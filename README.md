@@ -141,6 +141,25 @@ curl -X PUT http://localhost/cgi-bin/api/users \
   -d '{"id":1,"password":"yournewpassword"}'
 ```
 
+### Example: Add a Target & Monitor
+
+```sh
+export TOKEN="$(jq -r '.token' <(curl -s -X POST http://localhost/cgi-bin/api/login -H "Content-Type: application/json" -d '{"username":"admin","password":"netops"}'))"
+
+curl -s -X POST http://localhost/cgi-bin/api/target -H "Authorization: Bearer $TOKEN" -d '{ "address": "192.0.2.1" }' | jq .
+
+export AGENT_ID="$(jq -r '.data[0].id' <(curl -s -X GET http://localhost/cgi-bin/api/agent -H "Authorization: Bearer $TOKEN"))"
+export TARGET_ID="$(jq -r '.data[0].id' <(curl -s -X GET http://localhost/cgi-bin/api/target -H "Authorization: Bearer $TOKEN"))"
+export PASSWORD="$(jq -r '.data.password' <(curl -s -X GET http://localhost/cgi-bin/api/agent/$AGENT_ID -H "Authorization: Bearer $TOKEN"))"
+export SERVER="http://localhost/cgi-bin/api"
+
+echo "[${TOKEN:0:5}] ${AGENT_ID} > ${TARGET_ID} (${PASSWORD})"
+
+curl -s -X POST http://localhost/cgi-bin/api/monitor -H "Authorization: Bearer $TOKEN" -d "{ \"agent_id\": \"$AGENT_ID\", \"target_id\": \"$TARGET_ID\" }" | jq .
+
+netping-agent.pl
+```
+
 ## Development/Customization
 
 - **Modules**: each endpoint is a modular `.pm` file (`agent.pm`, `monitor.pm`, etc.)

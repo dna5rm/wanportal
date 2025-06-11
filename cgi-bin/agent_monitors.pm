@@ -44,20 +44,36 @@ sub register_agent_monitors {
         my $request_body = $c->req->json;
         my $password = $request_body->{password} // '';
         my $agent_id = $c->param('id');
+        # Authenticate and update address
         my $db_id = _validate_agent($c, $agent_id, $password) or return;
 
         my $db = $c->app->defaults->{db};
         my $dbh = DBI->connect($db->{dsn}, $db->{username}, $db->{password}, { RaiseError=>1, AutoCommit=>1 });
+
+        # Check agent is active
+        my ($agent_active) = $dbh->selectrow_array("SELECT is_active FROM agents WHERE id = ?", undef, $db_id);
+        unless ($agent_active) {
+            $dbh->disconnect;
+            return $c->render(json => {status=>'success', monitors=>[]});
+        }
+
+        # Only active monitors, targets, and agent, that are "due" or never sampled
         my $sql = q{
             SELECT m.id, t.address, m.protocol, m.port, m.dscp,
-                   m.pollcount, m.pollinterval
+                m.pollcount, m.pollinterval, m.sample, m.last_update
             FROM monitors m
             JOIN targets t ON t.id = m.target_id
-            WHERE m.agent_id=?
-              AND m.is_active=1
-              AND (m.last_update IS NULL OR
-                   UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(m.last_update) >= m.pollinterval)
+            WHERE m.agent_id = ?
+                AND m.is_active = 1
+                AND t.is_active = 1
+                AND
+                    (
+                    m.sample = 0
+                    OR m.last_update IS NULL
+                    OR UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(m.last_update) >= m.pollinterval
+                    )
         };
+        
         my $sth = $dbh->prepare($sql);
         $sth->execute($db_id);
         my @monitors;

@@ -78,6 +78,20 @@ sub register_agent {
         return $c->render(json => {status => 'success', data => $agents});
     };
 
+    main::get '/agent/:id' => sub {
+        my $c = shift;
+        my $id = $c->param('id');
+        my $db_config = $c->app->defaults->{db};
+        my $dbh = DBI->connect(
+            $db_config->{dsn}, $db_config->{username}, $db_config->{password}, { RaiseError => 1, AutoCommit => 1 }
+        );
+        my $sth = $dbh->prepare("SELECT id, name, address, description, last_seen, is_active, password FROM agents WHERE id=?");
+        $sth->execute($id);
+        my $agent = $sth->fetchrow_hashref;
+        $dbh->disconnect;
+        $c->render(json => { status => 'success', data => $agent });
+    };
+
     main::post '/agent' => sub {
         my $c = shift;
         $c->app->log->debug("Received request for /agent POST");

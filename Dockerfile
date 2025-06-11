@@ -9,13 +9,15 @@ ENV PERL_MM_USE_DEFAULT=1
 ENV PYTHONUNBUFFERED 1
 
 WORKDIR /var/www/localhost
+
 # COPY . .
+# ADD --chmod=755 netping-agent.pl /srv
 
 # Install Packages & Update
 RUN apk -q update && apk -q upgrade
 
 ## Core Packages
-RUN apk add --no-cache font-freefont mariadb-client nano rrdtool rrdtool-dev
+RUN apk add --no-cache font-freefont mariadb-client nano rrdtool rrdtool-dev curl jq
 
 ## Build Dependencies
 RUN apk add --no-cache build-base boost-dev cmake curl-dev \
@@ -30,15 +32,16 @@ RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-rege
 RUN apk add --no-cache apache2 apache2-utils apache2-webdav \
     php84 php84-apache2 php84-mysqli php84-session
 #RUN mkdir -p /var/run/lock/dav
+
+### Enable mod_cgi
 RUN cat <<EOF >>/etc/apache2/conf.d/cgi.conf
 LoadModule cgi_module modules/mod_cgi.so
 SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=\$1
 EOF
 
 ## cron services
-RUN apk add busybox-initscripts
-ADD netping-agent.pl /srv/netping-agent.pl
-RUN cat <<EOF >>/etc/apache2/conf.d/cgi.conf
+# RUN apk add busybox-initscripts
+RUN cat <<EOF >>/etc/crontabs/root
 ## do daily/weekly/monthly maintenance
 # min   hour    day     month   weekday command
 */15    *       *       *       *       run-parts /etc/periodic/15min
