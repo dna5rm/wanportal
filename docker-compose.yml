@@ -1,0 +1,44 @@
+---
+services:
+  wanportal:
+    build: .
+    image: wanportal
+    container_name: wanportal
+    volumes:
+      - rrd:/var/rrd:rw
+      - .:/var/www/localhost:rw
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    environment:
+      - MYSQL_HOST=${MYSQL_HOST:-wandb}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_USER=${MYSQL_USER:-root}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-netops}
+      - MYSQL_DB=${MYSQL_DB:-netops}
+
+  wandb:
+    image: mariadb:latest
+    command: --default-authentication-plugin=mysql_native_password
+    container_name: wandb
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD:-netops}
+      - MYSQL_DATABASE=${MYSQL_DB:-netops}
+    expose:
+      - 3306
+    restart: unless-stopped
+    volumes:
+      - mysql:/var/lib/mysql:rw
+
+networks:
+  default:
+    driver: bridge
+    name: netops
+    ipam:
+      driver: default
+      config:
+        - subnet: 100.172.42.0/24
+
+volumes:
+  rrd:
+  mysql:

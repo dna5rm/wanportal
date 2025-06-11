@@ -1,0 +1,69 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use FindBin;
+use lib $FindBin::Bin;
+
+use Mojolicious::Lite;
+use DBI;
+
+# Modular endpoints
+use users           qw(ensure_users_table register_users);
+use auth            qw(auth_middleware register_login);
+use test            qw(register_test);
+use agent           qw(register_agent);
+use target          qw(register_target);
+use monitor         qw(register_monitor);
+use agent_monitors  qw(register_agent_monitors);
+
+# Secure app config from env (with hard defaults for dev)
+my $jwt_secret = $ENV{JWT_SECRET}       // 'Wr9deCWWV&AV58DyH8Wz9Mz%6N6r5@sb';
+my $app_secret = $ENV{APP_SECRET}       // 'HKCr2g+Nn6MUm3H3/hG+2zLhpZgwI+oLrf35vf1+a/M=';
+my $db_name    = $ENV{MYSQL_DB}         // 'netops';
+my $db_host    = $ENV{MYSQL_HOST}       // 'wandb';
+my $db_user    = $ENV{MYSQL_USER}       // 'root';
+my $db_pass    = $ENV{MYSQL_PASSWORD}   // 'netops';
+
+my $dsn = "DBI:mysql:database=$db_name;host=$db_host";
+my $db_config = {
+    dsn      => $dsn,
+    username => $db_user,
+    password => $db_pass,
+};
+
+app->secrets([$app_secret]);
+app->defaults(
+    jwt_secret => $jwt_secret,
+    app_secret => $app_secret,
+    db         => $db_config,
+);
+
+app->log->level('debug');  # For production, lower log level
+
+# DSCP/protocol maps for monitor.pm
+my %valid_dscp      = map { $_ => 1 } qw(BE EF CS0 CS1 CS2 CS3 CS4 CS5 CS6 CS7 AF11 AF12 AF13 AF21 AF22 AF23 AF31 AF32 AF33 AF41 AF42 AF43);
+my %valid_protocols = map { $_ => 1 } qw(ICMP ICMPV6 TCP);
+
+# Ensure users table and default admin user
+{
+    my $dbh = DBI->connect($dsn, $db_user, $db_pass, { RaiseError => 1, AutoCommit => 1 });
+    users::ensure_users_table($dbh, $db_pass); # admin pass is db password
+    $dbh->disconnect if $dbh;
+}
+
+# Register endpoints
+register_login($db_config);
+register_agent_monitors($db_config);
+
+group {
+    under auth_middleware(app->defaults);
+
+    register_test();
+    register_users($db_config);
+    register_agent($db_config);
+    register_target($db_config);
+    register_monitor($db_config, \%valid_protocols, \%valid_dscp);
+};
+
+app->start;
