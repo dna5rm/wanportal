@@ -35,11 +35,11 @@ sub ensure_agents_table {
         undef, 'LOCAL'
     );
     if (!$exists) {
-        require Data::UUID;
-        my $agent_id = Data::UUID->new->create_str;
+        # require Data::UUID;
+        # my $agent_id = Data::UUID->new->create_str;
         $dbh->do(
             "INSERT INTO agents (id, name, address, description, is_active, password) VALUES (?,?,?,?,?,?)",
-            undef, $agent_id, 'LOCAL', '127.0.0.1', 'Server-local agent', 1, 'local_password' # password can be changed as needed
+            undef, '00000000-0000-0000-0000-000000000000', 'LOCAL', '127.0.0.1', 'Local Agent', 1, 'LOCAL' # password can be changed later as needed
         );
     }
 }

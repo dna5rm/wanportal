@@ -33,7 +33,7 @@ sub register_agent_monitors {
         # Update agent address
         my $ip = $c->req->headers->header('X-Forwarded-For');
         $ip = $c->tx->remote_address unless defined $ip && $ip ne '';
-        $dbh->do("UPDATE agents SET address=? WHERE id=?", undef, $ip, $agent->{id});
+        $dbh->do("UPDATE agents SET address=?, last_seen=NOW() WHERE id=?", undef, $ip, $agent->{id});
         $dbh->disconnect;
         return $agent->{id};
     }

@@ -1,7 +1,9 @@
 ---
 services:
   wanportal:
-    build: .
+    build:
+      context: .  # or the relative path to your build directory
+      dockerfile: Dockerfile  # if necessary
     image: wanportal
     container_name: wanportal
     volumes:
