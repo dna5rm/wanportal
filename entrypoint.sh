@@ -26,7 +26,7 @@ fi
 # Start background agent
 start_agent() {
     while true; do
-        AGENT_ID="00000000-0000-0000-0000-000000000000" PASSWORD="LOCAL" SERVER="http://localhost/cgi-bin/api" ./netping-agent.pl | grep ^"Monitor"
+        AGENT_ID="00000000-0000-0000-0000-000000000000" PASSWORD="LOCAL" SERVER="http://localhost/cgi-bin/api" ./netping-agent.pl
         sleep 60
     done
 }

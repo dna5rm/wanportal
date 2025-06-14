@@ -15,7 +15,7 @@ WORKDIR /var/www/localhost
 RUN apk -q update && apk -q upgrade
 
 ## Core Packages
-RUN apk add --no-cache font-freefont mariadb-client nano rrdtool rrdtool-dev curl jq
+RUN apk add --no-cache font-freefont mariadb-client nano rrdtool rrdtool-dev curl jq tzdata
 
 ## Build Dependencies
 RUN apk add --no-cache build-base boost-dev cmake curl-dev \
@@ -28,7 +28,7 @@ RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-rege
 
 ## Web Server + PHP
 RUN apk add --no-cache apache2 apache2-utils apache2-webdav \
-    php84 php84-apache2 php84-mysqli php84-session
+    php84 php84-apache2 php84-curl php84-mysqli php84-session
 
 ### Enable mod_cgi
 RUN cat <<EOF >>/etc/apache2/conf.d/cgi.conf

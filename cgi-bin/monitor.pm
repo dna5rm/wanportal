@@ -4,10 +4,16 @@ use warnings;
 use Exporter 'import';
 use DBI;
 use Data::UUID;
-use File::Path qw(make_path);
-use File::Basename qw(dirname);
+use JSON qw(encode_json decode_json);
+use Try::Tiny;
 
 our @EXPORT_OK = qw(register_monitor);
+
+# Valid protocol and DSCP values
+my %VALID_PROTOCOLS = map { $_ => 1 } qw(ICMP ICMPV6 TCP);
+my %VALID_DSCP = map { $_ => 1 } qw(BE EF CS0 CS1 CS2 CS3 CS4 CS5 CS6 CS7 
+                                   AF11 AF12 AF13 AF21 AF22 AF23 
+                                   AF31 AF32 AF33 AF41 AF42 AF43);
 
 sub ensure_monitors_table {
     my ($dbh) = @_;
@@ -17,7 +23,7 @@ sub ensure_monitors_table {
             description varchar(255) DEFAULT '',
             agent_id char(36) NOT NULL,
             target_id char(36) NOT NULL,
-            protocol varchar(10) DEFAULT 'icmp',
+            protocol varchar(10) DEFAULT 'ICMP',
             port int(11) DEFAULT 0,
             dscp varchar(10) DEFAULT 'BE',
             pollcount int(11) DEFAULT 5,
@@ -41,167 +47,340 @@ sub ensure_monitors_table {
             total_down int(11) DEFAULT 0,
             PRIMARY KEY (id),
             UNIQUE KEY monitor_uniqueness (agent_id, target_id, protocol, port, dscp),
-            KEY monitors_ibfk_2 (target_id)
-            -- Foreign keys may be added as appropriate
+            KEY monitors_agent_idx (agent_id),
+            KEY monitors_target_idx (target_id),
+            CONSTRAINT monitors_agent_fk FOREIGN KEY (agent_id) REFERENCES agents (id) ON DELETE CASCADE,
+            CONSTRAINT monitors_target_fk FOREIGN KEY (target_id) REFERENCES targets (id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
     });
 }
 
-sub register_monitor {
-    my ($db_config, $valid_protocols, $valid_dscp) = @_;
+# Helper function to validate monitor data
+sub validate_monitor_data {
+    my ($data, $is_update) = @_;  # Add $is_update parameter
+    my @errors;
 
-    # On registration, ensure the monitors table exists
+    # Check required fields only for new monitors
+    unless ($is_update) {
+        push @errors, "Missing agent_id" unless $data->{agent_id};
+        push @errors, "Missing target_id" unless $data->{target_id};
+    }
+
+    # Validate protocol if provided
+    if ($data->{protocol}) {
+        push @errors, "Invalid protocol" 
+            unless $VALID_PROTOCOLS{uc($data->{protocol})};
+    }
+
+    # Validate DSCP if provided
+    if ($data->{dscp}) {
+        push @errors, "Invalid DSCP value" 
+            unless $VALID_DSCP{uc($data->{dscp})};
+    }
+
+    # Validate numeric fields if provided
+    if (defined $data->{port}) {
+        push @errors, "Port must be between 0 and 65535" 
+            unless $data->{port} =~ /^\d+$/ && $data->{port} >= 0 && $data->{port} <= 65535;
+    }
+    if (defined $data->{pollcount}) {
+        push @errors, "Pollcount must be between 1 and 100" 
+            unless $data->{pollcount} =~ /^\d+$/ && $data->{pollcount} >= 1 && $data->{pollcount} <= 100;
+    }
+    if (defined $data->{pollinterval}) {
+        push @errors, "Pollinterval must be between 10 and 3600" 
+            unless $data->{pollinterval} =~ /^\d+$/ && $data->{pollinterval} >= 10 && $data->{pollinterval} <= 3600;
+    }
+
+    return @errors;
+}
+
+sub register_monitor {
+    my ($db_config) = @_;
+
+    # Initialize table
     my $dbh = DBI->connect(
-        $db_config->{dsn}, $db_config->{username}, $db_config->{password},
+        $db_config->{dsn},
+        $db_config->{username},
+        $db_config->{password},
         { RaiseError => 1, AutoCommit => 1 }
     );
     ensure_monitors_table($dbh);
-    $dbh->disconnect if $dbh;
+    $dbh->disconnect;
 
-    # RRD base directory
-    my $datadir = '/var/rrd';
-
-    # --- CREATE ---
-    main::post '/monitor' => sub {
-        my $c    = shift;
-        my $data = $c->req->json;
-
-        # Require agent_id and target_id only
-        foreach my $field (qw/agent_id target_id/) {
-            unless (defined $data->{$field} && $data->{$field} ne '') {
-                return $c->render(json => { status => 'error', message => "Missing required field: $field" }, status => 400);
+    # GET /monitor/:id - Get single monitor
+    main::get '/monitor/:id' => sub {
+        my $c = shift;
+        my $id = $c->param('id');
+        my $dbh;
+        
+        try {
+            $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+            
+            my $sth = $dbh->prepare(q{
+                SELECT m.*, 
+                       a.name as agent_name, 
+                       t.address as target_address
+                FROM monitors m
+                JOIN agents a ON m.agent_id = a.id
+                JOIN targets t ON m.target_id = t.id
+                WHERE m.id = ?
+            });
+            $sth->execute($id);
+            my $monitor = $sth->fetchrow_hashref;
+            
+            $dbh->disconnect;
+            
+            unless ($monitor) {
+                return $c->render(json => {
+                    status => 'error',
+                    message => 'Monitor not found'
+                }, status => 404);
             }
+            
+            return $c->render(json => {
+                status => 'success',
+                monitor => $monitor
+            });
+        } catch {
+            $dbh->disconnect if $dbh;
+            return $c->render(json => {
+                status => 'error',
+                message => "Database error: $_"
+            }, status => 500);
+        };
+    };
+
+    # POST /monitor - Create new monitor (requires auth)
+    main::post '/monitor' => sub {
+        my $c = shift;
+        my $data = $c->req->json;
+        my $dbh;
+        
+        # Validate input data
+        my @validation_errors = validate_monitor_data($data, 0);  # 0 = not an update
+        if (@validation_errors) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Validation failed: ' . join(', ', @validation_errors)
+            }, status => 400);
         }
 
-        # Provide defaults
-        $data->{protocol} = defined $data->{protocol} && $data->{protocol} ne '' ? $data->{protocol} : 'ICMP';
-        $data->{dscp}     = defined $data->{dscp}     && $data->{dscp}     ne '' ? $data->{dscp}     : 'BE';
+        try {
+            $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+            
+            # Verify agent and target exist
+            foreach my $check (
+                ['agents', $data->{agent_id}, 'Agent'],
+                ['targets', $data->{target_id}, 'Target']
+            ) {
+                my ($table, $id, $type) = @$check;
+                my ($exists) = $dbh->selectrow_array(
+                    "SELECT 1 FROM $table WHERE id = ?",
+                    undef, $id
+                );
+                unless ($exists) {
+                    $dbh->disconnect;
+                    return $c->render(json => {
+                        status => 'error',
+                        message => "$type not found"
+                    }, status => 404);
+                }
+            }
 
-        # Validate protocol/dscp
-        my $protocol = uc($data->{protocol});
-        return $c->render(json => { status => 'error', message => 'Invalid protocol' }, status => 400)
-            unless $valid_protocols->{$protocol};
-
-        my $dscp = uc($data->{dscp});
-        return $c->render(json => { status => 'error', message => 'Invalid DSCP value' }, status => 400)
-            unless $valid_dscp->{$dscp};
-
-        # Connect and create monitor row
-        my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError=>1, AutoCommit=>1 });
-        my $uuid = Data::UUID->new->create_str;
-
-        my $sth = $dbh->prepare(
-            "INSERT INTO monitors (id, description, agent_id, target_id, protocol, port, dscp, pollcount, pollinterval, is_active)
-            VALUES (?,?,?,?,?,?,?,?,?,?)"
-        );
-        eval {
-            $sth->execute(
+            my $uuid = Data::UUID->new->create_str;
+            
+            $dbh->do(q{
+                INSERT INTO monitors (
+                    id, description, agent_id, target_id, protocol,
+                    port, dscp, pollcount, pollinterval, is_active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            }, undef,
                 $uuid,
                 $data->{description} // '',
                 $data->{agent_id},
                 $data->{target_id},
-                $protocol,
+                uc($data->{protocol} // 'ICMP'),
                 $data->{port} // 0,
-                $dscp,
+                uc($data->{dscp} // 'BE'),
                 $data->{pollcount} // 5,
                 $data->{pollinterval} // 60,
-                defined $data->{is_active} ? $data->{is_active} : 1,
+                $data->{is_active} // 1
             );
-        };
-        $dbh->disconnect;
-
-        if ($@) {
-            return $c->render(json => { status => 'error', message => 'Failed to add monitor' }, status => 500);
-        } else {
-            return $c->render(json => { status => 'success', id => $uuid });
-        }
-    };
-
-    # --- READ ---
-    main::get '/monitor' => sub {
-        my $c = shift;
-        my $query = $c->req->json || {};
-        my @filters;
-        my @params;
-        if ($query->{id})         { push @filters, "id = ?";        push @params, $query->{id}; }
-        if ($query->{agent_id})   { push @filters, "agent_id = ?";  push @params, $query->{agent_id}; }
-        if ($query->{target_id})  { push @filters, "target_id = ?"; push @params, $query->{target_id}; }
-        if ($query->{protocol})   { push @filters, "protocol = ?";  push @params, $query->{protocol}; }
-        if ($query->{is_active})  { push @filters, "is_active = ?"; push @params, $query->{is_active} ? 1 : 0; }
-
-        my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError=>1, AutoCommit=>1 });
-        my $sql = "SELECT * FROM monitors";
-        $sql .= " WHERE " . join(" AND ", @filters) if @filters;
-        my $sth = $dbh->prepare($sql);
-        $sth->execute(@params);
-        my $monitors = $sth->fetchall_arrayref({});
-        $dbh->disconnect;
-        $c->render(json => {status=>'success', monitors=>$monitors});
-    };
-
-    # --- UPDATE ---
-    main::put '/monitor' => sub {
-        my $c = shift;
-        my $data = $c->req->json;
-        unless ($data && $data->{id}) {
-            return $c->render(json => { status => 'error', message => 'Missing monitor id' }, status => 400);
-        }
-        my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError=>1, AutoCommit=>1 });
-        my @set; my @params;
-        foreach my $field (qw/description agent_id target_id protocol port dscp pollcount pollinterval is_active/) {
-            if (defined $data->{$field}) {
-                push @set, "$field=?";
-                push @params, $data->{$field};
-            }
-        }
-        unless (@set) {
+            
             $dbh->disconnect;
-            return $c->render(json => { status => 'error', message => 'No fields to update' }, status => 400);
-        }
-        push @params, $data->{id};
-        my $sql = "UPDATE monitors SET " . join(", ", @set) . " WHERE id = ?";
-        eval {
-            my $sth = $dbh->prepare($sql);
-            $sth->execute(@params);
+            
+            return $c->render(json => {
+                status => 'success',
+                message => 'Monitor created successfully',
+                id => $uuid
+            });
+        } catch {
+            $dbh->disconnect if $dbh;
+            
+            if ($_ =~ /Duplicate entry.*for key 'monitor_uniqueness'/) {
+                return $c->render(json => {
+                    status => 'error',
+                    message => 'Monitor with these parameters already exists'
+                }, status => 400);
+            }
+            
+            return $c->render(json => {
+                status => 'error',
+                message => "Failed to create monitor: $_"
+            }, status => 500);
         };
-        $dbh->disconnect;
-        return $@ ? $c->render(json => { status => 'error', message => 'Failed to update monitor' }, status => 500)
-                  : $c->render(json => { status => 'success', message => 'Monitor updated' });
     };
 
-    # --- DELETE (also delete RRD) ---
-    main::del '/monitor' => sub {
+    # PUT /monitor/:id - Update monitor (requires auth)
+    main::put '/monitor/:id' => sub {
         my $c = shift;
+        my $id = $c->param('id');
         my $data = $c->req->json;
-        my $id = $data->{id} or do {
-            $c->app->log->error("[monitor DELETE] Missing id field!");
-            return $c->render(json => {status=>'error', message=>'Missing id'}, status=>400);
-        };
-        $c->app->log->debug("[monitor DELETE] Called with id=$id");
-
-        my $db = $c->app->defaults->{db};
-        my $dbh = DBI->connect($db->{dsn}, $db->{username}, $db->{password}, { RaiseError => 1, AutoCommit => 1 });
-
-        my $sth = $dbh->prepare("DELETE FROM monitors WHERE id=?");
-        my $rows = $sth->execute($id);
-        $dbh->disconnect;
-
-        my $rrdfile = "/var/rrd/$id.rrd";
-        if ($rows && -e $rrdfile) {
-            if (unlink $rrdfile) {
-                $c->app->log->debug("[monitor DELETE] Deleted RRD file $rrdfile");
-                print STDERR "[monitor DELETE] Deleted RRD file $rrdfile\n";
-            } else {
-                $c->app->log->error("[monitor DELETE] Could not delete RRD file $rrdfile: $!");
-                print STDERR "[monitor DELETE] Could not delete RRD file $rrdfile: $!\n";
-            }
-        } elsif ($rows) {
-            $c->app->log->debug("[monitor DELETE] No RRD file $rrdfile for monitor $id (nothing to delete)");
+        my $dbh;
+        
+        unless ($data) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'No update data provided'
+            }, status => 400);
         }
 
-        return $rows
-            ? $c->render(json => {status=>'success', message=>'Monitor deleted and RRD removed if existed.'})
-            : $c->render(json => {status=>'error', message=>'Monitor not found'}, status=>404);
+        # Check for forbidden update fields
+        if (exists $data->{pollcount} || exists $data->{pollinterval}) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Cannot modify polling parameters after monitor creation. Delete and recreate the monitor to change these values.'
+            }, status => 400);
+        }
+
+        # Validate input data if provided
+        my @validation_errors = validate_monitor_data($data, 1);
+        if (@validation_errors) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Validation failed: ' . join(', ', @validation_errors)
+            }, status => 400);
+        }
+
+        try {
+            $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+
+            # Check if monitor exists
+            my $exists = $dbh->selectrow_array(
+                "SELECT 1 FROM monitors WHERE id = ?",
+                undef, $id
+            );
+
+            unless ($exists) {
+                $dbh->disconnect;
+                return $c->render(json => {
+                    status => 'error',
+                    message => 'Monitor not found'
+                }, status => 404);
+            }
+            
+            # Verify agent and target if changing
+            foreach my $check (
+                ['agents', $data->{agent_id}, 'Agent'],
+                ['targets', $data->{target_id}, 'Target']
+            ) {
+                my ($table, $id, $type) = @$check;
+                if ($id) {
+                    my ($exists) = $dbh->selectrow_array(
+                        "SELECT 1 FROM $table WHERE id = ?",
+                        undef, $id
+                    );
+                    unless ($exists) {
+                        $dbh->disconnect;
+                        return $c->render(json => {
+                            status => 'error',
+                            message => "$type not found"
+                        }, status => 404);
+                    }
+                }
+            }
+
+            # Build update query (only allowed fields)
+            my @updates;
+            my @params;
+            
+            foreach my $field (qw(description agent_id target_id protocol port dscp is_active)) {
+                if (exists $data->{$field}) {
+                    my $value = $data->{$field};
+                    $value = uc($value) if $field =~ /^(protocol|dscp)$/;
+                    push @updates, "$field = ?";
+                    push @params, $value;
+                }
+            }
+            
+            push @params, $id;
+
+            my $sql = "UPDATE monitors SET " . join(", ", @updates) . " WHERE id = ?";
+            my $rows = $dbh->do($sql, undef, @params);
+            
+            $dbh->disconnect;
+            
+            return $c->render(json => {
+                status => 'success',
+                message => 'Monitor updated successfully',
+                id => $id
+            });
+        } catch {
+            $dbh->disconnect if $dbh;
+            
+            if ($_ =~ /Duplicate entry.*for key 'monitor_uniqueness'/) {
+                return $c->render(json => {
+                    status => 'error',
+                    message => 'Monitor with these parameters already exists'
+                }, status => 400);
+            }
+            
+            return $c->render(json => {
+                status => 'error',
+                message => "Failed to update monitor: $_"
+            }, status => 500);
+        };
+    };
+
+    # DELETE /monitor/:id - Delete monitor (requires auth)
+    main::del '/monitor/:id' => sub {
+        my $c = shift;
+        my $id = $c->param('id');
+        my $dbh;
+        
+        try {
+            $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+
+            # Check if monitor exists
+            my $exists = $dbh->selectrow_array(
+                "SELECT 1 FROM monitors WHERE id = ?",
+                undef, $id
+            );
+
+            unless ($exists) {
+                $dbh->disconnect;
+                return $c->render(json => {
+                    status => 'error',
+                    message => 'Monitor not found'
+                }, status => 404);
+            }
+
+            my $rows = $dbh->do("DELETE FROM monitors WHERE id = ?", undef, $id);
+            $dbh->disconnect;
+
+            return $c->render(json => {
+                status => 'success',
+                message => 'Monitor deleted successfully',
+                id => $id
+            });
+        } catch {
+            $dbh->disconnect if $dbh;
+            return $c->render(json => {
+                status => 'error',
+                message => "Failed to delete monitor: $_"
+            }, status => 500);
+        };
     };
 }
 

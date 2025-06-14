@@ -4,9 +4,34 @@ use warnings;
 use Exporter 'import';
 use DBI;
 use Data::UUID;
+use JSON qw(encode_json decode_json);
+use Try::Tiny;
 use Regexp::Common qw(net);
 
 our @EXPORT_OK = qw(register_target);
+
+# Helper function for address validation
+sub validate_address {
+    my ($address) = @_;
+    
+    # IPv4 validation
+    if ($address =~ /^(\d{1,3}\.){3}\d{1,3}$/) {
+        my @octets = split(/\./, $address);
+        foreach my $octet (@octets) {
+            return 0 if $octet > 255;
+        }
+        return 1;
+    }
+    # IPv6 validation
+    elsif ($address =~ /^$RE{net}{IPv6}$/) {
+        return 1;
+    }
+    # Hostname validation
+    elsif ($address =~ /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/) {
+        return 1;
+    }
+    return 0;
+}
 
 sub ensure_targets_table {
     my ($dbh) = @_;
@@ -17,177 +42,251 @@ sub ensure_targets_table {
             description varchar(255) DEFAULT '',
             is_active tinyint(1) NOT NULL DEFAULT 1,
             PRIMARY KEY (id),
-            UNIQUE KEY address (address),
-            CONSTRAINT chk_valid_address CHECK (
-                address regexp '^([0-9]{1,3}\\.){3}[0-9]{1,3}$' or
-                address regexp '^[0-9a-fA-F:]+$' or
-                address regexp '^[a-zA-Z0-9.-]+$'
-            )
+            UNIQUE KEY address (address)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
     });
 }
 
 sub register_target {
     my ($db_config) = @_;
+
+    # Initialize table
     my $dbh = DBI->connect(
-        $db_config->{dsn}, $db_config->{username}, $db_config->{password},
+        $db_config->{dsn},
+        $db_config->{username},
+        $db_config->{password},
         { RaiseError => 1, AutoCommit => 1 }
     );
     ensure_targets_table($dbh);
-    $dbh->disconnect if $dbh;
+    $dbh->disconnect;
 
-    main::get '/target' => sub {
+    # GET /target/:id - Get single target
+    main::get '/target/:id' => sub {
         my $c = shift;
-        $c->app->log->debug("Received request for /target GET");
-        my $db_config = $c->app->defaults->{db};
-        my $dbh = DBI->connect($db_config->{dsn}, $db_config->{username}, $db_config->{password}, { RaiseError => 1, AutoCommit => 1 });
-        unless ($dbh) {
-            $c->app->log->error("Failed to connect to the database: $DBI::errstr");
-            return $c->render(json => { status => 'error', message => 'Database connection failed' }, status => 500);
-        }
-        my $query = $c->req->json || {};
-        my @filters;
-        my @params;
-        if ($query->{id})       { push @filters, "id = ?"; push @params, $query->{id}; }
-        if ($query->{address})  { push @filters, "address = ?";  push @params, $query->{address}; }
-        if (defined $query->{is_active}) { push @filters, "is_active = ?"; push @params, $query->{is_active} ? 1 : 0; }
-        my $sql = "SELECT id, address, description, is_active FROM targets";
-        $sql .= " WHERE " . join(" AND ", @filters) if @filters;
-        my $sth = $dbh->prepare($sql);
-        $sth->execute(@params);
-        my $targets = $sth->fetchall_arrayref({});
-        return $c->render(json => { status => 'success', data => $targets });
+        my $id = $c->param('id');
+        my $dbh;
+        
+        try {
+            $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+            
+            my $sth = $dbh->prepare(q{
+                SELECT id, address, description, is_active
+                FROM targets 
+                WHERE id = ?
+            });
+            $sth->execute($id);
+            my $target = $sth->fetchrow_hashref;
+            
+            $dbh->disconnect;
+            
+            unless ($target) {
+                return $c->render(json => {
+                    status => 'error',
+                    message => 'Target not found'
+                }, status => 404);
+            }
+            
+            return $c->render(json => {
+                status => 'success',
+                target => $target
+            });
+        } catch {
+            $dbh->disconnect if $dbh;
+            return $c->render(json => {
+                status => 'error',
+                message => "Database error: $_"
+            }, status => 500);
+        };
     };
 
+    # POST /target - Create new target (requires auth)
     main::post '/target' => sub {
         my $c = shift;
-        $c->app->log->debug("Received request for /target POST");
-        my $db_config = $c->app->defaults->{db};
-        my $dbh = DBI->connect($db_config->{dsn}, $db_config->{username}, $db_config->{password}, { RaiseError => 1, AutoCommit => 1 });
-        unless ($dbh) {
-            $c->app->log->error("Failed to connect to the database: $DBI::errstr");
-            return $c->render(json => { status => 'error', message => 'Database connection failed' }, status => 500);
-        }
         my $data = $c->req->json;
-        unless ($data) {
-            return $c->render(json => { status => 'error', message => 'Invalid JSON input' }, status => 400);
+        my $dbh;
+        
+        unless ($data && $data->{address}) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Missing required field: address'
+            }, status => 400);
         }
-        foreach my $field (qw/address/) {
-            unless (defined $data->{$field} && $data->{$field} ne '') {
-                return $c->render(json => { status => 'error', message => "Missing required field: $field" }, status => 400);
-            }
+
+        # Address validation
+        unless (validate_address($data->{address})) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Invalid address format: must be valid IPv4, IPv6, or hostname'
+            }, status => 400);
         }
-        unless (
-            $data->{address} =~ /^$RE{net}{IPv4}$/ ||
-            $data->{address} =~ /^$RE{net}{IPv6}$/ ||
-            $data->{address} =~ /^[a-zA-Z0-9.-]+$/
-        ) {
-            return $c->render(json => { status => 'error', message => 'Invalid address' }, status => 400);
-        }
-        my $sql = "INSERT INTO targets (id, address, description, is_active) VALUES (?, ?, ?, ?)";
-        my $sth = $dbh->prepare($sql);
-        eval {
-            $sth->execute(
-                Data::UUID->new->create_str,
+
+        my $uuid = Data::UUID->new->create_str;
+        
+        try {
+            $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+            
+            $dbh->do(q{
+                INSERT INTO targets (
+                    id, address, description, is_active
+                ) VALUES (?, ?, ?, ?)
+            }, undef,
+                $uuid,
                 $data->{address},
                 $data->{description} // '',
-                defined $data->{is_active} ? $data->{is_active} : 1
+                $data->{is_active} // 1
             );
+            
+            $dbh->disconnect;
+            
+            return $c->render(json => {
+                status => 'success',
+                message => 'Target created successfully',
+                id => $uuid
+            });
+        } catch {
+            $dbh->disconnect if $dbh;
+            
+            # Handle duplicate address error specifically
+            if ($_ =~ /Duplicate entry.*for key 'address'/) {
+                return $c->render(json => {
+                    status => 'error',
+                    message => 'Target address already exists'
+                }, status => 400);
+            }
+            
+            return $c->render(json => {
+                status => 'error',
+                message => "Failed to create target: $_"
+            }, status => 500);
         };
-        if ($@) {
-            $c->app->log->error("Failed to insert target: $@");
-            return $c->render(json => { status => 'error', message => 'Failed to add target' }, status => 500);
-        }
-        return $c->render(json => { status => 'success', message => 'Target added successfully' });
     };
 
-    main::put '/target' => sub {
+    # PUT /target/:id - Update target (requires auth)
+    main::put '/target/:id' => sub {
         my $c = shift;
-        $c->app->log->debug("Received request for /target PUT");
-        my $db_config = $c->app->defaults->{db};
-        my $dbh = DBI->connect($db_config->{dsn}, $db_config->{username}, $db_config->{password}, { RaiseError => 1, AutoCommit => 1 });
-        unless ($dbh) {
-            $c->app->log->error("Failed to connect to the database: $DBI::errstr");
-            return $c->render(json => { status => 'error', message => 'Database connection failed' }, status => 500);
-        }
+        my $id = $c->param('id');
         my $data = $c->req->json;
+        my $dbh;
+        
         unless ($data) {
-            return $c->render(json => { status => 'error', message => 'Invalid JSON input' }, status => 400);
+            return $c->render(json => {
+                status => 'error',
+                message => 'No update data provided'
+            }, status => 400);
         }
-        my $id = $data->{id};
-        unless (defined $id && $id ne '') {
-            return $c->render(json => { status => 'error', message => 'Missing required field: id' }, status => 400);
+
+        # Address validation if provided
+        if ($data->{address} && !validate_address($data->{address})) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Invalid address format: must be valid IPv4, IPv6, or hostname'
+            }, status => 400);
         }
-        my @set;
-        my @params;
-        foreach my $field (qw/address description is_active/) {
-            if (defined $data->{$field}) {
-                push @set, "$field = ?";
-                push @params, $data->{$field};
+
+        try {
+            $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+            
+            # Build update query
+            my @updates;
+            my @params;
+            
+            foreach my $field (qw(address description is_active)) {
+                if (exists $data->{$field}) {
+                    push @updates, "$field = ?";
+                    push @params, $data->{$field};
+                }
             }
-        }
-        unless (@set) {
-            return $c->render(json => { status => 'error', message => 'No fields to update' }, status => 400);
-        }
-        push @params, $id;
-        my $sql = "UPDATE targets SET " . join(", ", @set) . " WHERE id = ?";
-        $c->app->log->debug("Executing SQL: $sql with params: " . join(", ", @params));
-        my $rows_affected;
-        eval {
-            my $sth = $dbh->prepare($sql);
-            $rows_affected = $sth->execute(@params);
+            
+            push @params, $id;
+
+            my $sql = "UPDATE targets SET " . join(", ", @updates) . " WHERE id = ?";
+            my $rows = $dbh->do($sql, undef, @params);
+            
+            $dbh->disconnect;
+            
+            unless ($rows) {
+                return $c->render(json => {
+                    status => 'error',
+                    message => 'Target not found'
+                }, status => 404);
+            }
+            
+            return $c->render(json => {
+                status => 'success',
+                message => 'Target updated successfully',
+                id => $id
+            });
+        } catch {
+            $dbh->disconnect if $dbh;
+            
+            # Handle duplicate address error
+            if ($_ =~ /Duplicate entry.*for key 'address'/) {
+                return $c->render(json => {
+                    status => 'error',
+                    message => 'Target address already exists'
+                }, status => 400);
+            }
+            
+            return $c->render(json => {
+                status => 'error',
+                message => "Failed to update target: $_"
+            }, status => 500);
         };
-        if ($@) {
-            $c->app->log->error("Failed to update target: $@");
-            return $c->render(json => { status => 'error', message => 'Failed to update target' }, status => 500);
-        }
-        unless ($rows_affected) {
-            return $c->render(json => { status => 'error', message => 'Target not found' }, status => 404);
-        }
-        return $c->render(json => { status => 'success', message => 'Target updated successfully' });
     };
 
-    main::del '/target' => sub {
+    # DELETE /target/:id - Delete target (requires auth)
+    main::del '/target/:id' => sub {
         my $c = shift;
-        my $data = $c->req->json;
-        my $id = $data->{id} or do {
-            $c->app->log->error("[target DELETE] Missing id field!");
-            return $c->render(json => {status=>'error', message=>'Missing id'}, status=>400);
-        };
-        $c->app->log->debug("[target DELETE] Called with id=$id");
+        my $id = $c->param('id');
+        my $dbh;
+        
+        try {
+            $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
 
-        my $db = $c->app->defaults->{db};
-        my $dbh = DBI->connect($db->{dsn}, $db->{username}, $db->{password}, { RaiseError => 1, AutoCommit => 1 });
+            # First check if target exists
+            my $exists = $dbh->selectrow_array(
+                "SELECT 1 FROM targets WHERE id = ?",
+                undef, $id
+            );
 
-        # Fetch all monitor ids that will be deleted
-        my $sth = $dbh->prepare("SELECT id FROM monitors WHERE target_id=?");
-        $sth->execute($id);
-        my @monitor_ids = map { $_->[0] } @{ $sth->fetchall_arrayref([]) };
-        $c->app->log->debug("[target DELETE] Monitors to delete: " . join(',', @monitor_ids));
-
-        # Delete the target row (cascade deletes monitors)
-        my $rows = $dbh->do("DELETE FROM targets WHERE id=?", undef, $id);
-        $dbh->disconnect;
-
-        # Attempt to delete all associated .rrd files
-        foreach my $mid (@monitor_ids) {
-            my $rrd = "/var/rrd/$mid.rrd";
-            if (-e $rrd) {
-                if (unlink $rrd) {
-                    $c->app->log->debug("[target DELETE] Deleted RRD file $rrd");
-                    print STDERR "[target DELETE] Deleted RRD file $rrd\n";
-                } else {
-                    $c->app->log->error("[target DELETE] Could not delete RRD file $rrd: $!");
-                    print STDERR "[target DELETE] Could not delete RRD file $rrd: $!\n";
-                }
-            } else {
-                $c->app->log->debug("[target DELETE] RRD file $rrd not found (nothing to delete)");
+            unless ($exists) {
+                $dbh->disconnect;
+                return $c->render(json => {
+                    status => 'error',
+                    message => 'Target not found'
+                }, status => 404);
             }
-        }
 
-        return $rows
-            ? $c->render(json => {status=>'success', message=>'Target and associated monitors/rrds deleted.'})
-            : $c->render(json => {status=>'error', message=>'Target not found'}, status=>404);
+            # Get associated monitor IDs before deletion for RRD cleanup
+            my $sth = $dbh->prepare("SELECT id FROM monitors WHERE target_id = ?");
+            $sth->execute($id);
+            my @monitor_ids = map { $_->[0] } @{ $sth->fetchall_arrayref([]) };
+
+            # Delete target (this will cascade delete monitors)
+            my $rows = $dbh->do("DELETE FROM targets WHERE id = ?", undef, $id);
+            $dbh->disconnect;
+
+            # Clean up RRD files for deleted monitors
+            foreach my $monitor_id (@monitor_ids) {
+                my $rrd_file = "/var/rrd/$monitor_id.rrd";
+                if (-e $rrd_file) {
+                    unlink $rrd_file or $c->app->log->warn("Could not delete RRD file $rrd_file: $!");
+                }
+            }
+
+            return $c->render(json => {
+                status => 'success',
+                message => 'Target and associated monitors deleted successfully',
+                id => $id,
+                deleted_monitors => \@monitor_ids
+            });
+        } catch {
+            $dbh->disconnect if $dbh;
+            return $c->render(json => {
+                status => 'error',
+                message => "Failed to delete target: $_"
+            }, status => 500);
+        };
     };
 }
 

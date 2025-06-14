@@ -43,6 +43,7 @@ sub register_login {
         unless (defined $data && exists $data->{username} && exists $data->{password}) {
             return $c->render(json => {status => 'error', message => 'Invalid input'}, status => 400);
         }
+
         my ($username, $password) = ($data->{username}, $data->{password});
         my $dbh = DBI->connect(
             $db_config->{dsn},
@@ -51,19 +52,72 @@ sub register_login {
             { RaiseError => 1, AutoCommit => 1 }
         );
 
-        my $valid = validate_user($dbh, $username, $password);
-        $dbh->disconnect if $dbh;
+        # Get user details including is_admin status
+        my $user = $dbh->selectrow_hashref(
+            "SELECT id, password_hash, is_admin, is_active, locked_until 
+            FROM users WHERE username = ?",
+            undef, $username
+        );
 
-        if ($valid) {
+        # Check if user exists and is active
+        unless ($user && $user->{is_active}) {
+            $dbh->disconnect;
+            return $c->render(json => {
+                status => 'error', 
+                message => 'Invalid username or password'
+            }, status => 401);
+        }
+
+        # Check if account is locked
+        if ($user->{locked_until} && $user->{locked_until} gt scalar localtime) {
+            $dbh->disconnect;
+            return $c->render(json => {
+                status => 'error',
+                message => 'Account is locked. Please try again later.'
+            }, status => 401);
+        }
+
+        # Verify password
+        if (sha256_hex($password) eq $user->{password_hash}) {
+            # Update last login and reset failed attempts
+            $dbh->do(
+                "UPDATE users SET 
+                    last_login = CURRENT_TIMESTAMP,
+                    failed_attempts = 0,
+                    locked_until = NULL
+                WHERE id = ?",
+                undef, $user->{id}
+            );
+
             my $jwt_secret = $c->app->defaults('jwt_secret');
             my $token = encode_jwt(
-                payload => { username => $username, exp => time + 3600 },
+                payload => {
+                    username => $username,
+                    is_admin => $user->{is_admin} ? JSON::true : JSON::false,
+                    exp => time + 3600
+                },
                 key     => $jwt_secret,
                 alg     => 'HS256'
             );
+
+            $dbh->disconnect;
             return $c->render(json => {status => 'success', token => $token});
         }
-        return $c->render(json => {status => 'error', message => 'Invalid username or password'}, status => 401);
+
+        # Increment failed attempts
+        my $failed_attempts = ($user->{failed_attempts} || 0) + 1;
+        my $lock_sql = $failed_attempts >= 5 ? ", locked_until = DATE_ADD(NOW(), INTERVAL 30 MINUTE)" : "";
+        
+        $dbh->do(
+            "UPDATE users SET failed_attempts = ? $lock_sql WHERE id = ?",
+            undef, $failed_attempts, $user->{id}
+        );
+
+        $dbh->disconnect;
+        return $c->render(json => {
+            status => 'error',
+            message => 'Invalid username or password'
+        }, status => 401);
     };
 }
 

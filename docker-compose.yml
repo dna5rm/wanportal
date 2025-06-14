@@ -10,7 +10,7 @@ services:
       - rrd:/var/rrd:rw
       - .:/var/www/localhost:rw
     ports:
-      - "80:80"
+      - "8080:80"
     restart: unless-stopped
     environment:
       - MYSQL_HOST=${MYSQL_HOST:-wandb}
@@ -18,6 +18,7 @@ services:
       - MYSQL_USER=${MYSQL_USER:-root}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:-netops}
       - MYSQL_DB=${MYSQL_DB:-netops}
+      - TZ=${TZ:-UTC}
 
   wandb:
     image: mariadb:latest
@@ -26,6 +27,7 @@ services:
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD:-netops}
       - MYSQL_DATABASE=${MYSQL_DB:-netops}
+      - TZ=${TZ:-UTC}
     expose:
       - 3306
     restart: unless-stopped

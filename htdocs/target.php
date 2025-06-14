@@ -1,65 +1,64 @@
 <?php
-// agent.php
 session_start();
 require_once 'config.php';
 
 $id = $_GET['id'] ?? '';
-if (!$id) die("No agent ID specified");
+if (!$id) die("No target ID specified");
 
 // Get show_inactive preference from GET or session
-$show_inactive = isset($_GET['show_inactive']) ? 
-    filter_var($_GET['show_inactive'], FILTER_VALIDATE_BOOLEAN) : 
+$show_inactive = isset($_GET['show_inactive']) ?
+    filter_var($_GET['show_inactive'], FILTER_VALIDATE_BOOLEAN) :
     ($_SESSION['show_inactive'] ?? false);
 $_SESSION['show_inactive'] = $show_inactive;
 
 try {
-    // Fetch agent info with prepared statement
+    // Fetch target info with prepared statement
     $stmt = $mysqli->prepare("
-        SELECT id, name, address, description, last_seen, is_active 
-        FROM agents 
+        SELECT id, address, description, is_active
+        FROM targets
         WHERE id = ?
     ");
     if (!$stmt) {
         throw new Exception("Prepare failed: " . $mysqli->error);
     }
-    
+
     $stmt->bind_param("s", $id);
     if (!$stmt->execute()) {
         throw new Exception("Execute failed: " . $stmt->error);
     }
-    
+
     $result = $stmt->get_result();
     if (!$result || $result->num_rows === 0) {
-        throw new Exception("Agent not found");
+        throw new Exception("Target not found");
     }
-    
-    $agent = $result->fetch_assoc();
+
+    $target = $result->fetch_assoc();
     $stmt->close();
 
     // Fetch monitors with all related info using JOIN
     $stmt = $mysqli->prepare("
-        SELECT 
+        SELECT
             m.*,
-            t.address as target_address,
-            t.description as target_description,
-            t.is_active as target_is_active
+            a.name as agent_name,
+            a.description as agent_description,
+            a.is_active as agent_is_active
         FROM monitors m
-        JOIN targets t ON m.target_id = t.id
-        WHERE m.agent_id = ?
-        ORDER BY m.description, m.id
+        JOIN agents a ON m.agent_id = a.id
+        WHERE m.target_id = ?
+        ORDER BY a.name, m.description
     ");
     if (!$stmt) {
         throw new Exception("Prepare failed: " . $mysqli->error);
     }
-    
+
     $stmt->bind_param("s", $id);
     if (!$stmt->execute()) {
         throw new Exception("Execute failed: " . $stmt->error);
     }
-    
+
     $result = $stmt->get_result();
     $monitors = [];
-    
+
     // Calculate monitor statistics while fetching
     $monitor_stats = [
         'total' => 0,
@@ -140,7 +139,7 @@ try {
 
         // Update statistics
         $monitor_stats['total']++;
-        if ($row['is_active'] && $row['target_is_active'] && $agent['is_active']) {
+        if ($row['is_active'] && $row['agent_is_active'] && $target['is_active']) {
             $monitor_stats['active']++;
         } else {
             $monitor_stats['effectively_inactive']++;
@@ -164,7 +163,7 @@ try {
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= htmlspecialchars($agent['name']) ?></title>
+    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= htmlspecialchars($target['address']) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/assets/base.css">
@@ -177,22 +176,22 @@ try {
     <div class="row mb-3">
         <div class="col">
             <h3>
-                Agent: 
-                <span title="<?= htmlspecialchars($agent['id']) ?>" data-bs-toggle="tooltip">
-                    <?= htmlspecialchars($agent['name']) ?>
+                Target:
+                <span title="<?= htmlspecialchars($target['id']) ?>" data-bs-toggle="tooltip">
+                    <?= htmlspecialchars($target['address']) ?>
                 </span>
-                <?php if (!$agent['is_active']): ?>
+                <?php if (!$target['is_active']): ?>
                     <span class="badge bg-warning">Inactive</span>
                 <?php endif; ?>
             </h3>
         </div>
-        <div class="col text-end">  <!-- Changed from text-center to text-end -->
+        <div class="col text-end">
             <div class="btn-group" role="group">
                 <a href="/index.php" class="btn btn-secondary">
                     <i class="bi bi-house-door"></i> Home
                 </a>
                 <?php if (isset($_SESSION['user'])): ?>
-                    <a href="/agents_edit.php?id=<?= htmlspecialchars($agent['id']) ?>" class="btn btn-danger">
+                    <a href="/targets_edit.php?id=<?= htmlspecialchars($target['id']) ?>" class="btn btn-danger">
                         <i class="bi bi-pencil"></i> Edit
                     </a>
                 <?php endif; ?>
@@ -201,36 +200,32 @@ try {
     </div>
 
     <div class="row">
-        <!-- Agent Info Column -->
+        <!-- Target Info Column -->
         <div class="col-md-3">
-            <!-- Agent Details Card -->
+            <!-- Target Details Card -->
             <div class="card mb-3">
                 <div class="card-body">
                     <h5 class="card-title">Details</h5>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item">
                             <strong>ID:</strong><br/>
-                            <?= htmlspecialchars($agent['id']) ?>
+                            <?= htmlspecialchars($target['id']) ?>
                         </li>
                         <li class="list-group-item">
                             <strong>Address:</strong><br/>
-                            <?= htmlspecialchars($agent['address']) ?>
+                            <?= htmlspecialchars($target['address']) ?>
                         </li>
                         <li class="list-group-item">
                             <strong>Description:</strong><br/>
-                            <?= htmlspecialchars($agent['description']) ?>
+                            <?= htmlspecialchars($target['description']) ?>
                         </li>
                         <li class="list-group-item">
                             <strong>Status:</strong><br/>
-                            <?php if ($agent['is_active']): ?>
+                            <?php if ($target['is_active']): ?>
                                 <span class="badge bg-success">Active</span>
                             <?php else: ?>
                                 <span class="badge bg-warning">Inactive</span>
                             <?php endif; ?>
-                        </li>
-                        <li class="list-group-item">
-                            <strong>Last Seen:</strong><br/>
-                            <?= htmlspecialchars($agent['last_seen']) ?>
                         </li>
                     </ul>
                 </div>
@@ -289,7 +284,7 @@ try {
                         </div>
                         <div class="col-md-3">
                             <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="showInactive" 
+                                <input class="form-check-input" type="checkbox" id="showInactive"
                                        <?= $show_inactive ? 'checked' : '' ?>>
                                 <label class="form-check-label" for="showInactive">
                                     Show Inactive
@@ -304,41 +299,26 @@ try {
             <div class="table-responsive">
                 <table class="table table-light table-bordered table-striped table-hover">
                     <thead>
-                        <!--
-                        <tr>
-                            <th colspan="3" class="text-center"></th>
-                            <th colspan="2" class="table-primary text-center">Current</th>
-                            <th colspan="5" class="table-secondary text-center">Average</th>
-                            <th colspan="1" class="text-center"></th>
-                        </tr>
-                        -->
                         <tr>
                             <th>Monitor</th>
-                            <th>Target</th>
+                            <th>Agent</th>
                             <th>Protocol</th>
                             <th class="text-center table-primary">Median</th>
                             <th class="text-center table-primary">Loss</th>
-                            <!--
-                            <th class="text-center table-secondary">Median</th>
-                            <th class="text-center table-secondary">Min</th>
-                            <th class="text-center table-secondary">Max</th>
-                            <th class="text-center table-secondary">Std Dev</th>
-                            <th class="text-center table-secondary">Loss</th>
-                            -->
                             <th class="text-center">Last Update</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($monitors)): ?>
                             <tr>
-                                <td colspan="11" class="text-center">No monitors found</td>
+                                <td colspan="6" class="text-center">No monitors found</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($monitors as $m): ?>
                                 <?php
                                 // Calculate effective status
-                                $effectively_active = $agent['is_active'] && $m['target_is_active'] && $m['is_active'];
-                                
+                                $effectively_active = $target['is_active'] && $m['agent_is_active'] && $m['is_active'];
+
                                 // Skip if inactive and not showing inactive
                                 if (!$effectively_active && !$show_inactive) {
                                     continue;
@@ -349,10 +329,10 @@ try {
                                         <?php if (!$effectively_active): ?>
                                             <del class="text-muted">
                                         <?php endif; ?>
-                                        
-                                        <a href="/monitor.php?id=<?= htmlspecialchars($m['id']) ?>" 
+
+                                        <a href="/monitor.php?id=<?= htmlspecialchars($m['id']) ?>"
                                            class="<?= $effectively_active ? 'text-decoration-none' : 'text-muted' ?>"
-                                           title="<?= htmlspecialchars($m['id']) ?>" 
+                                           title="<?= htmlspecialchars($m['id']) ?>"
                                            data-bs-toggle="tooltip">
                                             <?= !empty($m['description']) ? htmlspecialchars($m['description']) : htmlspecialchars($m['id']) ?>
                                         </a>
@@ -361,24 +341,24 @@ try {
                                             </del>
                                             <?php
                                             $inactive_reason = [];
-                                            if (!$agent['is_active']) $inactive_reason[] = "Agent disabled";
-                                            if (!$m['target_is_active']) $inactive_reason[] = "Target disabled";
+                                            if (!$target['is_active']) $inactive_reason[] = "Target disabled";
+                                            if (!$m['agent_is_active']) $inactive_reason[] = "Agent disabled";
                                             if (!$m['is_active']) $inactive_reason[] = "Monitor disabled";
                                             ?>
-                                            <i class="bi bi-info-circle text-muted" 
-                                               data-bs-toggle="tooltip" 
+                                            <i class="bi bi-info-circle text-muted"
+                                               data-bs-toggle="tooltip"
                                                title="Inactive: <?= implode(', ', $inactive_reason) ?>"></i>
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <a href="/target.php?id=<?= htmlspecialchars($m['target_id']) ?>"
+                                        <a href="/agent.php?id=<?= htmlspecialchars($m['agent_id']) ?>"
                                            class="<?= $effectively_active ? 'text-decoration-none' : 'text-muted' ?>">
-                                            <?= htmlspecialchars($m['target_address']) ?>
+                                            <?= htmlspecialchars($m['agent_name']) ?>
                                         </a>
                                     </td>
                                     <td>
                                         <span class="<?= $effectively_active ? '' : 'text-muted' ?>"
-                                              title="DSCP: <?= htmlspecialchars($m['dscp']) ?>" 
+                                              title="DSCP: <?= htmlspecialchars($m['dscp']) ?>"
                                               data-bs-toggle="tooltip">
                                             <?php if (strtoupper($m['protocol']) == 'ICMP'): ?>
                                                 <?= strtoupper($m['protocol']) ?>
@@ -397,36 +377,9 @@ try {
                                             <?= htmlspecialchars($m['current_loss']) ?>%
                                         </span>
                                     </td>
-                                    <!--
-                                    <td class="text-center table-secondary">
-                                        <span class="badge <?= $effectively_active ? $m['avg_median_color'] : 'bg-secondary' ?>">
-                                            <?= htmlspecialchars($m['avg_median']) ?>
-                                        </span>
-                                    </td>
-                                    <td class="text-center table-secondary">
-                                        <span class="badge <?= $effectively_active ? $m['avg_minimum_color'] : 'bg-secondary' ?>">
-                                            <?= htmlspecialchars($m['avg_min']) ?>
-                                        </span>
-                                    </td>
-                                    <td class="text-center table-secondary">
-                                        <span class="badge <?= $effectively_active ? $m['avg_maximum_color'] : 'bg-secondary' ?>">
-                                            <?= htmlspecialchars($m['avg_max']) ?>
-                                        </span>
-                                    </td>
-                                    <td class="text-center table-secondary">
-                                        <span class="badge <?= $effectively_active ? $m['avg_stddev_color'] : 'bg-secondary' ?>">
-                                            <?= htmlspecialchars($m['avg_stddev']) ?>
-                                        </span>
-                                    </td>
-                                    <td class="text-center table-secondary">
-                                        <span class="badge <?= $effectively_active ? $m['avg_loss_color'] : 'bg-secondary' ?>">
-                                            <?= htmlspecialchars($m['avg_loss']) ?>%
-                                        </span>
-                                    </td>
-                                    -->
                                     <td class="text-center">
                                         <span class="<?= $effectively_active ? '' : 'text-muted' ?>"
-                                              title="Last Down: <?= htmlspecialchars($m['last_down']) ?>" 
+                                              title="Last Down: <?= htmlspecialchars($m['last_down']) ?>"
                                               data-bs-toggle="tooltip">
                                             <?= htmlspecialchars($m['last_update']) ?>
                                         </span>
@@ -457,20 +410,20 @@ document.getElementById('showInactive').addEventListener('change', function() {
 function filterMonitors() {
     const search = document.getElementById('searchFilter').value.toLowerCase();
     const protocol = document.getElementById('protocolFilter').value;
-    
+
     const rows = document.querySelectorAll('tbody tr');
-    
+
     rows.forEach(row => {
         if (row.cells.length === 1) return; // Skip "No monitors found" row
-        
+
         const description = row.cells[0].textContent.toLowerCase();
-        const target = row.cells[1].textContent.toLowerCase();
+        const agent = row.cells[1].textContent.toLowerCase();
         const rowProtocol = row.cells[2].textContent;
-        
-        const searchMatch = description.includes(search) || 
-                          target.includes(search);
+
+        const searchMatch = description.includes(search) ||
+                          agent.includes(search);
         const protocolMatch = !protocol || rowProtocol.startsWith(protocol);
-        
+
         row.style.display = (searchMatch && protocolMatch) ? '' : 'none';
     });
 }

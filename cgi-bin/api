@@ -12,6 +12,8 @@ use DBI;
 use users           qw(ensure_users_table register_users);
 use auth            qw(auth_middleware register_login);
 use test            qw(register_test);
+use credentials     qw(register_credentials);
+use public_api      qw(register_public_endpoints);
 use agent           qw(register_agent);
 use target          qw(register_target);
 use monitor         qw(register_monitor);
@@ -52,15 +54,19 @@ my %valid_protocols = map { $_ => 1 } qw(ICMP ICMPV6 TCP);
     $dbh->disconnect if $dbh;
 }
 
-# Register endpoints
-register_login($db_config);
+# Register public endpoints (no auth required)
 register_agent_monitors($db_config);
+register_public_endpoints($db_config);
+
+# Register login endpoint
+register_login($db_config);
 
 group {
     under auth_middleware(app->defaults);
 
     register_test();
     register_users($db_config);
+    register_credentials($db_config);
     register_agent($db_config);
     register_target($db_config);
     register_monitor($db_config, \%valid_protocols, \%valid_dscp);
