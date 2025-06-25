@@ -1,0 +1,398 @@
+---
+components:
+  schemas:
+    Error:
+      properties:
+        message:
+          type: string
+        status:
+          example: error
+          type: string
+      type: object
+    Success:
+      properties:
+        message:
+          type: string
+        status:
+          example: success
+          type: string
+      type: object
+  securitySchemes:
+    bearerAuth:
+      bearerFormat: JWT
+      scheme: bearer
+      type: http
+info:
+  description: API for managing network monitoring agents, targets, and measurements
+  title: NetOPS Monitoring API
+  version: 1.0.0
+openapi: 3.0.0
+paths:
+  /cgi-bin/api/agent:
+    post:
+      description: Creates a new monitoring agent in the system.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Create new agent
+      tags:
+      - Agents
+  /cgi-bin/api/agent/{id}:
+    delete:
+      description: Removes an agent and all its associated monitors from the system.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Delete agent
+      tags:
+      - Agents
+    get:
+      description: Returns a list of all monitoring agents in the system, including
+        their status and last seen time.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: List all agents
+      tags:
+      - Agents
+    put:
+      description: Updates an existing agent's configuration.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Update agent
+      tags:
+      - Agents
+  /cgi-bin/api/agent/{id}/monitors:
+    get:
+      description: Returns a list of active monitors assigned to the specified agent.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Get agent's monitor assignments
+      tags:
+      - Agent Monitors
+    post:
+      description: Accepts monitoring results from an agent and updates the monitor
+        statistics.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Submit monitor results
+      tags:
+      - Agent Monitors
+  /cgi-bin/api/agents:
+    get:
+      description: Returns a list of all monitoring agents in the system without sensitive
+        information.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: List all agents
+      tags:
+      - Public API
+  /cgi-bin/api/credentials:
+    get:
+      description: Returns a list of all stored credentials with optional filtering.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: List credentials
+      tags:
+      - Credentials
+    post:
+      description: Creates a new credential entry in the system.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Create new credential
+      tags:
+      - Credentials
+  /cgi-bin/api/credentials/{id}:
+    delete:
+      description: Soft deletes a credential by marking it inactive.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Delete credential
+      tags:
+      - Credentials
+    get:
+      description: Retrieves detailed information about a specific credential.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Get credential details
+      tags:
+      - Credentials
+    put:
+      description: Updates an existing credential's information.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Update credential
+      tags:
+      - Credentials
+  /cgi-bin/api/login:
+    post:
+      description: Authenticates a user and returns a JWT token for API access.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: User authentication
+      tags:
+      - Authentication
+  /cgi-bin/api/monitor:
+    post:
+      description: Creates a new monitoring configuration that associates an agent
+        with a target.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Create new monitor
+      tags:
+      - Monitors
+  /cgi-bin/api/monitor/{id}:
+    delete:
+      description: Removes a monitor configuration and its associated RRD data files.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Delete monitor
+      tags:
+      - Monitors
+    get:
+      description: Retrieves detailed information about a specific monitor, including
+        its
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Get monitor details
+      tags:
+      - Monitors
+    put:
+      description: Updates an existing monitor's configuration. Note that polling
+        parameters
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Update monitor configuration
+      tags:
+      - Monitors
+  /cgi-bin/api/monitor/{id}/reset:
+    post:
+      description: Removes a monitor configuration and its associated RRD data files.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Delete monitor
+      tags:
+      - Monitors
+  /cgi-bin/api/monitors:
+    get:
+      description: Returns a list of all monitors with their current status and configuration.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: List all monitors
+      tags:
+      - Public API
+  /cgi-bin/api/rrd:
+    get:
+      description: Retrieves monitoring data from RRD files. Can return raw data or
+        generate graphs.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Get RRD data
+      tags:
+      - Public API
+  /cgi-bin/api/target:
+    post:
+      description: Creates a new monitoring target in the system.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Create new target
+      tags:
+      - Targets
+  /cgi-bin/api/target/{id}:
+    delete:
+      description: Removes a target and all its associated monitors from the system.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Delete target
+      tags:
+      - Targets
+    get:
+      description: Retrieves detailed information about a specific monitoring target.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Get target details
+      tags:
+      - Targets
+    put:
+      description: Updates an existing target's configuration.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Update target
+      tags:
+      - Targets
+  /cgi-bin/api/targets:
+    get:
+      description: Returns a list of all monitoring targets in the system.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: List all targets
+      tags:
+      - Public API
+  /cgi-bin/api/test:
+    post:
+      description: Test endpoint to verify if a JWT token is valid.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Verify authentication
+      tags:
+      - Authentication
+  /cgi-bin/api/users:
+    get:
+      description: Returns a list of all users in the system. Requires admin privileges.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: List all users
+      tags:
+      - Users
+    post:
+      description: Creates a new user account in the system. Requires admin privileges.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Create new user
+      tags:
+      - Users
+  /cgi-bin/api/users/{id}:
+    delete:
+      description: Removes a user account from the system. Requires admin privileges.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Delete user
+      tags:
+      - Users
+    get:
+      description: Retrieves detailed information about a specific user. Requires
+        admin privileges.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Get user details
+      tags:
+      - Users
+    put:
+      description: Updates an existing user's account information. Requires admin
+        privileges.
+      parameters: []
+      responses:
+        '200':
+          description: Successful operation
+      security:
+      - bearerAuth: []
+      summary: Update user
+      tags:
+      - Users

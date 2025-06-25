@@ -36,16 +36,17 @@ inc/
 
 # Ignore everything by default
 **
-logo*
 
 # Exceptions (keep these)
-!api-docs/*
-!cgi-bin/*
+!api-docs/
+!api-docs/openapi.yaml
+!cgi-bin/
 !htdocs/
 !htdocs/assets/*.css
 !htdocs/assets/kinetic.*
 !docker-compose.yml
 !Dockerfile*
+!*.html
 !*.md
 !*.pl
 !*.sh
