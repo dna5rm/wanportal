@@ -45,7 +45,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <div class="container-fluid">
         <!-- Brand and toggler -->
         <a class="navbar-brand d-flex align-items-center" href="/">
-            <img src="/assets/logo_white_trsprnt.png" class="d-inline-block align-top me-2" style="width: 122px;" alt="Logo" />
+            <img src="/assets/logo_white_trsprnt.png" class="d-inline-block align-top me-2" style="width: 122px;" alt="NETOPS" />
             <!-- <span><?= htmlspecialchars(strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING')) ?></span> -->
         </a>
 
