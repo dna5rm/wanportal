@@ -108,7 +108,14 @@ sub register_monitor {
     ensure_monitors_table($dbh);
     $dbh->disconnect;
 
-    # GET /monitor/:id - Get single monitor
+    # @summary Get monitor details
+    # @description Retrieves detailed information about a specific monitor, including its
+    # current status, configuration, and associated agent and target details.
+    # @tags Monitors
+    # @security bearerAuth
+    # @param {string} id - Monitor UUID
+    # @response 200 {object} Monitor details including current statistics
+    # @response 404 {Error} Monitor not found
     main::get '/monitor/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -151,7 +158,25 @@ sub register_monitor {
         };
     };
 
-    # POST /monitor - Create new monitor (requires auth)
+    # @summary Create new monitor
+    # @description Creates a new monitoring configuration that associates an agent with a target.
+    # The monitor defines how the agent should test connectivity to the target.
+    # @tags Monitors
+    # @security bearerAuth
+    # @param {object} requestBody
+    # @param {string} requestBody.agent_id - UUID of the monitoring agent
+    # @param {string} requestBody.target_id - UUID of the target to monitor
+    # @param {string} requestBody.protocol - Protocol to use (ICMP, ICMPV6, TCP)
+    # @param {integer} requestBody.port - Port number for TCP monitors (0-65535)
+    # @param {string} requestBody.dscp - DSCP value (BE, EF, CS0-CS7, AF11-AF43)
+    # @param {integer} requestBody.pollcount - Number of polls per interval (1-100)
+    # @param {integer} requestBody.pollinterval - Seconds between polls (10-3600)
+    # @param {string} [requestBody.description] - Optional monitor description
+    # @param {boolean} [requestBody.is_active=true] - Monitor status
+    # @response 200 {Success} Monitor created successfully
+    # @response 400 {Error} Validation error in request parameters
+    # @response 400 {Error} Monitor with these parameters already exists
+    # @response 404 {Error} Agent or target not found
     main::post '/monitor' => sub {
         my $c = shift;
         my $data = $c->req->json;
@@ -232,7 +257,22 @@ sub register_monitor {
         };
     };
 
-    # PUT /monitor/:id - Update monitor (requires auth)
+    # @summary Update monitor configuration
+    # @description Updates an existing monitor's configuration. Note that polling parameters
+    # (pollcount and pollinterval) cannot be modified after creation.
+    # @tags Monitors
+    # @security bearerAuth
+    # @param {string} id - Monitor UUID
+    # @param {object} requestBody
+    # @param {string} [requestBody.description] - Monitor description
+    # @param {string} [requestBody.protocol] - Protocol (ICMP, ICMPV6, TCP)
+    # @param {integer} [requestBody.port] - Port for TCP monitors
+    # @param {string} [requestBody.dscp] - DSCP value
+    # @param {boolean} [requestBody.is_active] - Monitor status
+    # @response 200 {Success} Monitor updated successfully
+    # @response 400 {Error} Invalid update parameters
+    # @response 400 {Error} Monitor with these parameters already exists
+    # @response 404 {Error} Monitor not found
     main::put '/monitor/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -343,7 +383,14 @@ sub register_monitor {
         };
     };
 
-    # DELETE /monitor/:id - Delete monitor (requires auth)
+    # @summary Delete monitor
+    # @description Removes a monitor configuration and its associated RRD data files.
+    # This operation cannot be undone.
+    # @tags Monitors
+    # @security bearerAuth
+    # @param {string} id - Monitor UUID
+    # @response 200 {Success} Monitor and associated data deleted successfully
+    # @response 404 {Error} Monitor not found
     main::del '/monitor/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -379,6 +426,73 @@ sub register_monitor {
             return $c->render(json => {
                 status => 'error',
                 message => "Failed to delete monitor: $_"
+            }, status => 500);
+        };
+    };
+
+    # @summary Delete monitor
+    # @description Removes a monitor configuration and its associated RRD data files.
+    # This operation cannot be undone.
+    # @tags Monitors
+    # @security bearerAuth
+    # @param {string} id - Monitor UUID
+    # @response 200 {Success} Monitor and associated data deleted successfully
+    # @response 404 {Error} Monitor not found
+    main::post '/monitor/:id/reset' => sub {
+        my $c = shift;
+        my $id = $c->param('id');
+        my $dbh;
+        
+        try {
+            $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+
+            # Check if monitor exists
+            my $exists = $dbh->selectrow_array(
+                "SELECT 1 FROM monitors WHERE id = ?",
+                undef, $id
+            );
+
+            unless ($exists) {
+                $dbh->disconnect;
+                return $c->render(json => {
+                    status => 'error',
+                    message => 'Monitor not found'
+                }, status => 404);
+            }
+
+            # Reset statistics
+            my $sql = q{
+                UPDATE monitors 
+                SET sample = 0,
+                    current_loss = 0,
+                    current_median = 0,
+                    current_min = 0,
+                    current_max = 0,
+                    current_stddev = 0,
+                    avg_loss = 0,
+                    avg_median = 0,
+                    avg_min = 0,
+                    avg_max = 0,
+                    avg_stddev = 0,
+                    prev_loss = 0,
+                    total_down = 0,
+                    last_clear = NOW()
+                WHERE id = ?
+            };
+
+            my $rows = $dbh->do($sql, undef, $id);
+            $dbh->disconnect;
+
+            return $c->render(json => {
+                status => 'success',
+                message => 'Monitor statistics reset successfully',
+                id => $id
+            });
+        } catch {
+            $dbh->disconnect if $dbh;
+            return $c->render(json => {
+                status => 'error',
+                message => "Failed to reset monitor statistics: $_"
             }, status => 500);
         };
     };

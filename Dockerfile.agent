@@ -1,0 +1,26 @@
+FROM alpine:latest
+
+# Create and set working directory
+WORKDIR /srv
+
+# Copy agent files
+COPY netping-agent.pl /srv/
+COPY run-agent.sh /srv/
+
+# Install Packages & Update
+RUN apk -q update && apk -q upgrade
+RUN apk add --no-cache cronie curl jq tzdata
+RUN apk add --no-cache perl perl-io-socket-ssl perl-json \
+    perl-lwp-useragent-determined perl-parallel-forkmanager perl-sys-cpu
+
+## Configure Crontab
+RUN install -m 0644 /dev/stdin /etc/crontabs/root <<EOF
+*/1 * * * * /srv/run-agent.sh > /proc/1/fd/1 2>/proc/1/fd/2
+EOF
+
+# Fix Permissions & Cleanup
+RUN chmod 755 /srv/*.pl /srv/*.sh
+RUN rm -rf /var/cache/apk/*
+
+# Run services
+CMD crond -f -s

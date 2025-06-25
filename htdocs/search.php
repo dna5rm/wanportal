@@ -129,17 +129,35 @@ try {
                 Search: <?= htmlspecialchars($search) ?>
             </h3>
         </div>
-        <div class="col text-end d-flex justify-content-end align-items-center">
-            <a href="/index.php" class="btn btn-secondary btn-sm me-2">
-                <i class="bi bi-house-door"></i> Home
-            </a>
-            <form action="/search.php" method="GET" class="d-flex align-items-center">
-                <input type="text" name="q" class="form-control form-control-sm me-2" 
-                    value="<?= htmlspecialchars($search) ?>" placeholder="Search monitors...">
-                <button type="submit" class="btn btn-primary btn-sm">
-                    <i class="bi bi-search"></i>
-                </button>
-            </form>
+        <div class="col text-end">
+            <div class="d-flex justify-content-end align-items-center gap-2">
+                <!-- Navigation Buttons -->
+                <div class="btn-group btn-group-sm me-3">
+                    <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
+                        <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm">
+                            <i class="bi bi-arrow-left"></i> Back
+                        </a>
+                    <?php endif; ?>
+                    <a href="/index.php" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-house-door"></i> Home
+                    </a>
+                </div>
+
+                <!-- Search Form -->
+                <form action="/search.php" method="GET" class="d-flex align-items-center">
+                    <div class="input-group input-group-sm">
+                        <input type="text" 
+                            name="q" 
+                            class="form-control" 
+                            value="<?= htmlspecialchars($search) ?>" 
+                            placeholder="Search monitors..."
+                            aria-label="Search monitors">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
@@ -214,12 +232,17 @@ try {
                 <table class="table table-light table-bordered table-striped table-hover">
                     <thead>
                         <tr>
+                            <th colspan="4" class="text-center"></th>
+                            <th colspan="2" class="table-primary text-center">Current</th>
+                            <th colspan="1" class="text-center"></th>
+                        </tr>                       
+                        <tr>
                             <th>Monitor</th>
                             <th>Agent</th>
                             <th>Target</th>
                             <th>Protocol</th>
-                            <th class="text-center">Median</th>
-                            <th class="text-center">Loss</th>
+                            <th class="text-center table-primary">Median</th>
+                            <th class="text-center table-primary">Loss</th>
                             <th class="text-center">Last Update</th>
                         </tr>
                     </thead>
@@ -268,12 +291,12 @@ try {
                                             <?php endif; ?>
                                         </span>
                                     </td>
-                                    <td class="text-center">
+                                    <td class="text-center table-primary">
                                         <span class="badge <?= $m['effectively_active'] ? $m['current_median_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['current_median']) ?>
                                         </span>
                                     </td>
-                                    <td class="text-center">
+                                    <td class="text-center table-primary">
                                         <span class="badge <?= $m['effectively_active'] ? $m['current_loss_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['current_loss']) ?>%
                                         </span>
@@ -296,47 +319,6 @@ try {
 </div>
 
 <?php include 'footer.php'; ?>
-
-<script>
-// Filter functionality
-document.getElementById('searchFilter').addEventListener('input', filterResults);
-document.getElementById('protocolFilter').addEventListener('change', filterResults);
-document.getElementById('showInactive').addEventListener('change', function() {
-    // Update URL with new show_inactive state
-    const url = new URL(window.location);
-    url.searchParams.set('show_inactive', this.checked);
-    window.location = url;
-});
-
-function filterResults() {
-    const search = document.getElementById('searchFilter').value.toLowerCase();
-    const protocol = document.getElementById('protocolFilter').value;
-
-    const rows = document.querySelectorAll('tbody tr');
-
-    rows.forEach(row => {
-        if (row.cells.length === 1) return; // Skip "No results found" row
-
-        const monitor = row.cells[0].textContent.toLowerCase();
-        const agent = row.cells[1].textContent.toLowerCase();
-        const target = row.cells[2].textContent.toLowerCase();
-        const rowProtocol = row.cells[3].textContent;
-
-        const searchMatch = monitor.includes(search) ||
-                          agent.includes(search) ||
-                          target.includes(search);
-        const protocolMatch = !protocol || rowProtocol.startsWith(protocol);
-
-        row.style.display = (searchMatch && protocolMatch) ? '' : 'none';
-    });
-}
-
-// Initialize tooltips
-const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-    return new bootstrap.Tooltip(tooltipTriggerEl);
-});
-</script>
 </body>
 </html>
 <?php $mysqli->close(); ?>

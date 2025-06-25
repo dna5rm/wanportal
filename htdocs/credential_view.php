@@ -82,16 +82,17 @@ $cred = $data['credential'];
         <div class="col">
             <h3>
                 View Credential: <?= htmlspecialchars($cred['name']) ?>
-                <span class="badge bg-<?= getBadgeColor($cred['type']) ?>"><?= htmlspecialchars($cred['type']) ?></span>
             </h3>
         </div>
         <div class="col text-end">
-            <a href="/credential_edit.php?id=<?= htmlspecialchars($id) ?>" class="btn btn-primary">
-                <i class="bi bi-pencil"></i> Edit
-            </a>
-            <a href="/credentials.php" class="btn btn-secondary">
-                <i class="bi bi-arrow-left"></i> Back
-            </a>
+            <div class="btn-group" role="group">
+                <a href="/credentials.php" class="btn btn-secondary btn-sm">
+                    <i class="bi bi-arrow-left"></i> Back
+                </a>
+                <a href="/credential_edit.php?id=<?= htmlspecialchars($id) ?>" class="btn btn-danger btn-sm">
+                    <i class="bi bi-pencil"></i> Edit
+                </a>
+            </div>
         </div>
     </div>
 
@@ -108,14 +109,14 @@ $cred = $data['credential'];
                         <dd class="col-sm-9"><?= htmlspecialchars($cred['site'] ?? 'N/A') ?></dd>
 
                         <dt class="col-sm-3">Type</dt>
-                        <dd class="col-sm-9"><?= htmlspecialchars($cred['type']) ?></dd>
+                        <dd class="col-sm-9"><span class="badge bg-<?= getBadgeColor($cred['type']) ?>"><?= htmlspecialchars($cred['type']) ?></span></dd>
 
                         <dt class="col-sm-3">Username</dt>
                         <dd class="col-sm-9">
                             <?php if ($cred['username']): ?>
                                 <div class="input-group">
                                     <input type="text" class="form-control" value="<?= htmlspecialchars($cred['username']) ?>" readonly>
-                                    <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard(this.previousElementSibling)">
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copyToClipboard(this.previousElementSibling)">
                                         <i class="bi bi-clipboard"></i>
                                     </button>
                                 </div>
@@ -129,10 +130,10 @@ $cred = $data['credential'];
                             <?php if ($cred['password']): ?>
                                 <div class="input-group">
                                     <input type="password" class="form-control" value="<?= htmlspecialchars($cred['password']) ?>" readonly>
-                                    <button class="btn btn-outline-secondary" type="button" onclick="togglePassword(this)">
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="togglePassword(this)">
                                         <i class="bi bi-eye"></i>
                                     </button>
-                                    <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard(this.parentElement.querySelector('input'))">
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copyToClipboard(this.parentElement.querySelector('input'))">
                                         <i class="bi bi-clipboard"></i>
                                     </button>
                                 </div>

@@ -38,7 +38,15 @@ sub register_agent_monitors {
         return $agent->{id};
     }
 
-    # GET: assignment for agent, expects password JSON
+    # @summary Get agent's monitor assignments
+    # @description Returns a list of active monitors assigned to the specified agent.
+    # Only returns monitors that are due for polling based on their interval.
+    # @tags Agent Monitors
+    # @param {string} id - Agent ID
+    # @param {object} requestBody.password - Agent password for authentication
+    # @response 200 {object} List of monitor assignments
+    # @response 401 {Error} Invalid agent ID or password
+    # @response 404 {Error} Agent not found
     main::get '/agent/:id/monitors' => sub {
         my $c = shift;
         my $request_body = $c->req->json;
@@ -57,10 +65,16 @@ sub register_agent_monitors {
             return $c->render(json => {status=>'success', monitors=>[]});
         }
 
-        # Only active monitors, targets, and agent, that are "due" or never sampled
+        # Only select necessary fields for active monitors that are due
         my $sql = q{
-            SELECT m.id, t.address, m.protocol, m.port, m.dscp,
-                m.pollcount, m.pollinterval, m.sample, m.last_update
+            SELECT 
+                m.id,
+                t.address,
+                m.protocol,
+                m.port,
+                m.dscp,
+                m.pollcount,
+                m.pollinterval
             FROM monitors m
             JOIN targets t ON t.id = m.target_id
             WHERE m.agent_id = ?
@@ -78,13 +92,36 @@ sub register_agent_monitors {
         $sth->execute($db_id);
         my @monitors;
         while (my $m = $sth->fetchrow_hashref) {
+            # Ensure default values are set
+            $m->{protocol} //= 'ICMP';
+            $m->{port} //= 0;
+            $m->{dscp} //= 'BE';
+            $m->{pollcount} //= 20;
+            $m->{pollinterval} //= 60;
+            
             push @monitors, $m;
         }
         $dbh->disconnect;
         $c->render(json => {status=>'success', monitors=>\@monitors});
     };
 
-    # POST: results update from agent, expects password/results in JSON
+    # @summary Submit monitor results
+    # @description Accepts monitoring results from an agent and updates the monitor statistics.
+    # Creates or updates RRD files for data storage.
+    # @tags Agent Monitors
+    # @param {string} id - Agent ID
+    # @param {object} requestBody.password - Agent password for authentication
+    # @param {array} requestBody.results - Array of monitor results
+    # @param {string} requestBody.results[].id - Monitor ID
+    # @param {number} requestBody.results[].min - Minimum RTT value
+    # @param {number} requestBody.results[].max - Maximum RTT value
+    # @param {number} requestBody.results[].median - Median RTT value
+    # @param {number} requestBody.results[].loss - Packet loss percentage
+    # @param {number} requestBody.results[].stddev - Standard deviation of RTT values
+    # @response 200 {Success} Results processed successfully
+    # @response 400 {Error} Missing or invalid result data
+    # @response 401 {Error} Invalid agent ID or password
+    # @response 404 {Error} Agent or monitor not found
     main::post '/agent/:id/monitors' => sub {
         my $c = shift;
         my $request_body = $c->req->json;
@@ -96,78 +133,113 @@ sub register_agent_monitors {
         my $db = $c->app->defaults->{db};
         my $dbh = DBI->connect($db->{dsn}, $db->{username}, $db->{password}, {RaiseError=>1,AutoCommit=>1});
 
-        # --- Debug/diagnostics ---
+        # Ensure RRD directory exists
         unless (-d $datadir) {
             print STDERR "Creating RRD directory: $datadir\n";
+            make_path($datadir);
         }
-        make_path($datadir) unless -d $datadir;
 
         foreach my $r (@$results) {
-            my $monitor_id   = $r->{monitor_id} or next;
-            my $loss         = $r->{loss} // 0;
-            my $median       = $r->{median} // 0;
-            my $min          = $r->{min} // 0;
-            my $max          = $r->{max} // 0;
-            my $stddev       = $r->{stddev} // 0;
-            my $prev_loss    = $loss;
+            # Validate required fields
+            unless (defined $r->{id} && 
+                defined $r->{min} && 
+                defined $r->{max} && 
+                defined $r->{median} && 
+                defined $r->{loss} && 
+                defined $r->{stddev}) {
+                $dbh->disconnect;
+                return $c->render(json => {
+                    status => 'error',
+                    message => 'Missing required fields (id, min, max, median, loss, stddev)'
+                }, status => 400);
+            }
 
-            # Get current sample/averages for running average
-            my $curr = $dbh->selectrow_hashref(
-                "SELECT sample, avg_loss, avg_median, avg_min, avg_max, avg_stddev, prev_loss, total_down FROM monitors WHERE id=?", undef, $monitor_id
+            # Get monitor configuration for RRD step
+            my $monitor_config = $dbh->selectrow_hashref(
+                "SELECT pollinterval FROM monitors WHERE id=?", 
+                undef, 
+                $r->{id}
             );
-            my $sample = ($curr->{sample} // 0) + 1;
-            my $avg_loss   = defined $curr->{avg_loss}   ? ((($curr->{avg_loss}   * ($sample-1)) + $loss   ) / $sample) : $loss;
-            my $avg_median = defined $curr->{avg_median} ? ((($curr->{avg_median}* ($sample-1)) + $median ) / $sample) : $median;
-            my $avg_min    = defined $curr->{avg_min}    ? ((($curr->{avg_min}   * ($sample-1)) + $min    ) / $sample) : $min;
-            my $avg_max    = defined $curr->{avg_max}    ? ((($curr->{avg_max}   * ($sample-1)) + $max    ) / $sample) : $max;
-            my $avg_stddev = defined $curr->{avg_stddev} ? ((($curr->{avg_stddev}* ($sample-1)) + $stddev ) / $sample) : $stddev;
 
-            # Downtime logic
+            unless ($monitor_config) {
+                $dbh->disconnect;
+                return $c->render(json => {
+                    status => 'error',
+                    message => "Invalid monitor ID: $r->{id}"
+                }, status => 400);
+            }
+
+            my $step = $monitor_config->{pollinterval} // 60;
+
+            # Get current stats for running averages
+            my $curr = $dbh->selectrow_hashref(
+                "SELECT sample, avg_loss, avg_median, avg_min, avg_max, avg_stddev, prev_loss, total_down FROM monitors WHERE id=?", 
+                undef, 
+                $r->{id}
+            );
+            
+            my $sample = ($curr->{sample} // 0) + 1;
+            my $avg_loss   = defined $curr->{avg_loss}   ? ((($curr->{avg_loss}   * ($sample-1)) + $r->{loss})   / $sample) : $r->{loss};
+            my $avg_median = defined $curr->{avg_median} ? ((($curr->{avg_median} * ($sample-1)) + $r->{median}) / $sample) : $r->{median};
+            my $avg_min    = defined $curr->{avg_min}    ? ((($curr->{avg_min}    * ($sample-1)) + $r->{min})    / $sample) : $r->{min};
+            my $avg_max    = defined $curr->{avg_max}    ? ((($curr->{avg_max}    * ($sample-1)) + $r->{max})    / $sample) : $r->{max};
+            my $avg_stddev = defined $curr->{avg_stddev} ? ((($curr->{avg_stddev} * ($sample-1)) + $r->{stddev}) / $sample) : $r->{stddev};
+
+            # Downtime tracking
             my $total_down = $curr->{total_down} || 0;
             my $set_last_down = '';
-            if ($loss == 100 && (!$curr->{prev_loss} || $curr->{prev_loss} < 100)) {
-                $total_down++;
+
+            # Update last_down only when transitioning from up (0) to down (100)
+            if ($r->{loss} == 100 && defined $curr->{prev_loss} && $curr->{prev_loss} == 0) {
                 $set_last_down = "last_down = NOW(),";
             }
 
-            # --- MySQL update
+            # Increment total_down whenever loss is 100%
+            if ($r->{loss} == 100) {
+                $total_down++;
+            }
+
+            # Update database
             my $sql = qq{
                 UPDATE monitors SET
-                  sample         = ?,
-                  current_loss   = ?,
-                  current_median = ?,
-                  current_min    = ?,
-                  current_max    = ?,
-                  current_stddev = ?,
-                  avg_loss       = ?,
-                  avg_median     = ?,
-                  avg_min        = ?,
-                  avg_max        = ?,
-                  avg_stddev     = ?,
-                  prev_loss      = ?,
-                  last_update    = NOW(),
-                  $set_last_down
-                  total_down     = ?
+                    sample         = ?,
+                    current_loss   = ?,
+                    current_median = ?,
+                    current_min    = ?,
+                    current_max    = ?,
+                    current_stddev = ?,
+                    avg_loss       = ?,
+                    avg_median     = ?,
+                    avg_min        = ?,
+                    avg_max        = ?,
+                    avg_stddev     = ?,
+                    prev_loss      = ?,
+                    last_update    = NOW(),
+                    $set_last_down
+                    total_down     = ?
                 WHERE id = ?
             };
             $sql =~ s/,\s+,/,/g;
             $sql =~ s/,$//g;
-            my @params = (
-                $sample, $loss, $median, $min, $max, $stddev,
+            
+            $dbh->do($sql, undef,
+                $sample, 
+                $r->{loss}, $r->{median}, $r->{min}, $r->{max}, $r->{stddev},
                 $avg_loss, $avg_median, $avg_min, $avg_max, $avg_stddev,
-                $loss, $total_down, $monitor_id
+                $r->{loss}, $total_down, $r->{id}
             );
-            $dbh->do($sql, undef, @params);
 
-            ### --- RRD logic --- ###
-            my $rrdfile = "$datadir/$monitor_id.rrd";
-            print STDERR "RRD: attempt create/update $rrdfile (loss=$loss, rtt/median=$median)\n";
+            # RRD handling
+            my $rrdfile = "$datadir/$r->{id}.rrd";
+            print STDERR "RRD: attempt create/update $rrdfile (loss=$r->{loss}, rtt=$r->{median})\n";
+            
             unless (-e $rrdfile) {
-                print STDERR "RRD: creating $rrdfile\n";
+                print STDERR "RRD: creating $rrdfile with step $step\n";
                 RRDs::create(
-                    $rrdfile, '-s', 60,
-                    'DS:loss:GAUGE:180:U:U',
-                    'DS:rtt:GAUGE:180:U:U',
+                    $rrdfile, 
+                    '--step', $step,
+                    'DS:loss:GAUGE:'.($step*3).':0:100',
+                    'DS:rtt:GAUGE:'.($step*3).':0:U',
                     'RRA:LAST:0.5:1:525600'
                 );
                 my $ERR = RRDs::error;
@@ -176,13 +248,17 @@ sub register_agent_monitors {
                     print STDERR "RRD error: $ERR\n";
                 }
             }
-            RRDs::update($rrdfile, '-t', 'loss:rtt', "N:$loss:$median");
+
+            # Update RRD with current timestamp
+            my $now = time();
+            RRDs::update($rrdfile, '--template', 'loss:rtt', "$now:$r->{loss}:$r->{median}");
             my $ERR = RRDs::error;
             if ($ERR) {
                 $c->app->log->error("RRD update $rrdfile: $ERR");
                 print STDERR "RRD error: $ERR\n";
             }
         }
+
         $dbh->disconnect;
         $c->render(json => {status=>'success'});
     };

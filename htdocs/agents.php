@@ -1,5 +1,4 @@
 <?php
-// agents.php
 session_start();
 require_once 'config.php';
 
@@ -8,6 +7,12 @@ if (!isset($_SESSION['user'])) {
     header('Location: /login.php');
     exit;
 }
+
+// Handle show_inactive preference
+$show_inactive = isset($_GET['show_inactive']) ?
+    filter_var($_GET['show_inactive'], FILTER_VALIDATE_BOOLEAN) :
+    ($_SESSION['show_inactive'] ?? false);
+$_SESSION['show_inactive'] = $show_inactive;
 
 // Fetch agents from API
 $ch = curl_init("http://localhost/cgi-bin/api/agents");
@@ -48,7 +53,7 @@ if ($status === 200) {
             <h3>Agent Management</h3>
         </div>
         <div class="col text-end">
-            <a href="/agents_edit.php" class="btn btn-primary">
+            <a href="/agents_edit.php" class="btn btn-primary btn-sm">
                 <i class="bi bi-plus-circle"></i> New Agent
             </a>
         </div>
@@ -65,7 +70,8 @@ if ($status === 200) {
                         </div>
                         <div class="col-md-2">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="showInactive">
+                                <input class="form-check-input" type="checkbox" id="showInactive"
+                                    <?= $show_inactive ? 'checked' : '' ?>>
                                 <label class="form-check-label" for="showInactive">
                                     Show Inactive
                                 </label>
@@ -98,7 +104,10 @@ if ($status === 200) {
                 <?php else: ?>
                     <?php foreach ($agents as $agent): ?>
                         <tr class="<?= $agent['is_active'] ? '' : 'table-secondary' ?>">
-                            <td><?= htmlspecialchars($agent['name']) ?></td>
+                            <td>
+                                <a href="/agent.php?id=<?= htmlspecialchars($agent['id']) ?>" class="btn btn-sm">
+                                    <i class="bi bi-arrow-bar-left"></i>
+                                </a> <?= htmlspecialchars($agent['name']) ?></td>
                             <td><?= htmlspecialchars($agent['address']) ?></td>
                             <td><?= htmlspecialchars($agent['description']) ?></td>
                             <td>
@@ -146,7 +155,9 @@ if ($status === 200) {
 <script>
 // Filter functionality
 document.getElementById('searchFilter').addEventListener('input', filterAgents);
-document.getElementById('showInactive').addEventListener('change', filterAgents);
+document.getElementById('showInactive').addEventListener('change', function() {
+    window.location.href = '?show_inactive=' + this.checked;
+});
 
 function filterAgents() {
     const search = document.getElementById('searchFilter').value.toLowerCase();
@@ -155,20 +166,33 @@ function filterAgents() {
     const rows = document.querySelectorAll('tbody tr');
     
     rows.forEach(row => {
+        if (row.cells.length < 2) return; // Skip empty table messages
+        
         const name = row.cells[0].textContent.toLowerCase();
         const address = row.cells[1].textContent.toLowerCase();
         const description = row.cells[2].textContent.toLowerCase();
-        const isActive = !row.classList.contains('table-secondary');
+        
+        // Check if row is inactive
+        const isInactive = row.classList.contains('table-secondary');
         
         const searchMatch = name.includes(search) || 
                           address.includes(search) || 
                           description.includes(search);
         
-        const activeMatch = showInactive || isActive;
+        // Hide inactive rows unless showInactive is checked
+        let shouldShow = searchMatch;
+        if (isInactive && !showInactive) {
+            shouldShow = false;
+        }
         
-        row.style.display = (searchMatch && activeMatch) ? '' : 'none';
+        row.style.display = shouldShow ? '' : 'none';
     });
 }
+
+// Apply initial filtering on page load
+window.addEventListener('DOMContentLoaded', function() {
+    filterAgents();
+});
 
 // Delete confirmation
 function deleteAgent(id, name) {

@@ -165,3 +165,5 @@ netping-agent.pl
 - **Modules**: each endpoint is a modular `.pm` file (`agent.pm`, `monitor.pm`, etc.)
 - **Auto-table**: Each module ensures its own database table(s) on registration.
 - **OAuth extension, logging, rate-limits, etc.** are easy to add (see Mojolicious documentation).
+
+Testing DSCP/TOS: `tcpdump -i any -v 'dst port 3000'`

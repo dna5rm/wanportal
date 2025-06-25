@@ -4,3 +4,5 @@
 # Exceptions (keep these)
 !cgi-bin/
 !htdocs/
+!run-agent.sh
+!*.pl

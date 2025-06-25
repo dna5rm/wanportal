@@ -141,8 +141,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $response = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-    print("API Response Status: $status\n");
-    print("API Response: $response\n");
+    // Debug output
+    // print("API Response Status: $status\n");
+    // print("API Response: $response\n");
 
     curl_close($ch);
 
@@ -185,7 +186,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <h3><?= $id ? 'Edit' : 'New' ?> Monitor</h3>
         </div>
         <div class="col text-end">
-            <a href="/monitors.php" class="btn btn-secondary">
+            <a href="/monitors.php" class="btn btn-secondary btn-sm">
                 <i class="bi bi-arrow-left"></i> Back
             </a>
         </div>
@@ -313,10 +314,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
 
                         <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" class="btn btn-primary btn-sm">
                                 <i class="bi bi-save"></i> Save Monitor
                             </button>
-                            <a href="/monitors.php" class="btn btn-secondary">
+                            <a href="/monitors.php" class="btn btn-secondary btn-sm">
                                 <i class="bi bi-x"></i> Cancel
                             </a>
                         </div>

@@ -177,21 +177,21 @@ try {
         <div class="col">
             <h3>
                 Target:
-                <span title="<?= htmlspecialchars($target['id']) ?>" data-bs-toggle="tooltip">
-                    <?= htmlspecialchars($target['address']) ?>
-                </span>
-                <?php if (!$target['is_active']): ?>
-                    <span class="badge bg-warning">Inactive</span>
-                <?php endif; ?>
+                <?= htmlspecialchars(!empty($target['description']) ? $target['description'] : $target['address']) ?>
             </h3>
         </div>
         <div class="col text-end">
             <div class="btn-group" role="group">
-                <a href="/index.php" class="btn btn-secondary">
+                <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
+                    <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Back
+                    </a>
+                <?php endif; ?>
+                <a href="/index.php" class="btn btn-secondary btn-sm">
                     <i class="bi bi-house-door"></i> Home
                 </a>
                 <?php if (isset($_SESSION['user'])): ?>
-                    <a href="/targets_edit.php?id=<?= htmlspecialchars($target['id']) ?>" class="btn btn-danger">
+                    <a href="/targets_edit.php?id=<?= htmlspecialchars($target['id']) ?>" class="btn btn-danger btn-sm">
                         <i class="bi bi-pencil"></i> Edit
                     </a>
                 <?php endif; ?>
@@ -214,10 +214,6 @@ try {
                         <li class="list-group-item">
                             <strong>Address:</strong><br/>
                             <?= htmlspecialchars($target['address']) ?>
-                        </li>
-                        <li class="list-group-item">
-                            <strong>Description:</strong><br/>
-                            <?= htmlspecialchars($target['description']) ?>
                         </li>
                         <li class="list-group-item">
                             <strong>Status:</strong><br/>
@@ -299,12 +295,28 @@ try {
             <div class="table-responsive">
                 <table class="table table-light table-bordered table-striped table-hover">
                     <thead>
+                        
+                        <tr>
+                            <th colspan="3" class="text-center"></th>
+                            <!--
+                            <th colspan="2" class="table-primary text-center">Current</th>
+                            -->
+                            <th colspan="5" class="table-secondary text-center">Average</th>
+                            <th colspan="1" class="text-center"></th>
+                        </tr>
                         <tr>
                             <th>Monitor</th>
                             <th>Agent</th>
                             <th>Protocol</th>
+                            <!--
                             <th class="text-center table-primary">Median</th>
                             <th class="text-center table-primary">Loss</th>
+                            -->
+                            <th class="text-center table-secondary">Median</th>
+                            <th class="text-center table-secondary">Min</th>
+                            <th class="text-center table-secondary">Max</th>
+                            <th class="text-center table-secondary">Std Dev</th>
+                            <th class="text-center table-secondary">Loss</th>
                             <th class="text-center">Last Update</th>
                         </tr>
                     </thead>
@@ -367,6 +379,7 @@ try {
                                             <?php endif; ?>
                                         </span>
                                     </td>
+                                    <!--
                                     <td class="text-center table-primary">
                                         <span class="badge <?= $effectively_active ? $m['current_median_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['current_median']) ?>
@@ -375,6 +388,32 @@ try {
                                     <td class="text-center table-primary">
                                         <span class="badge <?= $effectively_active ? $m['current_loss_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['current_loss']) ?>%
+                                        </span>
+                                    </td>
+                                    -->
+                                    <td class="text-center table-secondary">
+                                        <span class="badge <?= $effectively_active ? $m['avg_median_color'] : 'bg-secondary' ?>">
+                                            <?= htmlspecialchars($m['avg_median']) ?>
+                                        </span>
+                                    </td>
+                                    <td class="text-center table-secondary">
+                                        <span class="badge <?= $effectively_active ? $m['avg_minimum_color'] : 'bg-secondary' ?>">
+                                            <?= htmlspecialchars($m['avg_min']) ?>
+                                        </span>
+                                    </td>
+                                    <td class="text-center table-secondary">
+                                        <span class="badge <?= $effectively_active ? $m['avg_maximum_color'] : 'bg-secondary' ?>">
+                                            <?= htmlspecialchars($m['avg_max']) ?>
+                                        </span>
+                                    </td>
+                                    <td class="text-center table-secondary">
+                                        <span class="badge <?= $effectively_active ? $m['avg_stddev_color'] : 'bg-secondary' ?>">
+                                            <?= htmlspecialchars($m['avg_stddev']) ?>
+                                        </span>
+                                    </td>
+                                    <td class="text-center table-secondary">
+                                        <span class="badge <?= $effectively_active ? $m['avg_loss_color'] : 'bg-secondary' ?>">
+                                            <?= htmlspecialchars($m['avg_loss']) ?>%
                                         </span>
                                     </td>
                                     <td class="text-center">
@@ -395,45 +434,6 @@ try {
 </div>
 
 <?php include 'footer.php'; ?>
-
-<script>
-// Filter functionality
-document.getElementById('searchFilter').addEventListener('input', filterMonitors);
-document.getElementById('protocolFilter').addEventListener('change', filterMonitors);
-document.getElementById('showInactive').addEventListener('change', function() {
-    // Update URL with new show_inactive state
-    const url = new URL(window.location);
-    url.searchParams.set('show_inactive', this.checked);
-    window.location = url;
-});
-
-function filterMonitors() {
-    const search = document.getElementById('searchFilter').value.toLowerCase();
-    const protocol = document.getElementById('protocolFilter').value;
-
-    const rows = document.querySelectorAll('tbody tr');
-
-    rows.forEach(row => {
-        if (row.cells.length === 1) return; // Skip "No monitors found" row
-
-        const description = row.cells[0].textContent.toLowerCase();
-        const agent = row.cells[1].textContent.toLowerCase();
-        const rowProtocol = row.cells[2].textContent;
-
-        const searchMatch = description.includes(search) ||
-                          agent.includes(search);
-        const protocolMatch = !protocol || rowProtocol.startsWith(protocol);
-
-        row.style.display = (searchMatch && protocolMatch) ? '' : 'none';
-    });
-}
-
-// Initialize tooltips
-const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-    return new bootstrap.Tooltip(tooltipTriggerEl);
-});
-</script>
 </body>
 </html>
 <?php $mysqli->close(); ?>

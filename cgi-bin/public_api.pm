@@ -6,13 +6,28 @@ use DBI;
 use JSON qw(encode_json);
 use RRDs;
 use File::Temp;
+use Time::Local;
+use Date::Parse qw(str2time);
+use POSIX qw(strftime);
 
 our @EXPORT_OK = qw(register_public_endpoints);
+my $datadir = '/var/rrd';  # RRD storage directory
 
 sub register_public_endpoints {
     my ($db_config) = @_;
 
-    # GET /agents - List agents (without passwords)
+    # @summary List all agents
+    # @description Returns a list of all monitoring agents in the system without sensitive information.
+    # Passwords are never included in the response.
+    # @tags Public API
+    # @response 200 {object} List of agents with basic information
+    # @response 200 {array} agents - Array of agent objects
+    # @response 200 {string} agents[].id - Agent UUID
+    # @response 200 {string} agents[].name - Agent name
+    # @response 200 {string} agents[].address - Agent IP address
+    # @response 200 {string} agents[].description - Agent description
+    # @response 200 {string} agents[].last_seen - Last contact timestamp
+    # @response 200 {boolean} agents[].is_active - Agent status
     main::get '/agents' => sub {
         my $c = shift;
         my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
@@ -33,7 +48,15 @@ sub register_public_endpoints {
         });
     };
 
-    # GET /targets - List targets
+    # @summary List all targets
+    # @description Returns a list of all monitoring targets in the system.
+    # @tags Public API
+    # @response 200 {object} List of targets
+    # @response 200 {array} targets - Array of target objects
+    # @response 200 {string} targets[].id - Target UUID
+    # @response 200 {string} targets[].address - Target address (IP or hostname)
+    # @response 200 {string} targets[].description - Target description
+    # @response 200 {boolean} targets[].is_active - Target status
     main::get '/targets' => sub {
         my $c = shift;
         my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
@@ -54,42 +77,111 @@ sub register_public_endpoints {
         });
     };
 
-    # GET /monitors - List monitors
+    # @summary List all monitors
+    # @description Returns a list of all monitors with their current status and configuration.
+    # Supports filtering by status and activity state.
+    # @tags Public API
+    # @param {integer} [current_loss] - Filter by current loss percentage
+    # @param {boolean} [is_active] - Filter by active status
+    # @response 200 {object} List of monitors with current status
+    # @response 200 {array} monitors - Array of monitor objects
+    # @response 200 {string} monitors[].id - Monitor UUID
+    # @response 200 {string} monitors[].description - Monitor description
+    # @response 200 {string} monitors[].agent_id - Associated agent UUID
+    # @response 200 {string} monitors[].target_id - Associated target UUID
+    # @response 200 {string} monitors[].protocol - Monitor protocol
+    # @response 200 {integer} monitors[].port - TCP port (if applicable)
+    # @response 200 {string} monitors[].dscp - DSCP value
+    # @response 200 {integer} monitors[].current_loss - Current packet loss percentage
+    # @response 200 {number} monitors[].current_median - Current median RTT
+    # @response 200 {boolean} monitors[].is_active - Monitor status
     main::get '/monitors' => sub {
         my $c = shift;
-        my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
         
-        my $sth = $dbh->prepare(q{
-            SELECT 
+        # Get query parameters
+        my $current_loss = $c->param('current_loss');
+        my $is_active = $c->param('is_active');
+        
+        my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+
+        # Start building the SQL query
+        my $sql = q{
+            SELECT
                 m.id, m.description, m.agent_id, m.target_id,
-                m.protocol, m.port, m.dscp, m.is_active,
-                m.current_loss, m.current_median,
-                m.avg_loss, m.avg_median,
-                m.last_update,
+                m.protocol, m.port, m.dscp, m.pollcount, m.pollinterval,
+                CASE 
+                    WHEN m.is_active = 0 OR a.is_active = 0 OR t.is_active = 0 THEN 0 
+                    ELSE 1 
+                END as is_active,
+                m.sample, m.current_loss, m.current_median,
+                m.current_min, m.current_max, m.current_stddev,
+                m.avg_loss, m.avg_median, m.avg_min, m.avg_max,
+                m.avg_stddev, m.prev_loss, m.last_clear, m.last_down,
+                m.last_update, m.total_down,
                 a.name as agent_name,
-                t.address as target_address
+                a.is_active as agent_is_active,
+                t.address as target_address,
+                t.is_active as target_is_active
             FROM monitors m
             JOIN agents a ON m.agent_id = a.id
             JOIN targets t ON m.target_id = t.id
-            ORDER BY m.description
-        });
-        $sth->execute();
+            WHERE 1=1
+        };
+
+        my @params;
+
+        # Add query conditions if parameters are provided
+        if (defined $current_loss) {
+            $sql .= " AND m.current_loss = ?";
+            push @params, $current_loss;
+        }
+        
+        if (defined $is_active) {
+            $sql .= " AND (CASE 
+                WHEN m.is_active = 0 OR a.is_active = 0 OR t.is_active = 0 THEN 0 
+                ELSE 1 
+            END) = ?";
+            push @params, $is_active;
+        }
+
+        $sql .= " ORDER BY m.description";
+
+        my $sth = $dbh->prepare($sql);
+        $sth->execute(@params);
         my $monitors = $sth->fetchall_arrayref({});
         $dbh->disconnect;
-        
+
         return $c->render(json => {
             status => 'success',
             monitors => $monitors
         });
     };
 
-    # GET /rrd - RRD data access and graph generation
+    # @summary Get RRD data
+    # @description Retrieves monitoring data from RRD files. Can return raw data or generate graphs.
+    # Supports both RTT and loss metrics with customizable time ranges.
+    # @tags Public API
+    # @param {string} id - Monitor UUID
+    # @param {string} [cmd=graph] - Command type: 'graph' for PNG visualization or raw data if omitted
+    # @param {string} [ds=rtt] - Data source: 'rtt' for response time or 'loss' for packet loss
+    # @param {string} [start] - Start time (ISO format or relative time like '-3h')
+    # @param {string} [end] - End time (ISO format or relative time)
+    # @response 200 {object} RRD data or graph
+    # @response 200 {image/png} Response when cmd=graph
+    # @response 200 {object} Response for raw data
+    # @response 200 {integer} start_time - Data start timestamp
+    # @response 200 {integer} end_time - Data end timestamp
+    # @response 200 {integer} step - Time between data points
+    # @response 200 {array} data - Array of data points
+    # @response 404 {Error} Monitor or RRD file not found
+    # @response 400 {Error} Invalid parameters
     main::get '/rrd' => sub {
         my $c = shift;
         my $id = $c->param('id');
         my $cmd = $c->param('cmd') // '';
-        my $ds = $c->param('ds') // 'rtt';  # Default to RTT if not specified
-        my $timeframe = $c->param('timeframe') // '7h';  # Default 7 hours if not specified
+        my $ds = $c->param('ds') // 'rtt';
+        my $start = $c->param('start');
+        my $end = $c->param('end');
         
         # Validate monitor ID
         return $c->render(json => {
@@ -97,13 +189,38 @@ sub register_public_endpoints {
             message => 'Monitor ID required'
         }, status => 400) unless $id;
 
-        my $rrdfile = "/var/rrd/$id.rrd";
+        # Get monitor description from database
+        my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+        my $sth = $dbh->prepare("SELECT description FROM monitors WHERE id = ?");
+        $sth->execute($id);
+        my $monitor = $sth->fetchrow_hashref();
+        $dbh->disconnect;
+        
+        my $metric_type = $ds eq 'rtt' ? 'Response Time: ' : 'Packet Loss: ';
+        my $monitor_name = ($monitor && $monitor->{description}) ? $monitor->{description} : $id;
+        my $title = $metric_type . $monitor_name;
+        my $rrdfile = "$datadir/$id.rrd";
         
         # Check if RRD file exists
         return $c->render(json => {
             status => 'error',
             message => 'RRD file not found'
         }, status => 404) unless -f $rrdfile;
+
+        # Convert datetime parameters to epoch
+        if ($start) {
+            $start =~ s/T/ /;
+            $start = str2time($start);
+        } else {
+            $start = time() - (3 * 3600); # Default 3 hours ago
+        }
+        
+        if ($end) {
+            $end =~ s/T/ /;
+            $end = str2time($end);
+        } else {
+            $end = time(); # Default to now
+        }
 
         # If cmd=graph, generate and return PNG
         if ($cmd eq 'graph') {
@@ -114,26 +231,55 @@ sub register_public_endpoints {
                 UNLINK => 1
             );
 
+            # Use UTC for all operations
+            my $hours = int(($end - $start) / 3600);
+            
+            # Format time in UTC
+            my $display_time = strftime("%Y/%m/%d %H\\:%M UTC", gmtime($start));
+
             my @graph_opts = (
                 $tmpfile,
-                '--start', "-$timeframe",
+                '--start', $start,
+                '--end', $end,
                 '--width', '600',
-                '--height', '100',
-                '--title', ($ds eq 'rtt' ? 'Response Time' : 'Packet Loss'),
+                '--height', '105',
+                '--color', 'BACK#F3F3F3',
+                '--color', 'CANVAS#FDFDFD',
+                '--color', 'SHADEA#CBCBCB',
+                '--color', 'SHADEB#999999',
+                '--color', 'FONT#000000',
+                '--color', 'AXIS#2C4D43',
+                '--color', 'ARROW#2C4D43',
+                '--color', 'FRAME#2C4D43',
+                '--font', 'TITLE:10:Arial',
+                '--font', 'AXIS:8:Arial',
+                '--font', 'LEGEND:9:Courier',
+                '--font', 'UNIT:8:Arial',
+                '--font', 'WATERMARK:7:Arial',
+                '--border', '1',
+                '--title', $title,
                 '--vertical-label', ($ds eq 'rtt' ? 'milliseconds' : 'percent'),
                 '--slope-mode',
                 '--alt-autoscale',
                 '--rigid',
-                '--lower-limit', '0',
-                'DEF:data=' . $rrdfile . ':' . $ds . ':LAST',
-                'LINE3:data#FF0000:' . ($ds eq 'rtt' ? 'Latency' : 'Loss')
+                '--lower-limit', '0'
             );
 
             # Add upper limit for loss graphs
             push @graph_opts, '--upper-limit', '100' if $ds eq 'loss';
 
+            push @graph_opts, (
+                'DEF:data=' . $rrdfile . ':' . $ds . ':LAST',
+                'LINE3:data#FF0000:' . ($ds eq 'rtt' ? 'Latency' : 'Loss'),
+                'GPRINT:data:AVERAGE:Avg\\: %6.2lf',
+                'GPRINT:data:MIN:Min\\: %6.2lf',
+                'GPRINT:data:MAX:Max\\: %6.2lf',
+                'GPRINT:data:LAST:Last\\: %6.2lf\\j',
+                'COMMENT:' . $display_time . ' (+' . $hours . ' hours)\\r'
+            );
+
             RRDs::graph(@graph_opts);
-            if (my $err = RRDs::error()) {  # Fixed error check
+            if (my $err = RRDs::error()) {
                 return $c->render(json => {
                     status => 'error',
                     message => "Failed to generate graph: $err"
@@ -154,13 +300,14 @@ sub register_public_endpoints {
         }
         
         # If no cmd specified, dump RRD data as JSON
-        my ($start, $step, $names, $data) = RRDs::fetch(
+        my ($fetch_start, $step, $names, $data) = RRDs::fetch(
             $rrdfile,
             'LAST',
-            '--start', "-$timeframe"
+            '--start', $start,
+            '--end', $end
         );
         
-        if (my $err = RRDs::error()) {  # Fixed error check
+        if (my $err = RRDs::error()) {
             return $c->render(json => {
                 status => 'error',
                 message => "Failed to fetch RRD data: $err"
@@ -169,23 +316,31 @@ sub register_public_endpoints {
 
         # Format data for JSON response
         my @formatted_data;
-        my $time = $start;
+        my $time = $fetch_start;
         foreach my $line (@$data) {
             push @formatted_data, {
                 timestamp => $time,
-                rtt => $line->[0],
-                loss => $line->[1]
+                datetime => strftime("%Y-%m-%d %H:%M:%S", localtime($time)),
+                loss => $line->[0],
+                rtt => $line->[1]
             };
             $time += $step;
         }
 
         return $c->render(json => {
             status => 'success',
-            start_time => $start,
+            start_time => $fetch_start,
+            end_time => $time - $step,
             step => $step,
             data => \@formatted_data
         });
     };
+}
+
+# Helper function to validate datetime format
+sub is_valid_datetime {
+    my $dt = shift;
+    return $dt =~ /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 }
 
 1;

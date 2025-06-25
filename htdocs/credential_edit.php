@@ -153,7 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <h3><?= $id ? 'Edit' : 'New' ?> Credential</h3>
         </div>
         <div class="col text-end">
-            <a href="/credentials.php" class="btn btn-secondary">
+            <a href="/credentials.php" class="btn btn-secondary btn-sm">
                 <i class="bi bi-arrow-left"></i> Back
             </a>
         </div>
@@ -209,7 +209,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="input-group">
                             <input type="password" class="form-control" id="password" name="password" 
                                    value="<?= htmlspecialchars($cred['password']) ?>">
-                            <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('password')">
+                            <button class="btn btn-outline-secondary btn-sm" type="button" onclick="togglePassword('password')">
                                 <i class="bi bi-eye"></i>
                             </button>
                         </div>
@@ -279,10 +279,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <div class="col-12 text-center mb-3">
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary btn-sm">
                 <i class="bi bi-save"></i> Save Credential
             </button>
-            <a href="/credentials.php" class="btn btn-secondary">
+            <a href="/credentials.php" class="btn btn-secondary btn-sm">
                 <i class="bi bi-x"></i> Cancel
             </a>
         </div>

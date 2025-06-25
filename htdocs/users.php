@@ -59,7 +59,7 @@ if ($status === 200) {
             <h3>User Management</h3>
         </div>
         <div class="col text-end">
-            <a href="/user_edit.php" class="btn btn-primary">
+            <a href="/user_edit.php" class="btn btn-primary btn-sm">
                 <i class="bi bi-person-plus"></i> New User
             </a>
         </div>

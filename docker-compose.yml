@@ -2,16 +2,22 @@
 services:
   wanportal:
     build:
-      context: .  # or the relative path to your build directory
-      dockerfile: Dockerfile  # if necessary
+      context: .
+      dockerfile: Dockerfile
     image: wanportal
     container_name: wanportal
     volumes:
       - rrd:/var/rrd:rw
-      - .:/var/www/localhost:rw
+      - .:/srv:rw
     ports:
       - "8080:80"
     restart: unless-stopped
+    # healthcheck:
+    #   test: CMD curl -f http://localhost/cgi-bin/api/agent || exit 1
+    #   interval: 1m
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 30s
     environment:
       - MYSQL_HOST=${MYSQL_HOST:-wandb}
       - MYSQL_PORT=${MYSQL_PORT:-3306}

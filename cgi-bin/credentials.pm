@@ -58,30 +58,93 @@ sub register_credentials {
     ensure_credentials_table($dbh);
     $dbh->disconnect;
 
-    # GET /credentials - List credentials
+    # @summary List credentials
+    # @description Returns a list of all stored credentials with optional filtering.
+    # Passwords are not included in the response unless specifically requested.
+    # @tags Credentials
+    # @security bearerAuth
+    # @param {string} [is_active] - Filter by active status (0 or 1)
+    # @param {string} [site] - Filter by site
+    # @param {string} [type] - Filter by credential type (ACCOUNT, CERTIFICATE, API, PSK, CODE)
+    # @param {string} [sensitivity] - Filter by sensitivity level (LOW, MEDIUM, HIGH, CRITICAL)
+    # @param {boolean} [include_password] - Include passwords in response
+    # @response 200 {object} List of credentials
+    # @response 401 {Error} Unauthorized
     main::get '/credentials' => sub {
         my $c = shift;
-        my $query = $c->req->json || {};
         
         my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
         
-        # Build query conditions
+        # Define valid columns for filtering
+        my %valid_columns = (
+            id => 1,
+            site => 1,
+            name => 1,
+            type => 1,
+            username => 1,
+            url => 1,
+            owner => 1,
+            comment => 1,
+            expiry_date => 1,
+            is_active => 1,
+            sensitivity => 1,
+            metadata => 1,
+            created_at => 1,
+            created_by => 1,
+            last_accessed_at => 1,
+            last_accessed_by => 1,
+            updated_at => 1,
+            updated_by => 1
+        );
+
+        # Process query parameters for filtering
         my @where;
         my @params;
         
-        push @where, "is_active = 1" unless $query->{show_inactive};
-        
-        if ($query->{site}) {
-            push @where, "site = ?";
-            push @params, $query->{site};
+        # Handle is_active parameter specially
+        if (defined $c->param('is_active')) {
+            my $is_active = $c->param('is_active');
+            if ($is_active =~ /^[01]$/) {  # Only accept 0 or 1
+                push @where, "is_active = ?";
+                push @params, $is_active;
+            }
+        } else {
+            # Default to showing only active entries
+            push @where, "is_active = 1";
         }
-        if ($query->{type} && $VALID_TYPES{$query->{type}}) {
-            push @where, "type = ?";
-            push @params, $query->{type};
-        }
         
+        for my $param ($c->req->params->names) {
+            next if $param eq 'is_active';  # Skip since we handled it above
+            if ($valid_columns{$param}) {
+                my $value = $c->param($param);
+                
+                # Handle different types of comparisons
+                if ($value =~ /^(<=|>=|!=|<|>|=)(.+)$/) {
+                    push @where, "$param $1 ?";
+                    push @params, $2;
+                }
+                # Handle LIKE queries
+                elsif ($value =~ /^%.*%$/) {
+                    push @where, "$param LIKE ?";
+                    push @params, $value;
+                }
+                # Handle NULL checks
+                elsif ($value eq 'NULL') {
+                    push @where, "$param IS NULL";
+                }
+                elsif ($value eq 'NOT NULL') {
+                    push @where, "$param IS NOT NULL";
+                }
+                # Default exact match
+                else {
+                    push @where, "$param = ?";
+                    push @params, $value;
+                }
+            }
+        }
+
+        # Build and execute query
         my $where_clause = @where ? "WHERE " . join(" AND ", @where) : "";
-        
         my $sql = "SELECT * FROM credentials $where_clause ORDER BY name";
         
         my $sth = $dbh->prepare($sql);
@@ -89,16 +152,9 @@ sub register_credentials {
         
         my $credentials = $sth->fetchall_arrayref({});
         
-        # Update last accessed for each credential
-        my $username = $c->stash('jwt_payload')->{username};
-        my $update = $dbh->prepare(
-            "UPDATE credentials SET last_accessed_at = NOW(), last_accessed_by = ? WHERE id = ?"
-        );
-        
+        # Don't send passwords unless specifically requested
         for my $cred (@$credentials) {
-            $update->execute($username, $cred->{id});
-            # Clean sensitive data from response
-            delete $cred->{password} unless $query->{include_password};
+            delete $cred->{password} unless $c->param('include_password');
         }
         
         $dbh->disconnect;
@@ -108,7 +164,15 @@ sub register_credentials {
         });
     };
 
-    # GET /credentials/:id - Get single credential
+    # @summary Get credential details
+    # @description Retrieves detailed information about a specific credential.
+    # Updates last_accessed timestamp when credential is viewed.
+    # @tags Credentials
+    # @security bearerAuth
+    # @param {string} id - Credential UUID
+    # @response 200 {object} Credential details
+    # @response 401 {Error} Unauthorized
+    # @response 404 {Error} Credential not found
     main::get '/credentials/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -141,7 +205,25 @@ sub register_credentials {
         });
     };
 
-    # POST /credentials - Create new credential
+    # @summary Create new credential
+    # @description Creates a new credential entry in the system.
+    # @tags Credentials
+    # @security bearerAuth
+    # @param {object} requestBody
+    # @param {string} requestBody.name - Credential name
+    # @param {string} requestBody.type - Credential type (ACCOUNT, CERTIFICATE, API, PSK, CODE)
+    # @param {string} [requestBody.site] - Associated site
+    # @param {string} [requestBody.username] - Username for account credentials
+    # @param {string} [requestBody.password] - Password or secret
+    # @param {string} [requestBody.url] - Associated URL
+    # @param {string} [requestBody.owner] - Credential owner
+    # @param {string} [requestBody.comment] - Additional notes
+    # @param {string} [requestBody.expiry_date] - Expiration date (ISO format)
+    # @param {string} [requestBody.sensitivity=MEDIUM] - Sensitivity level (LOW, MEDIUM, HIGH, CRITICAL)
+    # @param {object} [requestBody.metadata] - Additional metadata (JSON object)
+    # @response 200 {Success} Credential created successfully
+    # @response 400 {Error} Missing required fields or invalid input
+    # @response 401 {Error} Unauthorized
     main::post '/credentials' => sub {
         my $c = shift;
         my $data = $c->req->json;
@@ -192,8 +274,14 @@ sub register_credentials {
                 INSERT INTO credentials (
                     id, site, name, type, username, password,
                     url, owner, comment, expiry_date, sensitivity,
-                    metadata, created_by, created_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())
+                    metadata, created_by, created_at,
+                    updated_by, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, ?, NOW(),
+                    ?, NOW()
+                )
             });
             
             $sth->execute(
@@ -209,13 +297,15 @@ sub register_credentials {
                 $data->{expiry_date},
                 $data->{sensitivity} || 'MEDIUM',
                 $data->{metadata},
-                $username
+                $username,
+                $username  # for updated_by
             );
         } catch {
+            my $error = $_;
             $dbh->disconnect;
             return $c->render(json => {
                 status => 'error',
-                message => "Database error: $_"
+                message => "Database error: $error"
             }, status => 500);
         };
         
@@ -226,7 +316,28 @@ sub register_credentials {
         });
     };
 
-    # PUT /credentials/:id - Update credential
+    # @summary Update credential
+    # @description Updates an existing credential's information.
+    # Tracks update history with timestamp and user.
+    # @tags Credentials
+    # @security bearerAuth
+    # @param {string} id - Credential UUID
+    # @param {object} requestBody
+    # @param {string} [requestBody.name] - Credential name
+    # @param {string} [requestBody.site] - Associated site
+    # @param {string} [requestBody.username] - Username for account credentials
+    # @param {string} [requestBody.password] - Password or secret
+    # @param {string} [requestBody.url] - Associated URL
+    # @param {string} [requestBody.owner] - Credential owner
+    # @param {string} [requestBody.comment] - Additional notes
+    # @param {string} [requestBody.expiry_date] - Expiration date (ISO format)
+    # @param {string} [requestBody.sensitivity] - Sensitivity level (LOW, MEDIUM, HIGH, CRITICAL)
+    # @param {boolean} [requestBody.is_active] - Active status
+    # @param {object} [requestBody.metadata] - Additional metadata (JSON object)
+    # @response 200 {Success} Credential updated successfully
+    # @response 400 {Error} Invalid input parameters
+    # @response 401 {Error} Unauthorized
+    # @response 404 {Error} Credential not found
     main::put '/credentials/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -314,7 +425,16 @@ sub register_credentials {
         });
     };
 
-    # DELETE /credentials/:id - Soft delete credential
+    # @summary Delete credential
+    # @description Soft deletes a credential by marking it inactive.
+    # If already inactive, performs hard delete.
+    # @tags Credentials
+    # @security bearerAuth
+    # @param {string} id - Credential UUID
+    # @response 200 {Success} Credential soft deleted
+    # @response 200 {Success} Credential permanently deleted
+    # @response 401 {Error} Unauthorized
+    # @response 404 {Error} Credential not found
     main::del '/credentials/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -323,22 +443,46 @@ sub register_credentials {
         my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
         
         try {
-            my $sth = $dbh->prepare(q{
-                UPDATE credentials 
-                SET is_active = 0, 
-                    updated_at = NOW(), 
-                    updated_by = ? 
-                WHERE id = ?
-            });
+            # First check if the credential exists and is already inactive
+            my $check_sth = $dbh->prepare("SELECT is_active FROM credentials WHERE id = ?");
+            $check_sth->execute($id);
+            my ($is_active) = $check_sth->fetchrow_array();
             
-            my $rows = $sth->execute($username, $id);
-            
-            unless ($rows) {
+            unless (defined $is_active) {
                 $dbh->disconnect;
                 return $c->render(json => {
                     status => 'error',
                     message => 'Credential not found'
                 }, status => 404);
+            }
+            
+            my $rows;
+            if ($is_active) {
+                # If active, perform soft delete
+                my $update_sth = $dbh->prepare(q{
+                    UPDATE credentials 
+                    SET is_active = 0, 
+                        updated_at = NOW(), 
+                        updated_by = ? 
+                    WHERE id = ?
+                });
+                $rows = $update_sth->execute($username, $id);
+                
+                $dbh->disconnect;
+                return $c->render(json => {
+                    status => 'success',
+                    message => 'Credential soft deleted'
+                });
+            } else {
+                # If already inactive, perform hard delete
+                my $delete_sth = $dbh->prepare("DELETE FROM credentials WHERE id = ?");
+                $rows = $delete_sth->execute($id);
+                
+                $dbh->disconnect;
+                return $c->render(json => {
+                    status => 'success',
+                    message => 'Credential permanently deleted'
+                });
             }
         } catch {
             $dbh->disconnect;
@@ -347,12 +491,6 @@ sub register_credentials {
                 message => "Database error: $_"
             }, status => 500);
         };
-        
-        $dbh->disconnect;
-        return $c->render(json => {
-            status => 'success',
-            message => 'Credential deleted'
-        });
     };
 }
 

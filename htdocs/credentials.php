@@ -11,8 +11,11 @@ if (!isset($_SESSION['user'])) {
 
 // Fetch credentials from API
 $ch = curl_init();
+$is_active = isset($_GET['is_active']) ? $_GET['is_active'] : '1'; // Default to active credentials
+$url = "http://localhost/cgi-bin/api/credentials?is_active=" . $is_active;
+
 curl_setopt_array($ch, [
-    CURLOPT_URL => "http://localhost/cgi-bin/api/credentials",
+    CURLOPT_URL => $url,
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_HTTPHEADER => [
         "Authorization: Bearer " . $_SESSION['token'],
@@ -22,15 +25,12 @@ curl_setopt_array($ch, [
 
 $response = curl_exec($ch);
 $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-// var_dump([
-//     'API Response Status' => $status,
-//     'Raw Response' => $response,
-//     'Decoded Data' => json_decode($response, true),
-//     'Session Token' => $_SESSION['token']
-// ]);
-
 curl_close($ch);
+
+if ($status === 401) {
+    header('Location: /login.php');
+    exit;
+}
 
 $credentials = [];
 if ($status === 200) {
@@ -61,7 +61,7 @@ if ($status === 200) {
             <h3>Credentials Management</h3>
         </div>
         <div class="col text-end">
-            <a href="/credential_edit.php" class="btn btn-primary">
+            <a href="/credential_edit.php" class="btn btn-primary btn-sm">
                 <i class="bi bi-plus-circle"></i> New Credential
             </a>
         </div>
@@ -89,14 +89,12 @@ if ($status === 200) {
                         <div class="col-md-4">
                             <input type="text" id="searchFilter" class="form-control" placeholder="Search...">
                         </div>
-                        <div class="col-md-2">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="showInactive">
-                                <label class="form-check-label" for="showInactive">
-                                    Show Inactive
-                                </label>
-                            </div>
-                        </div>
+<div class="col-md-2">
+    <select id="activeFilter" class="form-select form-select-sm">
+        <option value="1">Active</option>
+        <option value="0">Inactive</option>
+    </select>
+</div>
                     </div>
                 </div>
             </div>
@@ -105,14 +103,14 @@ if ($status === 200) {
 
     <!-- Credentials Table -->
     <div class="table-responsive">
-        <table class="table table-hover">
+        <table class="table table-bordered table-striped table-hover <?= ($is_active == '0') ? 'table-dark' : '' ?> rounded-bottom">
             <thead>
                 <tr>
                     <th>Name</th>
-                    <th>Type</th>
+                    <th class="text-center">Type</th>
                     <th>Site</th>
-                    <th>Username</th>
-                    <th>Owner</th>
+                    <th class="text-center">Username</th>
+                    <th class="text-center">Owner</th>
                     <th>Last Updated</th>
                     <th>Actions</th>
                 </tr>
@@ -128,14 +126,14 @@ if ($status === 200) {
                                 <?= htmlspecialchars($cred['name']) ?>
                             </a>
                         </td>
-                        <td>
+                        <td class="text-center">
                             <span class="badge bg-<?= getBadgeColor($cred['type']) ?>">
                                 <?= htmlspecialchars($cred['type']) ?>
                             </span>
                         </td>
                         <td><?= htmlspecialchars($cred['site']) ?></td>
-                        <td><?= htmlspecialchars($cred['username']) ?></td>
-                        <td><?= htmlspecialchars($cred['owner']) ?></td>
+                        <td class="text-center"><?= htmlspecialchars($cred['username']) ?></td>
+                        <td class="text-center"><?= htmlspecialchars($cred['owner']) ?></td>
                         <td>
                             <?php if ($cred['updated_at']): ?>
                                 <span data-bs-toggle="tooltip" 
@@ -178,25 +176,48 @@ if ($status === 200) {
 document.getElementById('typeFilter').addEventListener('change', filterCredentials);
 document.getElementById('siteFilter').addEventListener('input', filterCredentials);
 document.getElementById('searchFilter').addEventListener('input', filterCredentials);
-document.getElementById('showInactive').addEventListener('change', filterCredentials);
+document.getElementById('activeFilter').addEventListener('change', function() {
+    // Debug log
+    console.log('Changing active filter to:', this.value);
+    
+    // Construct new URL with the is_active parameter
+    let url = new URL(window.location.href);
+    url.searchParams.set('is_active', this.value);
+    
+    // Debug log
+    console.log('Redirecting to:', url.toString());
+    
+    // Redirect to new URL
+    window.location.href = url.toString();
+});
+
+// Helper function for badge colors
+function getBadgeColor(type) {
+    const colors = {
+        'ACCOUNT': 'primary',
+        'CERTIFICATE': 'success',
+        'API': 'info',
+        'PSK': 'warning',
+        'CODE': 'secondary'
+    };
+    return colors[type] || 'secondary';
+}
 
 function filterCredentials() {
     const type = document.getElementById('typeFilter').value.toLowerCase();
     const site = document.getElementById('siteFilter').value.toLowerCase();
     const search = document.getElementById('searchFilter').value.toLowerCase();
-    const showInactive = document.getElementById('showInactive').checked;
-    
+
     const rows = document.querySelectorAll('tbody tr');
-    
+
     rows.forEach(row => {
         const typeMatch = !type || row.querySelector('td:nth-child(2)').textContent.toLowerCase().includes(type);
         const siteMatch = !site || row.querySelector('td:nth-child(3)').textContent.toLowerCase().includes(site);
-        const searchMatch = !search || Array.from(row.querySelectorAll('td')).some(td => 
+        const searchMatch = !search || Array.from(row.querySelectorAll('td')).some(td =>
             td.textContent.toLowerCase().includes(search)
         );
-        const activeMatch = showInactive || !row.classList.contains('table-secondary');
         
-        row.style.display = (typeMatch && siteMatch && searchMatch && activeMatch) ? '' : 'none';
+        row.style.display = (typeMatch && siteMatch && searchMatch) ? '' : 'none';
     });
 }
 
@@ -223,17 +244,16 @@ function deleteCredential(id) {
     }
 }
 
-// Helper function for badge colors
-function getBadgeColor(type) {
-    const colors = {
-        'ACCOUNT': 'primary',
-        'CERTIFICATE': 'success',
-        'API': 'info',
-        'PSK': 'warning',
-        'CODE': 'secondary'
-    };
-    return colors[type] || 'secondary';
-}
+// Initialize filters on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Set initial filter states
+    const urlParams = new URLSearchParams(window.location.search);
+    const isActive = urlParams.get('is_active') || '1';
+    document.getElementById('activeFilter').value = isActive;
+    
+    // Apply initial filtering
+    filterCredentials();
+});
 </script>
 
 <?php

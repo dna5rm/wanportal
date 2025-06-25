@@ -1,4 +1,11 @@
 <?php
+// Constants
+define('DEBUG_MODE', false);
+define('HOUR_IN_SECONDS', 3600);
+define('WARNING_THRESHOLD_HOURS', 3);
+define('DANGER_THRESHOLD_HOURS', 5);
+define('API_BASE_URL', 'http://localhost/cgi-bin/api');
+
 // Database credentials
 $db_host = getenv('MYSQL_HOST') ?: 'localhost';
 $db_user = getenv('MYSQL_USER') ?: 'root';
@@ -47,11 +54,6 @@ $menuItems = [
                 'url' => '/users.php',
                 'icon' => 'bi bi-people',
                 'admin' => true
-            ],
-            'PHP Info' => [
-                'url' => '/phpinfo.php',
-                'icon' => 'bi bi-info-circle',
-                'admin' => true
             ]
         ]
     ],
@@ -73,6 +75,11 @@ $menuItems = [
                 'icon' => 'bi bi-card-list'
             ]
         ]
-    ]
+    ],
+    'API Docs' => [
+        'url' => '/api-docs/swagger.html',
+        'icon' => 'bi bi-file-text',
+        'auth' => false
+    ],
 ];
 ?>

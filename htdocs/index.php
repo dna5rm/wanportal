@@ -2,134 +2,123 @@
 session_start();
 require_once 'config.php';
 
-// Check database connection
-if (!isset($mysqli) || !$mysqli instanceof mysqli) {
-    die("Database not connected properly");
-}
+/**
+ * Make API calls to the backend
+ * @param string $endpoint API endpoint to call
+ * @return array|null Returns decoded JSON response or null on failure
+ */
+function callAPI($endpoint) {
+    // Ensure endpoint starts with /
+    if (substr($endpoint, 0, 1) !== '/') {
+        $endpoint = '/' . $endpoint;
+    }
 
-// Helper function to count entries based on table and active status using prepared statements
-function count_entries($mysqli, $table) {
-    $counts = ['active' => 0, 'disabled' => 0, 'total' => 0];
+    // For debugging
+    if (DEBUG_MODE) {
+        error_log("Calling API: " . API_BASE_URL . $endpoint);
+    }
+
+    $ch = curl_init(API_BASE_URL . $endpoint);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FAILONERROR => true,
+        CURLOPT_TIMEOUT => 30
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     
-    $stmt = $mysqli->prepare("SELECT is_active, COUNT(*) AS cnt FROM `$table` GROUP BY is_active");
-    if ($stmt->execute()) {
-        $result = $stmt->get_result();
-        while ($row = $result->fetch_assoc()) {
-            if ($row['is_active']) {
-                $counts['active'] = (int)$row['cnt'];
-            } else {
-                $counts['disabled'] = (int)$row['cnt'];
-            }
-            $counts['total'] += (int)$row['cnt'];
+    if (curl_errno($ch)) {
+        error_log("API Error for " . $endpoint . ": " . curl_error($ch));
+        curl_close($ch);
+        return null;
+    }
+    
+    curl_close($ch);
+    
+    if ($httpCode === 200) {
+        $decoded = json_decode($response, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            return $decoded;
         }
-        $result->close();
+        error_log("JSON decode error for " . $endpoint . ": " . json_last_error_msg());
+    } else {
+        error_log("API returned status code " . $httpCode . " for " . $endpoint);
+        if (DEBUG_MODE) {
+            error_log("API Response: " . $response);
+        }
     }
-    $stmt->close();
-    return $counts;
+    
+    return null;
 }
 
-// Count agents, targets, and monitors
-$agentCounts = count_entries($mysqli, 'agents');
-$targetsCount = count_entries($mysqli, 'targets');
-$monitorsCount = count_entries($mysqli, 'monitors');
+// Fetch active agents for sidebar
+$agentsResponse = callAPI('/agents');
+$activeAgents = array_filter($agentsResponse['agents'] ?? [], function($agent) {
+    return $agent['is_active'] == 1;
+});
 
-// Compute server metrics
-$uptimeSeconds = 0;
-$uptime = shell_exec('cat /proc/uptime');
-if ($uptime !== null) {
-    $uptimeSeconds = (int)floatval(explode(' ', $uptime)[0]);
+// Fetch down hosts
+$monitorsResponse = callAPI('/monitors?current_loss=100&is_active=1');
+$downHosts = $monitorsResponse['monitors'] ?? [];
+
+// Get server name safely
+$server_name = isset($_SERVER['SERVER_NAME']) ? 
+    strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0]) : 
+    'NETPING';
+
+// Initialize error message
+$error_message = null;
+
+// Check for API errors
+if ($agentsResponse === null || $monitorsResponse === null) {
+    $error_message = "Unable to fetch data from API";
 }
 
-function format_uptime($secs) {
-    $d = floor($secs/86400);
-    $secs -= $d * 86400;
-    
-    $h = floor($secs/3600);
-    $secs -= $h * 3600;
-    
-    $m = floor($secs/60);
-    $secs -= $m * 60;
-    
-    $parts = [];
-    if ($d > 0) $parts[] = $d . ' ' . ($d == 1 ? 'day' : 'days');
-    if ($h > 0) $parts[] = $h . ' ' . ($h == 1 ? 'hour' : 'hours');
-    if ($m > 0) $parts[] = $m . ' ' . ($m == 1 ? 'minute' : 'minutes');
-    
-    return implode(', ', $parts);
+// Start performance timing if in debug mode
+if (DEBUG_MODE) {
+    $start_time = microtime(true);
 }
-
-$uptimeStr = format_uptime($uptimeSeconds);
-
-// Build stats array with real metrics
-$stats = [
-    'server_timezone' => date_default_timezone_get(),
-    'server_localtime' => date('Y-m-d H:i:s'),
-    'server_utc_time' => gmdate('Y-m-d H:i:s'),
-    'server_run_time' => format_uptime($uptimeSeconds),
-    'active_agents' => $agentCounts['active'],
-    'disabled_agents' => $agentCounts['disabled'],
-    'total_agents' => $agentCounts['total'],
-    'active_targets' => $targetsCount['active'],
-    'disabled_targets' => $targetsCount['disabled'],
-    'total_targets' => $targetsCount['total'],
-    'active_monitors' => $monitorsCount['active'],
-    'disabled_monitors' => $monitorsCount['disabled'],
-    'total_monitors' => $monitorsCount['total']
-];
-
-// Fetch agents with last_seen times using prepared statement
-$agents = [];
-$stmt = $mysqli->prepare("
-    SELECT 
-        id, 
-        name, 
-        description,
-        address,
-        last_seen,
-        is_active
-    FROM agents 
-    ORDER BY name
-");
-
-if ($stmt->execute()) {
-    $result = $stmt->get_result();
-    while ($row = $result->fetch_assoc()) {
-        $agents[] = $row;
-    }
-    $result->close();
-}
-$stmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Console</title>
+    <title><?= $server_name ?> :: Console</title>
     <meta charset="utf-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
+    <meta http-equiv="refresh" content="300">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/assets/base.css">
 </head>
 <body>
 <?php include 'navbar.php'; ?>
 
 <div class="container-fluid">
+    <?php if ($error_message): ?>
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <?= htmlspecialchars($error_message) ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <?php endif; ?>
+
     <div class="row">
         <!-- Agents list -->
         <div class="col-2">
             <h3>Agents</h3>
             <ul class="list-group mb-3">
-                <?php if (empty($agents)): ?>
-                    <li class="list-group-item">No agents found</li>
+                <?php if (empty($activeAgents)): ?>
+                    <li class="list-group-item">No active agents found</li>
                 <?php else: ?>
                     <?php 
                     $now = time();
-                    foreach ($agents as $agent):
+                    foreach ($activeAgents as $agent):
                         $bgClass = '';
                         if ($agent['last_seen']) {
                             $last = strtotime($agent['last_seen']);
-                            if ($last !== false && $last < $now - 3600) {
+                            if ($last !== false && $last < $now - HOUR_IN_SECONDS) {
                                 $bgClass = 'list-group-item-danger';
                             }
                         }
@@ -140,9 +129,6 @@ $stmt->close();
                            data-bs-toggle="tooltip" 
                            data-html="true">
                             <?= htmlspecialchars($agent['name']) ?>
-                            <?php if (!$agent['is_active']): ?>
-                                <span class="badge bg-warning">Disabled</span>
-                            <?php endif; ?>
                         </a>
                     </li>
                     <?php endforeach; ?>
@@ -150,11 +136,14 @@ $stmt->close();
             </ul>
         </div>
 
-        <!-- Main stats -->
+        <!-- Main content -->
         <div class="col">
-
             <div class="row mb-3">
-                <div class="col text-end d-flex justify-content-end align-items-center">
+                <div class="col text-end d-flex justify-content-end align-items-center gap-3">
+                    <a href="/server.php" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-graph-up"></i> Runtime </a>
+                    <a href="/latency.php" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-speedometer2"></i> Latency </a>
                     <form action="/search.php" method="GET" class="d-flex align-items-center">
                         <input type="text" name="q" class="form-control form-control-sm me-2" placeholder="Search monitors...">
                         <button type="submit" class="btn btn-primary btn-sm">
@@ -164,79 +153,80 @@ $stmt->close();
                 </div>
             </div>
 
-            <div class="d-flex align-items-end mb-4">
-                <!-- Spacer -->
-                <div style="width: 5%;">&nbsp;</div>
-
-                <!-- Statistics -->
-                <div class="flex-fill" style="max-width: 55%;">
-                    <!-- <h3>Statistics</h3> -->
-                    <div class="card shadow rounded">
-                        <div class="card-body p-0">
-                            <table class="table table-striped table-hover mb-0 rounded-bottom">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th></th>
-                                        <th class="text-center">Active</th>
-                                        <th class="text-center">Disabled</th>
-                                        <th class="text-center">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>Agents</td>
-                                        <td class="text-center"><?= $stats['active_agents'] ?></td>
-                                        <td class="text-center"><?= $stats['disabled_agents'] ?></td>
-                                        <td class="text-center"><?= $stats['total_agents'] ?></td>
-                                    </tr>
-                                    <tr>
-                                        <td>Targets</td>
-                                        <td class="text-center"><?= $stats['active_targets'] ?></td>
-                                        <td class="text-center"><?= $stats['disabled_targets'] ?></td>
-                                        <td class="text-center"><?= $stats['total_targets'] ?></td>
-                                    </tr>
-                                    <tr>
-                                        <td>Monitors</td>
-                                        <td class="text-center"><?= $stats['active_monitors'] ?></td>
-                                        <td class="text-center"><?= $stats['disabled_monitors'] ?></td>
-                                        <td class="text-center"><?= $stats['total_monitors'] ?></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+            <!-- Down Hosts -->
+            <div class="text-center mb-4">
+                <div class="d-flex justify-content-center align-items-center gap-3">
+                    <h3 class="mb-0">Down Hosts</h3>
+                    <a href="/cgi-bin/api/monitors?current_loss=100&is_active=1" 
+                       class="btn btn-sm btn-outline-secondary" 
+                       target="_blank"
+                       title="View raw API data"
+                       data-bs-toggle="tooltip">
+                        <i class="bi bi-code-slash"></i> Raw Data
+                    </a>
                 </div>
-
-                <!-- Spacer -->
-                <div style="width: 5%;">&nbsp;</div>
-
-                <!-- Server Runtime -->
-                <div style="max-width: 30%;">
-                    <h4>Server Runtime</h4>
-                    <ul class="list-unstyled">
-                        <?php if ($stats['server_timezone'] == "UTC"): ?>
-                            <li>Server time: <?= $stats['server_localtime'] ?></li>
-                        <?php else: ?>
-                            <li>Server time: <?= $stats['server_localtime'] ?> (<?= htmlspecialchars($stats['server_timezone']) ?>)</li>
-                            <li>UTC time: <?= $stats['server_utc_time'] ?></li>
-                        <?php endif; ?>
-                        <li>Uptime: <?= $stats['server_run_time'] ?></li>
-                    </ul>
-                </div>
-
-                <!-- Spacer -->
-                <div style="width: 5%;">&nbsp;</div>
             </div>
-            <hr />
 
-            <div class="text-center">
-                <h3>PLACEHOLDER</h3>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Monitor</th>
+                            <th>Agent</th>
+                            <th>Target</th>
+                            <th>Down Since</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php if (empty($downHosts)): ?>
+                        <tr>
+                            <td colspan="4" class="text-center">No down hosts</td>
+                        </tr>
+                    <?php else:
+                        foreach ($downHosts as $monitor):
+                            // Convert last_down to timestamp for comparison
+                            $downTime = strtotime($monitor['last_down']);
+                            
+                            // Determine severity class using Bootstrap's colors
+                            if ($downTime <= strtotime('-' . DANGER_THRESHOLD_HOURS . ' hours')) {
+                                $rowClass = 'table-danger';    // Red background
+                            } elseif ($downTime <= strtotime('-' . WARNING_THRESHOLD_HOURS . ' hours')) {
+                                $rowClass = 'table-warning';   // Yellow background
+                            } elseif ($downTime <= strtotime('-1 hours')) {
+                                $rowClass = 'table-info';      // Light blue background
+                            } else {
+                                $rowClass = '';                // Default background
+                            }
+                            ?>
+                            <tr class="<?= $rowClass ?>">
+                                <td>
+                                    <a href="/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>" 
+                                       class="text-decoration-none">
+                                        <?= htmlspecialchars($monitor['description']) ?>
+                                    </a>
+                                </td>
+                                <td><?= htmlspecialchars($monitor['agent_name']) ?></td>
+                                <td><?= htmlspecialchars($monitor['target_address']) ?></td>
+                                <td><?= date("m/d H:i:s", strtotime($monitor['last_down'])) ?></td>
+                            </tr>
+                        <?php endforeach;
+                    endif; ?>
+                    </tbody>
+                </table>
             </div>
+
         </div>
     </div>
 </div>
 
 <?php include 'footer.php'; ?>
+
+<?php
+// Log execution time if in debug mode
+if (DEBUG_MODE) {
+    $execution_time = microtime(true) - $start_time;
+    error_log("Page generated in {$execution_time} seconds");
+}
+?>
 </body>
 </html>
-<?php $mysqli->close(); ?>

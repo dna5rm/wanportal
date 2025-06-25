@@ -34,7 +34,18 @@ inc/
 /pm_to_blib
 /*.zip
 
-# other
-.env
-/archive/
-/docs/
+# Ignore everything by default
+**
+logo*
+
+# Exceptions (keep these)
+!api-docs/
+!cgi-bin/
+!htdocs/
+!htdocs/assets/*.css
+!htdocs/assets/kinetic.*
+!docker-compose.yml
+!Dockerfile*
+!*.md
+!*.pl
+!*.sh

@@ -59,7 +59,10 @@ sub register_agent {
     ensure_agents_table($dbh);
     $dbh->disconnect;
 
-    # GET /agent/:id - Get single agent
+    # @summary List all agents
+    # @description Returns a list of all monitoring agents in the system, including their status and last seen time.
+    # @tags Agents
+    # @response 200 {object} List of agents
     main::get '/agent/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -87,7 +90,16 @@ sub register_agent {
         });
     };
 
-    # POST /agent - Create new agent (requires auth)
+    # @summary Create new agent
+    # @description Creates a new monitoring agent in the system.
+    # @tags Agents
+    # @param {object} requestBody.name - Agent name
+    # @param {string} [requestBody.address] - Agent IP address (IPv4 or IPv6)
+    # @param {string} [requestBody.description] - Agent description
+    # @param {boolean} [requestBody.is_active=true] - Agent status
+    # @param {string} [requestBody.password=CHANGE_ME] - Agent password
+    # @response 200 {Success} Agent created successfully
+    # @response 400 {Error} Invalid input parameters or duplicate agent name
     main::post '/agent' => sub {
         my $c = shift;
         my $data = $c->req->json;
@@ -154,7 +166,18 @@ sub register_agent {
         };
     };
 
-    # PUT /agent/:id - Update agent (requires auth)
+    # @summary Update agent
+    # @description Updates an existing agent's configuration.
+    # @tags Agents
+    # @param {string} id - Agent UUID
+    # @param {object} requestBody.name - Agent name
+    # @param {string} [requestBody.address] - Agent IP address (IPv4 or IPv6)
+    # @param {string} [requestBody.description] - Agent description
+    # @param {boolean} [requestBody.is_active] - Agent status
+    # @param {string} [requestBody.password] - Agent password
+    # @response 200 {Success} Agent updated successfully
+    # @response 400 {Error} Invalid input parameters or duplicate agent name
+    # @response 404 {Error} Agent not found
     main::put '/agent/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -220,7 +243,14 @@ sub register_agent {
         });
     };
 
-    # DELETE /agent/:id - Delete agent (requires auth)
+    # @summary Delete agent
+    # @description Removes an agent and all its associated monitors from the system.
+    # Cannot delete the LOCAL agent.
+    # @tags Agents
+    # @param {string} id - Agent UUID
+    # @response 200 {Success} Agent and associated monitors deleted successfully
+    # @response 403 {Error} Cannot delete LOCAL agent
+    # @response 404 {Error} Agent not found
     main::del '/agent/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');

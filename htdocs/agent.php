@@ -178,21 +178,26 @@ try {
         <div class="col">
             <h3>
                 Agent: 
-                <span title="<?= htmlspecialchars($agent['id']) ?>" data-bs-toggle="tooltip">
-                    <?= htmlspecialchars($agent['name']) ?>
-                </span>
-                <?php if (!$agent['is_active']): ?>
-                    <span class="badge bg-warning">Inactive</span>
-                <?php endif; ?>
+                <?= htmlspecialchars(!empty($agent['name']) ? $agent['name'] : $agent['id']) ?>
             </h3>
         </div>
         <div class="col text-end">  <!-- Changed from text-center to text-end -->
             <div class="btn-group" role="group">
-                <a href="/index.php" class="btn btn-secondary">
+                <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
+                    <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm ">
+                        <i class="bi bi-arrow-left"></i> Back
+                    </a>
+                <?php endif; ?>  
+                <a href="/index.php" class="btn btn-secondary btn-sm">
                     <i class="bi bi-house-door"></i> Home
                 </a>
                 <?php if (isset($_SESSION['user'])): ?>
-                    <a href="/agents_edit.php?id=<?= htmlspecialchars($agent['id']) ?>" class="btn btn-danger">
+                    <?php if ($agent['name'] != "LOCAL") : ?>
+                        <a href="/netping.php?id=<?= htmlspecialchars($agent['id']) ?>" class="btn btn-warning btn-sm">
+                            <i class="bi bi-play-circle"></i> Agent
+                        </a>
+                    <?php endif; ?>
+                    <a href="/agents_edit.php?id=<?= htmlspecialchars($agent['id']) ?>" class="btn btn-danger btn-sm">
                         <i class="bi bi-pencil"></i> Edit
                     </a>
                 <?php endif; ?>
@@ -304,14 +309,15 @@ try {
             <div class="table-responsive">
                 <table class="table table-light table-bordered table-striped table-hover">
                     <thead>
-                        <!--
+                        
                         <tr>
                             <th colspan="3" class="text-center"></th>
                             <th colspan="2" class="table-primary text-center">Current</th>
+                            <!--
                             <th colspan="5" class="table-secondary text-center">Average</th>
+                             -->
                             <th colspan="1" class="text-center"></th>
                         </tr>
-                        -->
                         <tr>
                             <th>Monitor</th>
                             <th>Target</th>
@@ -442,45 +448,6 @@ try {
 </div>
 
 <?php include 'footer.php'; ?>
-
-<script>
-// Filter functionality
-document.getElementById('searchFilter').addEventListener('input', filterMonitors);
-document.getElementById('protocolFilter').addEventListener('change', filterMonitors);
-document.getElementById('showInactive').addEventListener('change', function() {
-    // Update URL with new show_inactive state
-    const url = new URL(window.location);
-    url.searchParams.set('show_inactive', this.checked);
-    window.location = url;
-});
-
-function filterMonitors() {
-    const search = document.getElementById('searchFilter').value.toLowerCase();
-    const protocol = document.getElementById('protocolFilter').value;
-    
-    const rows = document.querySelectorAll('tbody tr');
-    
-    rows.forEach(row => {
-        if (row.cells.length === 1) return; // Skip "No monitors found" row
-        
-        const description = row.cells[0].textContent.toLowerCase();
-        const target = row.cells[1].textContent.toLowerCase();
-        const rowProtocol = row.cells[2].textContent;
-        
-        const searchMatch = description.includes(search) || 
-                          target.includes(search);
-        const protocolMatch = !protocol || rowProtocol.startsWith(protocol);
-        
-        row.style.display = (searchMatch && protocolMatch) ? '' : 'none';
-    });
-}
-
-// Initialize tooltips
-const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-    return new bootstrap.Tooltip(tooltipTriggerEl);
-});
-</script>
 </body>
 </html>
 <?php $mysqli->close(); ?>

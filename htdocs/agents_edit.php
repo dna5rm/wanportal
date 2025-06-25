@@ -91,8 +91,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
     // Debug output
-    print("API Response Status: $status\n");
-    print("API Response: $response\n");
+    // print("API Response Status: $status\n");
+    // print("API Response: $response\n");
 
     curl_close($ch);
 
@@ -135,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <h3><?= $id ? 'Edit' : 'New' ?> Agent</h3>
         </div>
         <div class="col text-end">
-            <a href="/agents.php" class="btn btn-secondary">
+            <a href="/agents.php" class="btn btn-secondary btn-sm">
                 <i class="bi bi-arrow-left"></i> Back
             </a>
         </div>
@@ -189,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <div class="input-group">
                                 <input type="password" class="form-control" id="password" name="password"
                                        <?= $id ? '' : 'required' ?>>
-                                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('password')">
+                                <button class="btn btn-outline-secondary btn-sm" type="button" onclick="togglePassword('password')">
                                     <i class="bi bi-eye"></i>
                                 </button>
                             </div>
@@ -207,10 +207,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
 
                         <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" class="btn btn-primary btn-sm">
                                 <i class="bi bi-save"></i> Save Agent
                             </button>
-                            <a href="/agents.php" class="btn btn-secondary">
+                            <a href="/agents.php" class="btn btn-secondary btn-sm">
                                 <i class="bi bi-x"></i> Cancel
                             </a>
                         </div>
@@ -255,7 +255,7 @@ function togglePassword(fieldId) {
 // IP address validation
 document.getElementById('address').addEventListener('input', function() {
     const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
-    const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
+    const ipv6Regex = /^(?:(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,7}:|(?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|(?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|(?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|(?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|[0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|:(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)|fe80:(?::[0-9A-Fa-f]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(?:ffff(?::0{1,4}){0,1}:){0,1}(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])|(?:[0-9A-Fa-f]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
     
     if (this.value && !ipv4Regex.test(this.value) && !ipv6Regex.test(this.value)) {
         this.setCustomValidity('Please enter a valid IP address');

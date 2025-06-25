@@ -1,5 +1,4 @@
 <?php
-// targets.php
 session_start();
 require_once 'config.php';
 
@@ -8,6 +7,12 @@ if (!isset($_SESSION['user'])) {
     header('Location: /login.php');
     exit;
 }
+
+// Handle show_inactive preference
+$show_inactive = isset($_GET['show_inactive']) ?
+    filter_var($_GET['show_inactive'], FILTER_VALIDATE_BOOLEAN) :
+    ($_SESSION['show_inactive'] ?? false);
+$_SESSION['show_inactive'] = $show_inactive;
 
 // Fetch targets from API
 $ch = curl_init("http://localhost/cgi-bin/api/targets");
@@ -48,7 +53,7 @@ if ($status === 200) {
             <h3>Target Management</h3>
         </div>
         <div class="col text-end">
-            <a href="/targets_edit.php" class="btn btn-primary">
+            <a href="/targets_edit.php" class="btn btn-primary btn-sm">
                 <i class="bi bi-plus-circle"></i> New Target
             </a>
         </div>
@@ -65,7 +70,8 @@ if ($status === 200) {
                         </div>
                         <div class="col-md-2">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="showInactive">
+                                <input class="form-check-input" type="checkbox" id="showInactive"
+                                    <?= $show_inactive ? 'checked' : '' ?>>
                                 <label class="form-check-label" for="showInactive">
                                     Show Inactive
                                 </label>
@@ -96,7 +102,10 @@ if ($status === 200) {
                 <?php else: ?>
                     <?php foreach ($targets as $target): ?>
                         <tr class="<?= $target['is_active'] ? '' : 'table-secondary' ?>">
-                            <td><?= htmlspecialchars($target['address']) ?></td>
+                            <td>
+                                <a href="/target.php?id=<?= htmlspecialchars($target['id']) ?>" class="btn btn-sm">
+                                    <i class="bi bi-arrow-bar-left"></i>
+                                </a> <?= htmlspecialchars($target['address']) ?></td>
                             <td><?= htmlspecialchars($target['description']) ?></td>
                             <td>
                                 <span class="badge bg-<?= $target['is_active'] ? 'success' : 'warning' ?>">
@@ -131,7 +140,9 @@ if ($status === 200) {
 <script>
 // Filter functionality
 document.getElementById('searchFilter').addEventListener('input', filterTargets);
-document.getElementById('showInactive').addEventListener('change', filterTargets);
+document.getElementById('showInactive').addEventListener('change', function() {
+    window.location.href = '?show_inactive=' + this.checked;
+});
 
 function filterTargets() {
     const search = document.getElementById('searchFilter').value.toLowerCase();
@@ -140,18 +151,31 @@ function filterTargets() {
     const rows = document.querySelectorAll('tbody tr');
     
     rows.forEach(row => {
+        if (row.cells.length < 2) return; // Skip empty table messages
+        
         const address = row.cells[0].textContent.toLowerCase();
         const description = row.cells[1].textContent.toLowerCase();
-        const isActive = !row.classList.contains('table-secondary');
+        
+        // Check if row is inactive
+        const isInactive = row.classList.contains('table-secondary');
         
         const searchMatch = address.includes(search) || 
                           description.includes(search);
         
-        const activeMatch = showInactive || isActive;
+        // Hide inactive rows unless showInactive is checked
+        let shouldShow = searchMatch;
+        if (isInactive && !showInactive) {
+            shouldShow = false;
+        }
         
-        row.style.display = (searchMatch && activeMatch) ? '' : 'none';
+        row.style.display = shouldShow ? '' : 'none';
     });
 }
+
+// Apply initial filtering on page load
+window.addEventListener('DOMContentLoaded', function() {
+    filterTargets();
+});
 
 // Delete confirmation
 function deleteTarget(id, address) {

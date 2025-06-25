@@ -42,8 +42,9 @@ if ($id) {
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    // Add debug output temporarily
-    error_log("API Response: " . $response);
+    // Debug output
+    // print("API Response Status: $status\n");
+    // print("API Response: $response\n");
 
     if ($status === 200) {
         $data = json_decode($response, true);
@@ -160,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <h3><?= $id ? 'Edit' : 'New' ?> User</h3>
         </div>
         <div class="col text-end">
-            <a href="/users.php" class="btn btn-secondary">
+            <a href="/users.php" class="btn btn-secondary btn-sm">
                 <i class="bi bi-arrow-left"></i> Back
             </a>
         </div>
@@ -195,7 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <div class="input-group">
                                 <input type="password" class="form-control" id="password" name="password"
                                        <?= $id ? '' : 'required' ?>>
-                                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('password')">
+                                <button class="btn btn-outline-secondary btn-sm" type="button" onclick="togglePassword('password')">
                                     <i class="bi bi-eye"></i>
                                 </button>
                             </div>
@@ -239,10 +240,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
 
                         <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" class="btn btn-primary btn-sm">
                                 <i class="bi bi-save"></i> Save User
                             </button>
-                            <a href="/users.php" class="btn btn-secondary">
+                            <a href="/users.php" class="btn btn-secondary btn-sm">
                                 <i class="bi bi-x"></i> Cancel
                             </a>
                         </div>
