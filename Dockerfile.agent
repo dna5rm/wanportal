@@ -10,8 +10,8 @@ COPY run-agent.sh /srv/
 # Install Packages & Update
 RUN apk -q update && apk -q upgrade
 RUN apk add --no-cache cronie curl jq tzdata
-RUN apk add --no-cache perl perl-io-socket-ssl perl-json \
-    perl-lwp-useragent-determined perl-parallel-forkmanager perl-sys-cpu
+RUN apk add --no-cache perl perl-io-socket-ssl perl-json perl-sys-cpu \
+    perl-lwp-useragent-determined perl-lwp-protocol-https perl-parallel-forkmanager
 
 ## Configure Crontab
 RUN install -m 0644 /dev/stdin /etc/crontabs/root <<EOF
