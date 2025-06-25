@@ -2,6 +2,7 @@
 **
 
 # Exceptions (keep these)
+!api-docs/
 !cgi-bin/
 !htdocs/
 !run-agent.sh
