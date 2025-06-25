@@ -7,6 +7,7 @@ use Time::HiRes qw(sleep time);
 use LWP::UserAgent;
 use JSON qw(decode_json encode_json);
 use IO::Socket::SSL qw(SSL_VERIFY_NONE);
+use Socket qw(AF_INET6);
 use POSIX qw(strftime WNOHANG);
 use List::Util qw(min);
 
@@ -233,7 +234,15 @@ sub ping {
     my $tos = $DSCP_MAP->{$dscp} // 0x00;
     my $count = min(5, $monitor->{pollcount} || 5);
     
-    my $p = Net::Ping->new($protocol, 1, 56, 0, $tos);
+    # Add IPv6 support by using the appropriate ping type
+    my $p;
+    if ($monitor->{address} =~ /:/) {  # IPv6 address contains ':'
+        $p = Net::Ping->new($protocol, 1, 56, undef, $tos);
+        $p->{family} = AF_INET6;  # Force IPv6
+    } else {
+        $p = Net::Ping->new($protocol, 1, 56, 0, $tos);
+    }
+    
     if ($protocol eq "tcp" || $protocol eq "udp") {
         $p->{port_num} = $port;
     }
