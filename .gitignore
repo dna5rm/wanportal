@@ -39,8 +39,8 @@ inc/
 logo*
 
 # Exceptions (keep these)
-!api-docs/
-!cgi-bin/
+!api-docs/*
+!cgi-bin/*
 !htdocs/
 !htdocs/assets/*.css
 !htdocs/assets/kinetic.*
