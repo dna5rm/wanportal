@@ -32,7 +32,7 @@ $menuItems = [
         'items' => [
             'Agents' => [
                 'url' => '/agents.php',
-                'icon' => 'bi bi-hdd-network',
+                'icon' => 'bi bi-server',
                 'auth' => true
             ],
             'Targets' => [
@@ -56,30 +56,6 @@ $menuItems = [
                 'admin' => true
             ]
         ]
-    ],
-    'IPControl' => [
-        'type' => 'dropdown',
-        'icon' => 'bi bi-hdd-network',
-        'auth' => false,
-        'items' => [
-            'Network Map' => [
-                'url' => '#',
-                'icon' => 'bi bi-diagram-3'
-            ],
-            'IP Management' => [
-                'url' => '#',
-                'icon' => 'bi bi-grid-3x3'
-            ],
-            'DHCP Leases' => [
-                'url' => '#',
-                'icon' => 'bi bi-card-list'
-            ]
-        ]
-    ],
-    'API Docs' => [
-        'url' => '/api-docs/swagger.html',
-        'icon' => 'bi bi-file-text',
-        'auth' => false
     ],
 ];
 ?>

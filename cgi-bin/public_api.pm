@@ -20,14 +20,6 @@ sub register_public_endpoints {
     # @description Returns a list of all monitoring agents in the system without sensitive information.
     # Passwords are never included in the response.
     # @tags Public API
-    # @response 200 {object} List of agents with basic information
-    # @response 200 {array} agents - Array of agent objects
-    # @response 200 {string} agents[].id - Agent UUID
-    # @response 200 {string} agents[].name - Agent name
-    # @response 200 {string} agents[].address - Agent IP address
-    # @response 200 {string} agents[].description - Agent description
-    # @response 200 {string} agents[].last_seen - Last contact timestamp
-    # @response 200 {boolean} agents[].is_active - Agent status
     main::get '/agents' => sub {
         my $c = shift;
         my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
@@ -51,12 +43,6 @@ sub register_public_endpoints {
     # @summary List all targets
     # @description Returns a list of all monitoring targets in the system.
     # @tags Public API
-    # @response 200 {object} List of targets
-    # @response 200 {array} targets - Array of target objects
-    # @response 200 {string} targets[].id - Target UUID
-    # @response 200 {string} targets[].address - Target address (IP or hostname)
-    # @response 200 {string} targets[].description - Target description
-    # @response 200 {boolean} targets[].is_active - Target status
     main::get '/targets' => sub {
         my $c = shift;
         my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
@@ -81,20 +67,6 @@ sub register_public_endpoints {
     # @description Returns a list of all monitors with their current status and configuration.
     # Supports filtering by status and activity state.
     # @tags Public API
-    # @param {integer} [current_loss] - Filter by current loss percentage
-    # @param {boolean} [is_active] - Filter by active status
-    # @response 200 {object} List of monitors with current status
-    # @response 200 {array} monitors - Array of monitor objects
-    # @response 200 {string} monitors[].id - Monitor UUID
-    # @response 200 {string} monitors[].description - Monitor description
-    # @response 200 {string} monitors[].agent_id - Associated agent UUID
-    # @response 200 {string} monitors[].target_id - Associated target UUID
-    # @response 200 {string} monitors[].protocol - Monitor protocol
-    # @response 200 {integer} monitors[].port - TCP port (if applicable)
-    # @response 200 {string} monitors[].dscp - DSCP value
-    # @response 200 {integer} monitors[].current_loss - Current packet loss percentage
-    # @response 200 {number} monitors[].current_median - Current median RTT
-    # @response 200 {boolean} monitors[].is_active - Monitor status
     main::get '/monitors' => sub {
         my $c = shift;
         
@@ -161,20 +133,6 @@ sub register_public_endpoints {
     # @description Retrieves monitoring data from RRD files. Can return raw data or generate graphs.
     # Supports both RTT and loss metrics with customizable time ranges.
     # @tags Public API
-    # @param {string} id - Monitor UUID
-    # @param {string} [cmd=graph] - Command type: 'graph' for PNG visualization or raw data if omitted
-    # @param {string} [ds=rtt] - Data source: 'rtt' for response time or 'loss' for packet loss
-    # @param {string} [start] - Start time (ISO format or relative time like '-3h')
-    # @param {string} [end] - End time (ISO format or relative time)
-    # @response 200 {object} RRD data or graph
-    # @response 200 {image/png} Response when cmd=graph
-    # @response 200 {object} Response for raw data
-    # @response 200 {integer} start_time - Data start timestamp
-    # @response 200 {integer} end_time - Data end timestamp
-    # @response 200 {integer} step - Time between data points
-    # @response 200 {array} data - Array of data points
-    # @response 404 {Error} Monitor or RRD file not found
-    # @response 400 {Error} Invalid parameters
     main::get '/rrd' => sub {
         my $c = shift;
         my $id = $c->param('id');

@@ -11,8 +11,6 @@ sub register_test {
     # @description Test endpoint to verify if a JWT token is valid.
     # @tags Authentication
     # @security bearerAuth
-    # @response 200 {object} Token is valid
-    # @response 401 {Error} Missing or invalid token
     main::post '/test' => sub {
         my $c = shift;
         my $payload = $c->stash('jwt_payload');

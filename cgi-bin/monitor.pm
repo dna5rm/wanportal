@@ -113,9 +113,6 @@ sub register_monitor {
     # current status, configuration, and associated agent and target details.
     # @tags Monitors
     # @security bearerAuth
-    # @param {string} id - Monitor UUID
-    # @response 200 {object} Monitor details including current statistics
-    # @response 404 {Error} Monitor not found
     main::get '/monitor/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -163,20 +160,6 @@ sub register_monitor {
     # The monitor defines how the agent should test connectivity to the target.
     # @tags Monitors
     # @security bearerAuth
-    # @param {object} requestBody
-    # @param {string} requestBody.agent_id - UUID of the monitoring agent
-    # @param {string} requestBody.target_id - UUID of the target to monitor
-    # @param {string} requestBody.protocol - Protocol to use (ICMP, ICMPV6, TCP)
-    # @param {integer} requestBody.port - Port number for TCP monitors (0-65535)
-    # @param {string} requestBody.dscp - DSCP value (BE, EF, CS0-CS7, AF11-AF43)
-    # @param {integer} requestBody.pollcount - Number of polls per interval (1-100)
-    # @param {integer} requestBody.pollinterval - Seconds between polls (10-3600)
-    # @param {string} [requestBody.description] - Optional monitor description
-    # @param {boolean} [requestBody.is_active=true] - Monitor status
-    # @response 200 {Success} Monitor created successfully
-    # @response 400 {Error} Validation error in request parameters
-    # @response 400 {Error} Monitor with these parameters already exists
-    # @response 404 {Error} Agent or target not found
     main::post '/monitor' => sub {
         my $c = shift;
         my $data = $c->req->json;
@@ -262,17 +245,6 @@ sub register_monitor {
     # (pollcount and pollinterval) cannot be modified after creation.
     # @tags Monitors
     # @security bearerAuth
-    # @param {string} id - Monitor UUID
-    # @param {object} requestBody
-    # @param {string} [requestBody.description] - Monitor description
-    # @param {string} [requestBody.protocol] - Protocol (ICMP, ICMPV6, TCP)
-    # @param {integer} [requestBody.port] - Port for TCP monitors
-    # @param {string} [requestBody.dscp] - DSCP value
-    # @param {boolean} [requestBody.is_active] - Monitor status
-    # @response 200 {Success} Monitor updated successfully
-    # @response 400 {Error} Invalid update parameters
-    # @response 400 {Error} Monitor with these parameters already exists
-    # @response 404 {Error} Monitor not found
     main::put '/monitor/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -388,9 +360,6 @@ sub register_monitor {
     # This operation cannot be undone.
     # @tags Monitors
     # @security bearerAuth
-    # @param {string} id - Monitor UUID
-    # @response 200 {Success} Monitor and associated data deleted successfully
-    # @response 404 {Error} Monitor not found
     main::del '/monitor/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -435,9 +404,6 @@ sub register_monitor {
     # This operation cannot be undone.
     # @tags Monitors
     # @security bearerAuth
-    # @param {string} id - Monitor UUID
-    # @response 200 {Success} Monitor and associated data deleted successfully
-    # @response 404 {Error} Monitor not found
     main::post '/monitor/:id/reset' => sub {
         my $c = shift;
         my $id = $c->param('id');

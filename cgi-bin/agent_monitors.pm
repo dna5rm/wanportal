@@ -42,11 +42,6 @@ sub register_agent_monitors {
     # @description Returns a list of active monitors assigned to the specified agent.
     # Only returns monitors that are due for polling based on their interval.
     # @tags Agent Monitors
-    # @param {string} id - Agent ID
-    # @param {object} requestBody.password - Agent password for authentication
-    # @response 200 {object} List of monitor assignments
-    # @response 401 {Error} Invalid agent ID or password
-    # @response 404 {Error} Agent not found
     main::get '/agent/:id/monitors' => sub {
         my $c = shift;
         my $request_body = $c->req->json;
@@ -109,19 +104,6 @@ sub register_agent_monitors {
     # @description Accepts monitoring results from an agent and updates the monitor statistics.
     # Creates or updates RRD files for data storage.
     # @tags Agent Monitors
-    # @param {string} id - Agent ID
-    # @param {object} requestBody.password - Agent password for authentication
-    # @param {array} requestBody.results - Array of monitor results
-    # @param {string} requestBody.results[].id - Monitor ID
-    # @param {number} requestBody.results[].min - Minimum RTT value
-    # @param {number} requestBody.results[].max - Maximum RTT value
-    # @param {number} requestBody.results[].median - Median RTT value
-    # @param {number} requestBody.results[].loss - Packet loss percentage
-    # @param {number} requestBody.results[].stddev - Standard deviation of RTT values
-    # @response 200 {Success} Results processed successfully
-    # @response 400 {Error} Missing or invalid result data
-    # @response 401 {Error} Invalid agent ID or password
-    # @response 404 {Error} Agent or monitor not found
     main::post '/agent/:id/monitors' => sub {
         my $c = shift;
         my $request_body = $c->req->json;
@@ -171,19 +153,34 @@ sub register_agent_monitors {
 
             my $step = $monitor_config->{pollinterval} // 60;
 
+            # Check if host is down (100% loss and 0 RTT)
+            my $is_down = ($r->{loss} == 100 && $r->{median} == 0);
+
             # Get current stats for running averages
             my $curr = $dbh->selectrow_hashref(
                 "SELECT sample, avg_loss, avg_median, avg_min, avg_max, avg_stddev, prev_loss, total_down FROM monitors WHERE id=?", 
                 undef, 
                 $r->{id}
             );
-            
-            my $sample = ($curr->{sample} // 0) + 1;
-            my $avg_loss   = defined $curr->{avg_loss}   ? ((($curr->{avg_loss}   * ($sample-1)) + $r->{loss})   / $sample) : $r->{loss};
-            my $avg_median = defined $curr->{avg_median} ? ((($curr->{avg_median} * ($sample-1)) + $r->{median}) / $sample) : $r->{median};
-            my $avg_min    = defined $curr->{avg_min}    ? ((($curr->{avg_min}    * ($sample-1)) + $r->{min})    / $sample) : $r->{min};
-            my $avg_max    = defined $curr->{avg_max}    ? ((($curr->{avg_max}    * ($sample-1)) + $r->{max})    / $sample) : $r->{max};
-            my $avg_stddev = defined $curr->{avg_stddev} ? ((($curr->{avg_stddev} * ($sample-1)) + $r->{stddev}) / $sample) : $r->{stddev};
+
+            # Only update averages if the host is not down
+            my ($sample, $avg_loss, $avg_median, $avg_min, $avg_max, $avg_stddev);
+            if (!$is_down) {
+                $sample = ($curr->{sample} // 0) + 1;  # Increment sample count
+                $avg_loss   = defined $curr->{avg_loss}   ? ((($curr->{avg_loss}   * ($sample-1)) + $r->{loss})   / $sample) : $r->{loss};
+                $avg_median = defined $curr->{avg_median} ? ((($curr->{avg_median} * ($sample-1)) + $r->{median}) / $sample) : $r->{median};
+                $avg_min    = defined $curr->{avg_min}    ? ((($curr->{avg_min}    * ($sample-1)) + $r->{min})    / $sample) : $r->{min};
+                $avg_max    = defined $curr->{avg_max}    ? ((($curr->{avg_max}    * ($sample-1)) + $r->{max})    / $sample) : $r->{max};
+                $avg_stddev = defined $curr->{avg_stddev} ? ((($curr->{avg_stddev} * ($sample-1)) + $r->{stddev}) / $sample) : $r->{stddev};
+            } else {
+                $sample = $curr->{sample} // 0;  # Keep existing sample count
+                # If host is down, keep existing averages
+                $avg_loss   = $curr->{avg_loss};
+                $avg_median = $curr->{avg_median};
+                $avg_min    = $curr->{avg_min};
+                $avg_max    = $curr->{avg_max};
+                $avg_stddev = $curr->{avg_stddev};
+            }
 
             # Downtime tracking
             my $total_down = $curr->{total_down} || 0;
@@ -231,7 +228,8 @@ sub register_agent_monitors {
 
             # RRD handling
             my $rrdfile = "$datadir/$r->{id}.rrd";
-            print STDERR "RRD: attempt create/update $rrdfile (loss=$r->{loss}, rtt=$r->{median})\n";
+            print STDERR "RRD: attempt create/update $rrdfile (loss=$r->{loss}, rtt=" . 
+                ($is_down ? "U" : $r->{median}) . ")\n";
             
             unless (-e $rrdfile) {
                 print STDERR "RRD: creating $rrdfile with step $step\n";
@@ -249,9 +247,10 @@ sub register_agent_monitors {
                 }
             }
 
-            # Update RRD with current timestamp
+            # Update RRD with current timestamp, using 'U' for RTT when host is down
             my $now = time();
-            RRDs::update($rrdfile, '--template', 'loss:rtt', "$now:$r->{loss}:$r->{median}");
+            my $rtt_value = $is_down ? 'U' : $r->{median};
+            RRDs::update($rrdfile, '--template', 'loss:rtt', "$now:$r->{loss}:$rtt_value");
             my $ERR = RRDs::error;
             if ($ERR) {
                 $c->app->log->error("RRD update $rrdfile: $ERR");

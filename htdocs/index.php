@@ -89,8 +89,12 @@ if (DEBUG_MODE) {
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <meta http-equiv="refresh" content="300">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <!-- DataTables -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
+    <!-- Custom CSS -->
     <link rel="stylesheet" href="/assets/base.css">
 </head>
 <body>
@@ -140,10 +144,12 @@ if (DEBUG_MODE) {
         <div class="col">
             <div class="row mb-3">
                 <div class="col text-end d-flex justify-content-end align-items-center gap-3">
+                    <a href="/latency.php" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-speedometer2"></i> Latency </a> |
+                    <a href="/api-docs/swagger.php" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-braces"></i> API </a>
                     <a href="/server.php" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-graph-up"></i> Runtime </a>
-                    <a href="/latency.php" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-speedometer2"></i> Latency </a>
                     <form action="/search.php" method="GET" class="d-flex align-items-center">
                         <input type="text" name="q" class="form-control form-control-sm me-2" placeholder="Search monitors...">
                         <button type="submit" class="btn btn-primary btn-sm">
@@ -157,18 +163,14 @@ if (DEBUG_MODE) {
             <div class="text-center mb-4">
                 <div class="d-flex justify-content-center align-items-center gap-3">
                     <h3 class="mb-0">Down Hosts</h3>
-                    <a href="/cgi-bin/api/monitors?current_loss=100&is_active=1" 
-                       class="btn btn-sm btn-outline-secondary" 
-                       target="_blank"
-                       title="View raw API data"
-                       data-bs-toggle="tooltip">
+                    <a href="/cgi-bin/api/monitors?current_loss=100&is_active=1" class="btn btn-sm btn-outline-secondary" target="_blank" title="View raw API data" data-bs-toggle="tooltip">
                         <i class="bi bi-code-slash"></i> Raw Data
                     </a>
                 </div>
             </div>
 
             <div class="table-responsive">
-                <table class="table table-striped table-hover">
+                <table id="tablePager" class="table table-striped table-hover">
                     <thead class="table-light">
                         <tr>
                             <th>Monitor</th>

@@ -64,13 +64,6 @@ sub register_target {
     # @description Retrieves detailed information about a specific monitoring target.
     # @tags Targets
     # @security bearerAuth
-    # @param {string} id - Target UUID
-    # @response 200 {object} Target details
-    # @response 200 {string} target.id - Target UUID
-    # @response 200 {string} target.address - Target address (IPv4, IPv6, or hostname)
-    # @response 200 {string} target.description - Target description
-    # @response 200 {boolean} target.is_active - Target status
-    # @response 404 {Error} Target not found
     main::get '/target/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -114,15 +107,6 @@ sub register_target {
     # Address can be IPv4, IPv6, or a valid hostname.
     # @tags Targets
     # @security bearerAuth
-    # @param {object} requestBody
-    # @param {string} requestBody.address - Target address (IPv4, IPv6, or hostname)
-    # @param {string} [requestBody.description] - Target description
-    # @param {boolean} [requestBody.is_active=true] - Target status
-    # @response 200 {Success} Target created successfully
-    # @response 200 {string} id - New target UUID
-    # @response 400 {Error} Missing required field: address
-    # @response 400 {Error} Invalid address format
-    # @response 400 {Error} Target address already exists
     main::post '/target' => sub {
         my $c = shift;
         my $data = $c->req->json;
@@ -189,15 +173,6 @@ sub register_target {
     # Address validation applies when updating.
     # @tags Targets
     # @security bearerAuth
-    # @param {string} id - Target UUID
-    # @param {object} requestBody
-    # @param {string} [requestBody.address] - Target address (IPv4, IPv6, or hostname)
-    # @param {string} [requestBody.description] - Target description
-    # @param {boolean} [requestBody.is_active] - Target status
-    # @response 200 {Success} Target updated successfully
-    # @response 400 {Error} Invalid address format
-    # @response 400 {Error} Target address already exists
-    # @response 404 {Error} Target not found
     main::put '/target/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -275,10 +250,6 @@ sub register_target {
     # Also removes associated RRD files for all deleted monitors.
     # @tags Targets
     # @security bearerAuth
-    # @param {string} id - Target UUID
-    # @response 200 {Success} Target and associated monitors deleted successfully
-    # @response 200 {array} deleted_monitors - Array of deleted monitor IDs
-    # @response 404 {Error} Target not found
     main::del '/target/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');

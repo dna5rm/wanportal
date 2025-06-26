@@ -17,382 +17,1876 @@ components:
           example: success
           type: string
       type: object
+    Agent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        description:
+          type: string
+        last_seen:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+        password:
+          type: string
+    Target:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        address:
+          type: string
+        description:
+          type: string
+        is_active:
+          type: boolean
+    Monitor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        description:
+          type: string
+        agent_id:
+          type: string
+          format: uuid
+        target_id:
+          type: string
+          format: uuid
+        protocol:
+          type: string
+          enum: [ICMP, ICMPV6, TCP]
+        port:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        dscp:
+          type: string
+          enum: [BE, EF, CS0, CS1, CS2, CS3, CS4, CS5, CS6, CS7, AF11, AF12, AF13, AF21, AF22, AF23, AF31, AF32, AF33, AF41, AF42, AF43]
+        pollcount:
+          type: integer
+          minimum: 1
+          maximum: 100
+        pollinterval:
+          type: integer
+          minimum: 10
+          maximum: 3600
+        is_active:
+          type: boolean
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+        is_admin:
+          type: boolean
+        is_active:
+          type: boolean
+    Credential:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        site:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [ACCOUNT, CERTIFICATE, API, PSK, CODE]
+        username:
+          type: string
+        password:
+          type: string
+        url:
+          type: string
+        sensitivity:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, CRITICAL]
+
   securitySchemes:
     bearerAuth:
       bearerFormat: JWT
       scheme: bearer
       type: http
+
 info:
-  description: API for managing network monitoring agents, targets, and measurements
+  description: API for managing network monitoring agents, targets, and monitors.
   title: NetOPS Monitoring API
   version: 1.0.0
+
 openapi: 3.0.0
+
 paths:
-  /cgi-bin/api/agent:
+  /login:
     post:
-      description: Creates a new monitoring agent in the system.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Create new agent
       tags:
-      - Agents
-  /cgi-bin/api/agent/{id}:
-    delete:
-      description: Removes an agent and all its associated monitors from the system.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Delete agent
-      tags:
-      - Agents
-    get:
-      description: Returns a list of all monitoring agents in the system, including
-        their status and last seen time.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: List all agents
-      tags:
-      - Agents
-    put:
-      description: Updates an existing agent's configuration.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Update agent
-      tags:
-      - Agents
-  /cgi-bin/api/agent/{id}/monitors:
-    get:
-      description: Returns a list of active monitors assigned to the specified agent.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Get agent's monitor assignments
-      tags:
-      - Agent Monitors
-    post:
-      description: Accepts monitoring results from an agent and updates the monitor
-        statistics.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Submit monitor results
-      tags:
-      - Agent Monitors
-  /cgi-bin/api/agents:
-    get:
-      description: Returns a list of all monitoring agents in the system without sensitive
-        information.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: List all agents
-      tags:
-      - Public API
-  /cgi-bin/api/credentials:
-    get:
-      description: Returns a list of all stored credentials with optional filtering.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: List credentials
-      tags:
-      - Credentials
-    post:
-      description: Creates a new credential entry in the system.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Create new credential
-      tags:
-      - Credentials
-  /cgi-bin/api/credentials/{id}:
-    delete:
-      description: Soft deletes a credential by marking it inactive.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Delete credential
-      tags:
-      - Credentials
-    get:
-      description: Retrieves detailed information about a specific credential.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Get credential details
-      tags:
-      - Credentials
-    put:
-      description: Updates an existing credential's information.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Update credential
-      tags:
-      - Credentials
-  /cgi-bin/api/login:
-    post:
-      description: Authenticates a user and returns a JWT token for API access.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
+        - Authentication
       summary: User authentication
-      tags:
-      - Authentication
-  /cgi-bin/api/monitor:
+      description: Authenticates a user and returns a JWT token for API access.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  token:
+                    type: string
+
+  /agent:
     post:
-      description: Creates a new monitoring configuration that associates an agent
-        with a target.
-      parameters: []
+      tags:
+        - Agents
+      summary: Create new agent
+      description: Creates a new monitoring agent in the system.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Unique name for the agent
+                address:
+                  type: string
+                  description: IP address of the agent
+                description:
+                  type: string
+                is_active:
+                  type: boolean
+                  default: true
+                password:
+                  type: string
+              required:
+                - name
       responses:
         '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Create new monitor
-      tags:
-      - Monitors
-  /cgi-bin/api/monitor/{id}:
-    delete:
-      description: Removes a monitor configuration and its associated RRD data files.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Delete monitor
-      tags:
-      - Monitors
+          description: Agent created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /agent/{id}:
     get:
-      description: Retrieves detailed information about a specific monitor, including
-        its
-      parameters: []
+      tags:
+        - Agents
+      summary: List all agents
+      description: Returns a list of all monitoring agents in the system, including their status and last seen time.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Agent ID
       responses:
         '200':
           description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Get monitor details
-      tags:
-      - Monitors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  agent:
+                    $ref: '#/components/schemas/Agent'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     put:
-      description: Updates an existing monitor's configuration. Note that polling
-        parameters
-      parameters: []
+      tags:
+        - Agents
+      summary: Update agent
+      description: Updates an existing agent's configuration.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Agent ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                address:
+                  type: string
+                description:
+                  type: string
+                is_active:
+                  type: boolean
+                password:
+                  type: string
       responses:
         '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Update monitor configuration
+          description: Agent updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
       tags:
-      - Monitors
-  /cgi-bin/api/monitor/{id}/reset:
-    post:
-      description: Removes a monitor configuration and its associated RRD data files.
-      parameters: []
+        - Agents
+      summary: Delete agent
+      description: Removes an agent and all its associated monitors from the system. Cannot delete the LOCAL agent.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Agent ID
       responses:
         '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Delete monitor
-      tags:
-      - Monitors
-  /cgi-bin/api/monitors:
+          description: Agent deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+                  deleted_monitors:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+        '403':
+          description: Cannot delete LOCAL agent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /agent/{id}/monitors:
     get:
-      description: Returns a list of all monitors with their current status and configuration.
-      parameters: []
+      tags:
+        - Agent Monitors
+      summary: Get agent's monitor assignments
+      description: Returns a list of active monitors assigned to the specified agent. Only returns monitors that are due for polling based on their interval.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Agent ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  description: Agent password for authentication
+              required:
+                - password
       responses:
         '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: List all monitors
-      tags:
-      - Public API
-  /cgi-bin/api/rrd:
-    get:
-      description: Retrieves monitoring data from RRD files. Can return raw data or
-        generate graphs.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Get RRD data
-      tags:
-      - Public API
-  /cgi-bin/api/target:
+          description: List of monitors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  monitors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        address:
+                          type: string
+                        protocol:
+                          type: string
+                        port:
+                          type: integer
+                        dscp:
+                          type: string
+                        pollcount:
+                          type: integer
+                        pollinterval:
+                          type: integer
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
-      description: Creates a new monitoring target in the system.
-      parameters: []
+      tags:
+        - Agent Monitors
+      summary: Submit monitor results
+      description: Accepts monitoring results from an agent and updates the monitor statistics. Creates or updates RRD files for data storage.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Agent ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                results:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      min:
+                        type: number
+                      max:
+                        type: number
+                      median:
+                        type: number
+                      loss:
+                        type: number
+                      stddev:
+                        type: number
+              required:
+                - password
+                - results
       responses:
         '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
+          description: Results submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /target:
+    post:
+      tags:
+        - Targets
       summary: Create new target
-      tags:
-      - Targets
-  /cgi-bin/api/target/{id}:
-    delete:
-      description: Removes a target and all its associated monitors from the system.
-      parameters: []
+      description: Creates a new monitoring target in the system. Address can be IPv4, IPv6, or a valid hostname.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                address:
+                  type: string
+                  description: IPv4, IPv6, or hostname of the target
+                description:
+                  type: string
+                  description: Optional description of the target
+                is_active:
+                  type: boolean
+                  default: true
+                  description: Whether the target is active
+              required:
+                - address
       responses:
         '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Delete target
-      tags:
-      - Targets
+          description: Target created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Invalid input or duplicate address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Database error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /target/{id}:
     get:
-      description: Retrieves detailed information about a specific monitoring target.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
+      tags:
+        - Targets
       summary: Get target details
-      tags:
-      - Targets
-    put:
-      description: Updates an existing target's configuration.
-      parameters: []
+      description: Retrieves detailed information about a specific monitoring target.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Target ID
       responses:
         '200':
           description: Successful operation
-      security:
-      - bearerAuth: []
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  target:
+                    $ref: '#/components/schemas/Target'
+        '404':
+          description: Target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Database error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - Targets
       summary: Update target
-      tags:
-      - Targets
-  /cgi-bin/api/targets:
-    get:
-      description: Returns a list of all monitoring targets in the system.
-      parameters: []
+      description: Updates an existing target's configuration. Address validation applies when updating.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Target ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                address:
+                  type: string
+                  description: IPv4, IPv6, or hostname of the target
+                description:
+                  type: string
+                  description: Optional description of the target
+                is_active:
+                  type: boolean
+                  description: Whether the target is active
       responses:
         '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: List all targets
-      tags:
-      - Public API
-  /cgi-bin/api/test:
-    post:
-      description: Test endpoint to verify if a JWT token is valid.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Verify authentication
-      tags:
-      - Authentication
-  /cgi-bin/api/users:
-    get:
-      description: Returns a list of all users in the system. Requires admin privileges.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: List all users
-      tags:
-      - Users
-    post:
-      description: Creates a new user account in the system. Requires admin privileges.
-      parameters: []
-      responses:
-        '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Create new user
-      tags:
-      - Users
-  /cgi-bin/api/users/{id}:
+          description: Target updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Invalid input or duplicate address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Database error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
-      description: Removes a user account from the system. Requires admin privileges.
-      parameters: []
+      tags:
+        - Targets
+      summary: Delete target
+      description: Removes a target and all its associated monitors from the system. Also removes associated RRD files for all deleted monitors.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Target ID
       responses:
         '200':
-          description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Delete user
+          description: Target deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+                  deleted_monitors:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+                    description: List of monitor IDs that were deleted
+        '404':
+          description: Target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Database error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /monitor:
+    post:
       tags:
-      - Users
+        - Monitors
+      summary: Create new monitor
+      description: Creates a new monitoring configuration that associates an agent with a target. The monitor defines how the agent should test connectivity to the target.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                agent_id:
+                  type: string
+                  format: uuid
+                target_id:
+                  type: string
+                  format: uuid
+                protocol:
+                  type: string
+                  enum: [ICMP, ICMPV6, TCP]
+                  default: ICMP
+                port:
+                  type: integer
+                  minimum: 0
+                  maximum: 65535
+                  default: 0
+                dscp:
+                  type: string
+                  enum: [BE, EF, CS0, CS1, CS2, CS3, CS4, CS5, CS6, CS7, AF11, AF12, AF13, AF21, AF22, AF23, AF31, AF32, AF33, AF41, AF42, AF43]
+                  default: BE
+                pollcount:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  default: 5
+                pollinterval:
+                  type: integer
+                  minimum: 10
+                  maximum: 3600
+                  default: 60
+                is_active:
+                  type: boolean
+                  default: true
+              required:
+                - agent_id
+                - target_id
+      responses:
+        '200':
+          description: Monitor created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Invalid input or duplicate monitor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Agent or target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Database error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /monitor/{id}:
     get:
-      description: Retrieves detailed information about a specific user. Requires
-        admin privileges.
-      parameters: []
+      tags:
+        - Monitors
+      summary: Get monitor details
+      description: Retrieves detailed information about a specific monitor, including its current status, configuration, and associated agent and target details.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Monitor ID
       responses:
         '200':
           description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Get user details
-      tags:
-      - Users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  monitor:
+                    allOf:
+                      - $ref: '#/components/schemas/Monitor'
+                      - type: object
+                        properties:
+                          agent_name:
+                            type: string
+                          target_address:
+                            type: string
+                          sample:
+                            type: integer
+                          current_loss:
+                            type: integer
+                          current_median:
+                            type: number
+                          current_min:
+                            type: number
+                          current_max:
+                            type: number
+                          current_stddev:
+                            type: number
+                          avg_loss:
+                            type: integer
+                          avg_median:
+                            type: number
+                          avg_min:
+                            type: number
+                          avg_max:
+                            type: number
+                          avg_stddev:
+                            type: number
+                          last_clear:
+                            type: string
+                            format: date-time
+                          last_down:
+                            type: string
+                            format: date-time
+                          last_update:
+                            type: string
+                            format: date-time
+                          total_down:
+                            type: integer
+        '404':
+          description: Monitor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Database error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     put:
-      description: Updates an existing user's account information. Requires admin
-        privileges.
-      parameters: []
+      tags:
+        - Monitors
+      summary: Update monitor configuration
+      description: Updates an existing monitor's configuration. Note that polling parameters (pollcount and pollinterval) cannot be modified after creation.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Monitor ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                agent_id:
+                  type: string
+                  format: uuid
+                target_id:
+                  type: string
+                  format: uuid
+                protocol:
+                  type: string
+                  enum: [ICMP, ICMPV6, TCP]
+                port:
+                  type: integer
+                  minimum: 0
+                  maximum: 65535
+                dscp:
+                  type: string
+                  enum: [BE, EF, CS0, CS1, CS2, CS3, CS4, CS5, CS6, CS7, AF11, AF12, AF13, AF21, AF22, AF23, AF31, AF32, AF33, AF41, AF42, AF43]
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Monitor updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Invalid input or duplicate monitor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Monitor, agent, or target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Database error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Monitors
+      summary: Delete monitor
+      description: Removes a monitor configuration and its associated RRD data files. This operation cannot be undone.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Monitor ID
+      responses:
+        '200':
+          description: Monitor deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '404':
+          description: Monitor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Database error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /monitor/{id}/reset:
+    post:
+      tags:
+        - Monitors
+      summary: Reset monitor statistics
+      description: Resets all statistics for a monitor, including averages and counters.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Monitor ID
+      responses:
+        '200':
+          description: Monitor statistics reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '404':
+          description: Monitor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Database error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /agents:
+    get:
+      tags:
+        - Public API
+      summary: List all agents
+      description: Returns a list of all monitoring agents in the system without sensitive information. Passwords are never included in the response.
       responses:
         '200':
           description: Successful operation
-      security:
-      - bearerAuth: []
-      summary: Update user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  agents:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+                        address:
+                          type: string
+                        description:
+                          type: string
+                        last_seen:
+                          type: string
+                          format: date-time
+                        is_active:
+                          type: boolean
+
+  /targets:
+    get:
       tags:
-      - Users
+        - Public API
+      summary: List all targets
+      description: Returns a list of all monitoring targets in the system.
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  targets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Target'
+
+  /monitors:
+    get:
+      tags:
+        - Public API
+      summary: List all monitors
+      description: Returns a list of all monitors with their current status and configuration. Supports filtering by status and activity state.
+      parameters:
+        - in: query
+          name: current_loss
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+          description: Filter by current loss percentage
+        - in: query
+          name: is_active
+          schema:
+            type: boolean
+          description: Filter by active status
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  monitors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        description:
+                          type: string
+                        agent_id:
+                          type: string
+                          format: uuid
+                        target_id:
+                          type: string
+                          format: uuid
+                        protocol:
+                          type: string
+                        port:
+                          type: integer
+                        dscp:
+                          type: string
+                        pollcount:
+                          type: integer
+                        pollinterval:
+                          type: integer
+                        is_active:
+                          type: boolean
+                        sample:
+                          type: integer
+                        current_loss:
+                          type: integer
+                        current_median:
+                          type: number
+                        current_min:
+                          type: number
+                        current_max:
+                          type: number
+                        current_stddev:
+                          type: number
+                        avg_loss:
+                          type: integer
+                        avg_median:
+                          type: number
+                        avg_min:
+                          type: number
+                        avg_max:
+                          type: number
+                        avg_stddev:
+                          type: number
+                        last_clear:
+                          type: string
+                          format: date-time
+                        last_down:
+                          type: string
+                          format: date-time
+                        last_update:
+                          type: string
+                          format: date-time
+                        total_down:
+                          type: integer
+                        agent_name:
+                          type: string
+                        agent_is_active:
+                          type: boolean
+                        target_address:
+                          type: string
+                        target_is_active:
+                          type: boolean
+
+  /rrd:
+    get:
+      tags:
+        - Public API
+      summary: Get RRD data
+      description: Retrieves monitoring data from RRD files. Can return raw data or generate graphs. Supports both RTT and loss metrics with customizable time ranges.
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Monitor ID
+        - in: query
+          name: cmd
+          schema:
+            type: string
+            enum: [graph]
+          description: Command to execute. If 'graph', returns PNG image instead of JSON data
+        - in: query
+          name: ds
+          schema:
+            type: string
+            enum: [rtt, loss]
+            default: rtt
+          description: Data source to query
+        - in: query
+          name: start
+          schema:
+            type: string
+            format: date-time
+          description: Start time for data range (ISO 8601 format)
+        - in: query
+          name: end
+          schema:
+            type: string
+            format: date-time
+          description: End time for data range (ISO 8601 format)
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  start_time:
+                    type: integer
+                    description: Unix timestamp of start time
+                  end_time:
+                    type: integer
+                    description: Unix timestamp of end time
+                  step:
+                    type: integer
+                    description: Time interval between data points
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        timestamp:
+                          type: integer
+                          description: Unix timestamp
+                        datetime:
+                          type: string
+                          format: date-time
+                        loss:
+                          type: number
+                        rtt:
+                          type: number
+            image/png:
+              schema:
+                type: string
+                format: binary
+              description: PNG graph when cmd=graph
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Monitor or RRD file not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: RRD operation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /credentials:
+    get:
+      tags:
+        - Credentials
+      summary: List credentials
+      description: Returns a list of all stored credentials with optional filtering. Passwords are not included in the response unless specifically requested.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: is_active
+          schema:
+            type: boolean
+          description: Filter by active status
+        - in: query
+          name: site
+          schema:
+            type: string
+          description: Filter by site
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [ACCOUNT, CERTIFICATE, API, PSK, CODE]
+          description: Filter by credential type
+        - in: query
+          name: sensitivity
+          schema:
+            type: string
+            enum: [LOW, MEDIUM, HIGH, CRITICAL]
+          description: Filter by sensitivity level
+        - in: query
+          name: include_password
+          schema:
+            type: boolean
+            default: false
+          description: Include password fields in response
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  credentials:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Credential'
+    post:
+      tags:
+        - Credentials
+      summary: Create new credential
+      description: Creates a new credential entry in the system.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Name of the credential
+                type:
+                  type: string
+                  enum: [ACCOUNT, CERTIFICATE, API, PSK, CODE]
+                  description: Type of credential
+                site:
+                  type: string
+                  description: Site or system the credential is for
+                username:
+                  type: string
+                  description: Username if applicable
+                password:
+                  type: string
+                  description: Password or secret value
+                url:
+                  type: string
+                  description: Related URL if applicable
+                owner:
+                  type: string
+                  description: Owner of the credential
+                comment:
+                  type: string
+                  description: Additional notes
+                expiry_date:
+                  type: string
+                  format: date-time
+                  description: Expiration date if applicable
+                sensitivity:
+                  type: string
+                  enum: [LOW, MEDIUM, HIGH, CRITICAL]
+                  default: MEDIUM
+                  description: Sensitivity level of the credential
+                metadata:
+                  type: object
+                  description: Additional structured data
+              required:
+                - name
+                - type
+      responses:
+        '200':
+          description: Credential created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /credentials/{id}:
+    get:
+      tags:
+        - Credentials
+      summary: Get credential details
+      description: Retrieves detailed information about a specific credential. Updates last_accessed timestamp when credential is viewed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Credential ID
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  credential:
+                    $ref: '#/components/schemas/Credential'
+        '404':
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - Credentials
+      summary: Update credential
+      description: Updates an existing credential's information.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Credential ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [ACCOUNT, CERTIFICATE, API, PSK, CODE]
+                site:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+                url:
+                  type: string
+                owner:
+                  type: string
+                comment:
+                  type: string
+                expiry_date:
+                  type: string
+                  format: date-time
+                sensitivity:
+                  type: string
+                  enum: [LOW, MEDIUM, HIGH, CRITICAL]
+                metadata:
+                  type: object
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Credential updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Credentials
+      summary: Delete credential
+      description: Soft deletes a credential by marking it inactive. If already inactive, performs hard delete.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Credential ID
+      responses:
+        '200':
+          description: Credential deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    description: Indicates whether soft or hard delete was performed
+        '404':
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users:
+    get:
+      tags:
+        - Users
+      summary: List all users
+      description: Returns a list of all users in the system. Requires admin privileges. Passwords are never included in the response.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  users:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        username:
+                          type: string
+                        full_name:
+                          type: string
+                        email:
+                          type: string
+                        is_admin:
+                          type: boolean
+                        is_active:
+                          type: boolean
+                        last_login:
+                          type: string
+                          format: date-time
+                        created_at:
+                          type: string
+                          format: date-time
+                        updated_at:
+                          type: string
+                          format: date-time
+        '403':
+          description: Unauthorized - Requires admin privileges
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - Users
+      summary: Create new user
+      description: Creates a new user account in the system. Requires admin privileges. Password must meet complexity requirements.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  description: Unique username
+                password:
+                  type: string
+                  description: Password (must meet complexity requirements)
+                full_name:
+                  type: string
+                  description: User's full name
+                email:
+                  type: string
+                  format: email
+                  description: User's email address
+                is_admin:
+                  type: boolean
+                  default: false
+                  description: Whether user has admin privileges
+                is_active:
+                  type: boolean
+                  default: true
+                  description: Whether account is active
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Invalid input or password doesn't meet requirements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Unauthorized - Requires admin privileges
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{id}:
+    get:
+      tags:
+        - Users
+      summary: Get user details
+      description: Retrieves detailed information about a specific user. Requires admin privileges. Includes account status, login history, and security information.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: User ID
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      username:
+                        type: string
+                      full_name:
+                        type: string
+                      email:
+                        type: string
+                      is_admin:
+                        type: boolean
+                      is_active:
+                        type: boolean
+                      last_login:
+                        type: string
+                        format: date-time
+                      created_at:
+                        type: string
+                        format: date-time
+                      created_by:
+                        type: string
+                      updated_at:
+                        type: string
+                        format: date-time
+                      updated_by:
+                        type: string
+                      failed_attempts:
+                        type: integer
+                      locked_until:
+                        type: string
+                        format: date-time
+        '403':
+          description: Unauthorized - Requires admin privileges
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - Users
+      summary: Update user
+      description: Updates an existing user's account information. Requires admin privileges. Cannot modify admin user except by themselves.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: User ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  description: New password (must meet complexity requirements)
+                full_name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                is_admin:
+                  type: boolean
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Invalid input or password doesn't meet requirements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Unauthorized or attempting to modify admin user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Users
+      summary: Delete user
+      description: Removes a user account from the system. Requires admin privileges. Cannot delete the admin user.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: User ID
+      responses:
+        '200':
+          description: User deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '403':
+          description: Unauthorized or attempting to delete admin user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+tags:
+  - name: Public API
+    description: Public endpoints that provide read-only access to monitoring data and statistics.
+
+  - name: Authentication
+    description: Endpoints for user authentication and token validation.
+
+  - name: Users
+    description: User account management endpoints. Most operations require admin privileges.
+
+  - name: Agents
+    description: Monitoring agent management endpoints for creating, updating, and managing monitoring agents.
+
+  - name: Agent Monitors
+    description: Endpoints used by monitoring agents to retrieve assignments and submit results.
+
+  - name: Targets
+    description: Target management endpoints for creating and managing monitoring targets.
+
+  - name: Monitors
+    description: Monitor configuration endpoints for setting up and managing monitoring assignments.
+
+  - name: Credentials
+    description: Secure credential management endpoints for storing and retrieving various types of credentials.
+

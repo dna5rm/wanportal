@@ -1,7 +1,37 @@
 <!-- Footer Scripts -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.10.24/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.10.24/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
 <script>
+    $(document).ready(function() {
+        $('#tablePager').DataTable({
+            responsive: true,
+            pageLength: 25,
+            order: [[0, "asc"]],
+            language: {
+                search: "_INPUT_",
+                searchPlaceholder: "Search records..."
+            },
+            lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]]
+        });
+    });
+
+    $(document).ready(function() {
+        $('.searchable-select').each(function() {
+            $(this).select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                placeholder: $(this).find('option:first').text(), // Uses first option as placeholder
+                allowClear: false,
+                selectionCssClass: 'form-select',
+            });
+        });
+    });
+
     // Wait for the document to be fully loaded
     document.addEventListener('DOMContentLoaded', function() {
         // Initialize all tooltips

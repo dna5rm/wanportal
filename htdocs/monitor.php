@@ -146,8 +146,12 @@ try {
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= htmlspecialchars($monitor['description']) ?></title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <!-- DataTables -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
+    <!-- Custom CSS -->
     <link rel="stylesheet" href="/assets/base.css">
 </head>
 <body>
@@ -428,7 +432,7 @@ try {
                         <!-- DateTime Form -->
                         <form action="monitor.php" method="GET" id="dateTimeForm">
                             <div class="input-group">
-                                <span class="input-group-text">Date</span>
+                                <span class="input-group-text">UTC</span>
                                 <input type="datetime-local" class="form-control" name="start" value="<?= htmlspecialchars($start) ?>" />
                                 <input type="datetime-local" class="form-control" name="end" value="<?= htmlspecialchars($end) ?>" />
                                 <input type="hidden" name="id" value="<?= htmlspecialchars($id) ?>" />
@@ -447,30 +451,14 @@ try {
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Convert UTC times to local timezone for display
-    const dateInputs = document.querySelectorAll('input[type="datetime-local"]');
-    dateInputs.forEach(input => {
-        if (input.value) {
-            const utcDate = new Date(input.value + 'Z'); // Add Z to indicate UTC
-            const localDate = new Date(utcDate.toLocaleString());
-            input.value = localDate.toISOString().slice(0, 16);
-        }
-    });
-
-    // Convert local time to UTC when submitting
-    const dateTimeForm = document.querySelector('#dateTimeForm');  // Use specific ID
-    if (dateTimeForm) {  // Only add listener if it's the datetime form
+    // Handle form submission - keep everything in UTC
+    const dateTimeForm = document.getElementById('dateTimeForm');
+    if (dateTimeForm) {
         dateTimeForm.addEventListener('submit', function(e) {
             e.preventDefault();
+            
             const formData = new FormData(dateTimeForm);
-            const start = new Date(formData.get('start'));
-            const end = new Date(formData.get('end'));
-            
-            // Convert to UTC
-            formData.set('start', start.toISOString().slice(0, 16));
-            formData.set('end', end.toISOString().slice(0, 16));
-            
-            // Submit with UTC times
+            // Submit the form with UTC times exactly as entered
             const queryString = new URLSearchParams(formData).toString();
             window.location.href = window.location.pathname + '?' + queryString;
         });

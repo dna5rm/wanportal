@@ -63,13 +63,6 @@ sub register_credentials {
     # Passwords are not included in the response unless specifically requested.
     # @tags Credentials
     # @security bearerAuth
-    # @param {string} [is_active] - Filter by active status (0 or 1)
-    # @param {string} [site] - Filter by site
-    # @param {string} [type] - Filter by credential type (ACCOUNT, CERTIFICATE, API, PSK, CODE)
-    # @param {string} [sensitivity] - Filter by sensitivity level (LOW, MEDIUM, HIGH, CRITICAL)
-    # @param {boolean} [include_password] - Include passwords in response
-    # @response 200 {object} List of credentials
-    # @response 401 {Error} Unauthorized
     main::get '/credentials' => sub {
         my $c = shift;
         
@@ -169,10 +162,6 @@ sub register_credentials {
     # Updates last_accessed timestamp when credential is viewed.
     # @tags Credentials
     # @security bearerAuth
-    # @param {string} id - Credential UUID
-    # @response 200 {object} Credential details
-    # @response 401 {Error} Unauthorized
-    # @response 404 {Error} Credential not found
     main::get '/credentials/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -209,21 +198,6 @@ sub register_credentials {
     # @description Creates a new credential entry in the system.
     # @tags Credentials
     # @security bearerAuth
-    # @param {object} requestBody
-    # @param {string} requestBody.name - Credential name
-    # @param {string} requestBody.type - Credential type (ACCOUNT, CERTIFICATE, API, PSK, CODE)
-    # @param {string} [requestBody.site] - Associated site
-    # @param {string} [requestBody.username] - Username for account credentials
-    # @param {string} [requestBody.password] - Password or secret
-    # @param {string} [requestBody.url] - Associated URL
-    # @param {string} [requestBody.owner] - Credential owner
-    # @param {string} [requestBody.comment] - Additional notes
-    # @param {string} [requestBody.expiry_date] - Expiration date (ISO format)
-    # @param {string} [requestBody.sensitivity=MEDIUM] - Sensitivity level (LOW, MEDIUM, HIGH, CRITICAL)
-    # @param {object} [requestBody.metadata] - Additional metadata (JSON object)
-    # @response 200 {Success} Credential created successfully
-    # @response 400 {Error} Missing required fields or invalid input
-    # @response 401 {Error} Unauthorized
     main::post '/credentials' => sub {
         my $c = shift;
         my $data = $c->req->json;
@@ -321,23 +295,6 @@ sub register_credentials {
     # Tracks update history with timestamp and user.
     # @tags Credentials
     # @security bearerAuth
-    # @param {string} id - Credential UUID
-    # @param {object} requestBody
-    # @param {string} [requestBody.name] - Credential name
-    # @param {string} [requestBody.site] - Associated site
-    # @param {string} [requestBody.username] - Username for account credentials
-    # @param {string} [requestBody.password] - Password or secret
-    # @param {string} [requestBody.url] - Associated URL
-    # @param {string} [requestBody.owner] - Credential owner
-    # @param {string} [requestBody.comment] - Additional notes
-    # @param {string} [requestBody.expiry_date] - Expiration date (ISO format)
-    # @param {string} [requestBody.sensitivity] - Sensitivity level (LOW, MEDIUM, HIGH, CRITICAL)
-    # @param {boolean} [requestBody.is_active] - Active status
-    # @param {object} [requestBody.metadata] - Additional metadata (JSON object)
-    # @response 200 {Success} Credential updated successfully
-    # @response 400 {Error} Invalid input parameters
-    # @response 401 {Error} Unauthorized
-    # @response 404 {Error} Credential not found
     main::put '/credentials/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -430,11 +387,6 @@ sub register_credentials {
     # If already inactive, performs hard delete.
     # @tags Credentials
     # @security bearerAuth
-    # @param {string} id - Credential UUID
-    # @response 200 {Success} Credential soft deleted
-    # @response 200 {Success} Credential permanently deleted
-    # @response 401 {Error} Unauthorized
-    # @response 404 {Error} Credential not found
     main::del '/credentials/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');

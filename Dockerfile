@@ -27,8 +27,8 @@ RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-rege
     perl-lwp-useragent-determined perl-io-socket-ssl perl-rrd perl-parallel-forkmanager perl-sys-cpu
 
 ## Web Server + PHP
-RUN apk add --no-cache apache2 apache2-utils apache2-webdav \
-    php84 php84-apache2 php84-curl php84-mysqli php84-session
+RUN apk add --no-cache apache2 apache2-utils apache2-webdav php84 \
+    php84-apache2 php84-curl php84-mysqli php84-session php84-simplexml php84-xml
 
 ### Enable mod_cgi
 RUN cat <<EOF >>/etc/apache2/conf.d/cgi.conf

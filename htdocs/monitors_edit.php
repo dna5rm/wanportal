@@ -174,6 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= $id ? 'Edit' : 'New' ?> Monitor</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/assets/base.css">
 </head>
@@ -230,11 +231,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         <div class="mb-3">
                             <label for="target_id" class="form-label">Target *</label>
-                            <select class="form-select" id="target_id" name="target_id" required>
+                            <select class="form-select searchable-select" name="target_id" required>
                                 <option value="">Select Target...</option>
                                 <?php foreach ($targets as $target): ?>
                                     <?php if ($target['is_active']): ?>
                                         <option value="<?= htmlspecialchars($target['id']) ?>"
+                                                data-search="<?= htmlspecialchars(strtolower($target['address'] . ' ' . $target['description'])) ?>"
                                                 <?= $monitor['target_id'] === $target['id'] ? 'selected' : '' ?>>
                                             <?= htmlspecialchars($target['address']) ?>
                                             <?= $target['description'] ? ' (' . htmlspecialchars($target['description']) . ')' : '' ?>

@@ -40,14 +40,6 @@ sub register_login {
     # @description Authenticates a user and returns a JWT token for API access.
     # Failed login attempts are tracked and accounts may be temporarily locked after multiple failures.
     # @tags Authentication
-    # @param {object} requestBody
-    # @param {string} requestBody.username - User's username
-    # @param {string} requestBody.password - User's password
-    # @response 200 {object} Authentication successful
-    # @response 200 {object} token - JWT token for subsequent API requests
-    # @response 401 {Error} Invalid username or password
-    # @response 401 {Error} Account is locked. Please try again later
-    # @response 401 {Error} Account is inactive
     main::post '/login' => sub {
         my $c = shift;
         $c->app->log->debug("Received request for /login");

@@ -122,18 +122,6 @@ sub register_users {
     # Passwords are never included in the response.
     # @tags Users
     # @security bearerAuth
-    # @response 200 {object} List of users
-    # @response 200 {array} users - Array of user objects
-    # @response 200 {string} users[].id - User UUID
-    # @response 200 {string} users[].username - Username
-    # @response 200 {string} users[].full_name - Full name
-    # @response 200 {string} users[].email - Email address
-    # @response 200 {boolean} users[].is_admin - Administrator status
-    # @response 200 {boolean} users[].is_active - Account status
-    # @response 200 {string} users[].last_login - Last login timestamp
-    # @response 200 {string} users[].created_at - Account creation timestamp
-    # @response 200 {string} users[].updated_at - Last update timestamp
-    # @response 403 {Error} Unauthorized - Requires admin privileges
     main::get '/users' => sub {
         my $c = shift;
         
@@ -170,19 +158,6 @@ sub register_users {
     # Password must meet complexity requirements.
     # @tags Users
     # @security bearerAuth
-    # @param {object} requestBody
-    # @param {string} requestBody.username - Username (must be unique)
-    # @param {string} requestBody.password - Password (must meet complexity requirements)
-    # @param {string} [requestBody.full_name] - User's full name
-    # @param {string} [requestBody.email] - User's email address
-    # @param {boolean} [requestBody.is_admin=false] - Administrator privileges
-    # @param {boolean} [requestBody.is_active=true] - Account status
-    # @response 200 {Success} User created successfully
-    # @response 200 {string} id - New user UUID
-    # @response 400 {Error} Missing required fields
-    # @response 400 {Error} Username already exists
-    # @response 400 {Error} Password does not meet complexity requirements
-    # @response 403 {Error} Unauthorized - Requires admin privileges
     main::post '/users' => sub {
         my $c = shift;
         my $data = $c->req->json;
@@ -271,23 +246,6 @@ sub register_users {
     # Includes account status, login history, and security information.
     # @tags Users
     # @security bearerAuth
-    # @param {string} id - User UUID
-    # @response 200 {object} User details
-    # @response 200 {string} id - User UUID
-    # @response 200 {string} username - Username
-    # @response 200 {string} full_name - Full name
-    # @response 200 {string} email - Email address
-    # @response 200 {boolean} is_admin - Administrator status
-    # @response 200 {boolean} is_active - Account status
-    # @response 200 {string} last_login - Last login timestamp
-    # @response 200 {integer} failed_attempts - Failed login attempts
-    # @response 200 {string} locked_until - Account lock expiry (if locked)
-    # @response 200 {string} created_at - Account creation timestamp
-    # @response 200 {string} created_by - Creator's username
-    # @response 200 {string} updated_at - Last update timestamp
-    # @response 200 {string} updated_by - Last updater's username
-    # @response 403 {Error} Unauthorized - Requires admin privileges
-    # @response 404 {Error} User not found
     main::get '/users/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -333,18 +291,6 @@ sub register_users {
     # Cannot modify admin user except by themselves.
     # @tags Users
     # @security bearerAuth
-    # @param {string} id - User UUID
-    # @param {object} requestBody
-    # @param {string} [requestBody.password] - New password (must meet complexity requirements)
-    # @param {string} [requestBody.full_name] - User's full name
-    # @param {string} [requestBody.email] - User's email address
-    # @param {boolean} [requestBody.is_admin] - Administrator privileges
-    # @param {boolean} [requestBody.is_active] - Account status
-    # @response 200 {Success} User updated successfully
-    # @response 400 {Error} Password does not meet complexity requirements
-    # @response 403 {Error} Unauthorized - Requires admin privileges
-    # @response 403 {Error} Cannot modify admin user
-    # @response 404 {Error} User not found
     main::put '/users/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');
@@ -435,11 +381,6 @@ sub register_users {
     # Cannot delete the admin user.
     # @tags Users
     # @security bearerAuth
-    # @param {string} id - User UUID
-    # @response 200 {Success} User deleted successfully
-    # @response 403 {Error} Unauthorized - Requires admin privileges
-    # @response 403 {Error} Cannot delete admin user
-    # @response 404 {Error} User not found
     main::del '/users/:id' => sub {
         my $c = shift;
         my $id = $c->param('id');

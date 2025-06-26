@@ -62,3 +62,135 @@ h1, h2, h3, h4, h5, h6 {
     transform: translateY(-50%);
     cursor: pointer;
 }
+
+.bg-orange {
+    background-color: #fd7e14;
+}
+
+.table-container {
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    margin: 20px 0;
+}
+
+/* Match Select2 height to Bootstrap form-select */
+.select2-container--bootstrap-5 .select2-selection {
+    min-height: 38px !important;
+}
+
+/* DataTable wrapper styles */
+.dataTables_wrapper {
+    width: 100%;
+}
+
+/* Top row padding */
+.dataTables_wrapper > .row:first-child {
+    padding: 0 0 15px 0;  /* Added bottom padding */
+}
+
+/* Bottom row padding */
+.dataTables_wrapper > .row:last-child {
+    padding: 15px 0 0 0;  /* Added top padding */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+/* Fix for "Show entries" dropdown */
+.dataTables_length {
+    white-space: nowrap;
+    padding-left: 15px;
+}
+
+.dataTables_length select {
+    width: auto;
+    display: inline-block;
+    margin: 0 5px;
+}
+
+/* Search box styling */
+.dataTables_filter {
+    text-align: right;
+    padding-right: 15px;
+}
+
+.dataTables_filter input {
+    width: 200px;
+    margin-left: 10px;
+}
+
+/* Bottom info and pagination styling */
+.dataTables_info {
+    padding-left: 15px;
+    float: left;
+    width: auto;
+    white-space: nowrap;
+}
+
+.dataTables_paginate {
+    padding-right: 15px;
+    float: right;
+    width: auto;
+}
+
+/* Table styles */
+#tablePager {
+    width: 100% !important;
+    margin-bottom: 0;
+}
+
+/* Clear floats */
+.dataTables_wrapper > .row {
+    margin: 0;
+    clear: both;
+}
+
+/* Rest of your table styles */
+#tablePager thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+    padding: 12px;
+}
+
+#tablePager tbody td {
+    padding: 10px;
+    vertical-align: middle;
+}
+
+#tablePager.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(0,0,0,.02);
+}
+
+#tablePager.table-hover tbody tr:hover {
+    background-color: rgba(0,0,0,.075);
+}
+
+pre:not([class]) {
+    background-color: #000 !important;
+    color: #fff !important;
+    border-radius: 8px !important;
+    padding: 1.5rem !important;
+    margin: 1.5rem 0 !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+pre:not([class]) code:not([class]) {
+    background-color: #000 !important;
+    color: #fff !important;
+    padding: 0 !important;
+    border-radius: 6px !important;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+    font-size: 0.95rem !important;
+    line-height: 1.5 !important;
+}
+
+pre:not([class]):hover {
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-1px);
+    transition: all 0.2s ease;
+}

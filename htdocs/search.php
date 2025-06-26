@@ -114,8 +114,12 @@ try {
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Search Results</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <!-- DataTables -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
+    <!-- Custom CSS -->
     <link rel="stylesheet" href="/assets/base.css">
 </head>
 <body>
@@ -131,17 +135,29 @@ try {
         </div>
         <div class="col text-end">
             <div class="d-flex justify-content-end align-items-center gap-2">
-                <!-- Navigation Buttons -->
-                <div class="btn-group btn-group-sm me-3">
-                    <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
-                        <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm">
-                            <i class="bi bi-arrow-left"></i> Back
-                        </a>
-                    <?php endif; ?>
-                    <a href="/index.php" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-house-door"></i> Home
+            <!-- Header Button Group -->
+            <div class="btn-group" role="group">
+                <!-- BACK -->
+                <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
+                    <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Back
                     </a>
+                <?php endif; ?>  
+                <!-- HOME -->                
+                <a href="/index.php" class="btn btn-secondary btn-sm">
+                    <i class="bi bi-house-door"></i> Home
+                </a>
+                <!-- Show Inactive Switch -->
+                <div class="btn btn-secondary btn-sm d-flex align-items-center" style="gap: 5px;">
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="showInactive" 
+                            <?= $show_inactive ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="showInactive">
+                            Inactive
+                        </label>
+                    </div>
                 </div>
+            </div>
 
                 <!-- Search Form -->
                 <form action="/search.php" method="GET" class="d-flex align-items-center">
@@ -199,43 +215,10 @@ try {
 
         <!-- Results Column -->
         <div class="col-md-9">
-            <!-- Filters Card -->
-            <div class="card mb-3">
-                <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-4">
-                            <input type="text" id="searchFilter" class="form-control" placeholder="Filter results...">
-                        </div>
-                        <div class="col-md-3">
-                            <select id="protocolFilter" class="form-select">
-                                <option value="">All Protocols</option>
-                                <option value="ICMP">ICMP</option>
-                                <option value="ICMPV6">ICMPv6</option>
-                                <option value="TCP">TCP</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="showInactive"
-                                       <?= $show_inactive ? 'checked' : '' ?>>
-                                <label class="form-check-label" for="showInactive">
-                                    Show Inactive
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- Results Table -->
             <div class="table-responsive">
-                <table class="table table-light table-bordered table-striped table-hover">
-                    <thead>
-                        <tr>
-                            <th colspan="4" class="text-center"></th>
-                            <th colspan="2" class="table-primary text-center">Current</th>
-                            <th colspan="1" class="text-center"></th>
-                        </tr>                       
+                <table id="tablePager" class="table table-light table-bordered table-striped table-hover">
+                    <thead>                     
                         <tr>
                             <th>Monitor</th>
                             <th>Agent</th>
