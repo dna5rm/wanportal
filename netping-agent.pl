@@ -8,7 +8,7 @@ use LWP::UserAgent;
 use JSON qw(decode_json encode_json);
 use IO::Socket::SSL qw(SSL_VERIFY_NONE);
 use POSIX qw(strftime WNOHANG);
-use List::Util qw(min);
+use List::Util qw(min max sum);
 
 our $VERSION = '0.1.0';
 
@@ -118,8 +118,9 @@ foreach my $monitor (@hosts) {
         die "Fork failed: $!";
     } elsif ($pid == 0) { # Child
         close $reader;
-        my ($loss, $rtt) = ping($monitor);
-        printf $writer "%s %.1f %s\n", $monitor->{id}, $loss, $rtt;
+        my ($loss, $median, $min, $max, $stddev) = ping($monitor);
+        printf $writer "%s %.1f %.1f %.1f %.1f %.1f\n", 
+            $monitor->{id}, $loss, $median, $min, $max, $stddev;
         close $writer;
         exit 0;
     } else { # Parent
@@ -140,20 +141,36 @@ foreach my $result (@results) {
     
     if ($line) {
         chomp $line;
-        my ($id, $loss, $rtt) = split(/\s+/, $line);
+        my ($id, $loss, $median, $min, $max, $stddev) = split(/\s+/, $line);
         push @final_results, {
             id => $id,
             loss => $loss + 0,
-            median => $rtt eq 'U' ? 0 : ($rtt + 0),
-            min => $rtt eq 'U' ? 0 : ($rtt + 0),
-            max => $rtt eq 'U' ? 0 : ($rtt + 0),
-            stddev => 0
+            median => $median + 0,
+            min => $min + 0,
+            max => $max + 0,
+            stddev => $stddev + 0
         };
     }
 }
 
 # Submit results if we have any
 if (@final_results) {
+    debug_log("Final Results:");
+    debug_log(sprintf("  %-36s %8s %8s %8s %8s %8s", 
+        "Monitor ID", "Loss%", "Min", "Med", "Max", "StdDev"));
+    debug_log("  " . "-" x 82);
+    
+    foreach my $result (@final_results) {
+        debug_log(sprintf("  %-36s %7.1f%% %8.1f %8.1f %8.1f %8.1f",
+            $result->{id},
+            $result->{loss},
+            $result->{min},
+            $result->{median},
+            $result->{max},
+            $result->{stddev}
+        ));
+    }
+
     debug_log("Preparing to submit " . scalar(@final_results) . " results");
     
     # Split results into chunks of 100
@@ -179,7 +196,6 @@ if (@final_results) {
                 my $submit_response = $ua->post(
                     "$SERVER/agent/$AGENT_ID/monitors",
                     'Content-Type' => 'application/json',
-                    timeout => 30,  # Increased timeout
                     Content => encode_json({
                         password => $PASSWORD,
                         results => \@chunk
@@ -208,9 +224,6 @@ if (@final_results) {
                 }
             }
         }
-
-        # Small delay between chunks
-        sleep(1) if @final_results;
     }
 
     if ($success) {
@@ -233,7 +246,6 @@ sub ping {
     my $tos = $DSCP_MAP->{$dscp} // 0x00;
     my $count = min(5, $monitor->{pollcount} || 5);
     
-    # Add IPv6 support by using the appropriate ping type
     my $p;
     if ($monitor->{address} =~ /:/) {
         $p = Net::Ping->new('icmpv6', 1, 56, undef, $tos);
@@ -246,7 +258,7 @@ sub ping {
     }
     $p->hires(1);
     
-    my ($success, $total_rtt) = (0, 0);
+    my @rtts;
     my $consecutive_fails = 0;
     
     for my $i (1..$count) {
@@ -255,8 +267,7 @@ sub ping {
         my @result = $p->ping($monitor->{address});
         if ($result[0]) {
             my $rtt = sprintf("%.3f", $result[1]) * 1000;
-            $success++;
-            $total_rtt += $rtt;
+            push @rtts, $rtt;
             $consecutive_fails = 0;
         } else {
             $consecutive_fails++;
@@ -266,8 +277,29 @@ sub ping {
     
     $p->close;
     
+    my $success = scalar @rtts;
     my $loss = $success ? (($count - $success) / $count * 100) : 100;
-    my $avg_rtt = $success ? sprintf("%.0f", $total_rtt / $success) : "U";
     
-    return ($loss, $avg_rtt);
+    if ($success) {
+        @rtts = sort { $a <=> $b } @rtts;
+        my $min = $rtts[0];
+        my $max = $rtts[-1];
+        
+        # Calculate median
+        my $median;
+        if ($success % 2 == 0) {
+            $median = ($rtts[$success/2 - 1] + $rtts[$success/2]) / 2;
+        } else {
+            $median = $rtts[int($success/2)];
+        }
+        
+        # Calculate standard deviation
+        my $mean = sum(@rtts) / $success;
+        my $variance = sum(map { ($_ - $mean) ** 2 } @rtts) / $success;
+        my $stddev = sqrt($variance);
+        
+        return ($loss, $median, $min, $max, $stddev);
+    }
+    
+    return (100, 0, 0, 0, 0);
 }
