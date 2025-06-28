@@ -71,13 +71,12 @@ EOF
 RUN install -d -o root -g root -m 775 /etc/cron.d
 RUN install -d -o apache -g apache -m 775 /var/rrd
 RUN install -d -o apache -g apache -m 775 /var/run/lock/dav
-RUN chown -R apache:apache *
-RUN chmod 755 cgi-bin/api *.pl *.sh
 RUN find . -type f -exec chmod 644 {} \;
 RUN find . -type d -exec chmod 755 {} \;
-RUN rm -rf htdocs/index.html /var/www/localhost /var/cache/apk/*
+RUN chown -R apache:apache *
+RUN chmod 755 cgi-bin/api *.pl *.sh
+RUN rm -rf /var/www/localhost /var/cache/apk/*
 RUN ln -sf /srv /var/www/localhost
-RUN touch /var/log/cron.log
 
 # Exposed ports
 EXPOSE 80
