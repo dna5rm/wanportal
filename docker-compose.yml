@@ -43,13 +43,14 @@ services:
       - mysql:/var/lib/mysql:rw
 
 networks:
-  default:
+  netops:
     driver: bridge
-    name: netops
     ipam:
       driver: default
       config:
         - subnet: 100.172.42.0/24
+        - subnet: fc00:64AC:2A00::/64
+    enable_ipv6: true
 
 volumes:
   rrd:
