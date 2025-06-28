@@ -8,9 +8,7 @@ services:
     container_name: wanportal
     volumes:
       - rrd:/var/rrd:rw
-      - .:/srv:rw
-      - ../wanportal_ipcontrol:/srv/htdocs/ipc:ro
-      - ../wanportal_transfer:/srv/htdocs/transfer:ro
+      # .:/srv:rw # DEV
     ports:
       - "${HTTP_LISTEN:-0.0.0.0}:${HTTP_PORT:-8080}:80"
     restart: unless-stopped
