@@ -43,7 +43,6 @@ services:
 networks:
   netops:
     driver: bridge
-    enable_ipv6: true
     ipam:
       driver: default
       config:
