@@ -22,9 +22,10 @@ RUN apk add --no-cache build-base boost-dev cmake curl-dev \
     fuse fuse-dev git libc-dev range-v3-dev spdlog-dev
 
 ## Perl Lang
-RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-regexp-common \
+RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-regexp-common perl-email-mime \
     perl-dbd-mysql perl-dbi perl-crypt-jwt perl-mojolicious perl-try-tiny perl-timedate perl-yaml-xs \
-    perl-lwp-useragent-determined perl-io-socket-ssl perl-rrd perl-parallel-forkmanager perl-sys-cpu
+    perl-lwp-protocol-https perl-lwp-useragent-determined perl-io-socket-ssl perl-rrd \
+    perl-parallel-forkmanager perl-sys-cpu perl-net-snmp
 
 ## Web Server + PHP
 RUN apk add --no-cache apache2 apache2-utils apache2-webdav php84 \
@@ -54,7 +55,8 @@ EOF
 
 ## Configure Contabs
 RUN cat <<EOF >>/etc/crontabs/root
-*/1 * * * * /srv/run-agent.sh > /proc/1/fd/1 2>/proc/1/fd/2
+*/1 * * * * /srv/run-agent.sh  > /proc/1/fd/1 2>/proc/1/fd/2
+*/5 * * * * /srv/run-notify.sh > /proc/1/fd/1 2>/proc/1/fd/2
 EOF
 
 # # Build: CryFS
@@ -75,7 +77,7 @@ RUN find . -type f -exec chmod 644 {} \;
 RUN find . -type d -exec chmod 755 {} \;
 RUN chown -R apache:apache *
 RUN chmod 755 cgi-bin/api *.pl *.sh
-RUN rm -rf /var/www/localhost /var/cache/apk/*
+RUN rm -rf htdocs/index.html /var/www/localhost /var/cache/apk/*
 RUN ln -sf /srv /var/www/localhost
 
 # Exposed ports
