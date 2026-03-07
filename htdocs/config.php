@@ -47,7 +47,7 @@ $menuItems = [
             ],
             'Credentials' => [
                 'url' => '/credentials.php',
-                'icon' => 'bi bi-key',
+                'icon' => 'bi bi-safe',
                 'auth' => true
             ],
             'Users' => [

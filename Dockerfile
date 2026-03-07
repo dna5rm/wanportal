@@ -25,7 +25,7 @@ RUN apk add --no-cache build-base boost-dev cmake curl-dev \
 RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-regexp-common perl-email-mime \
     perl-dbd-mysql perl-dbi perl-crypt-jwt perl-mojolicious perl-try-tiny perl-timedate perl-yaml-xs \
     perl-lwp-protocol-https perl-lwp-useragent-determined perl-io-socket-ssl perl-rrd \
-    perl-parallel-forkmanager perl-sys-cpu perl-net-snmp
+    perl-parallel-forkmanager perl-sys-cpu perl-net-snmp perl-net-ldap
 
 ## Web Server + PHP
 RUN apk add --no-cache apache2 apache2-utils apache2-webdav php84 \
@@ -35,6 +35,22 @@ RUN apk add --no-cache apache2 apache2-utils apache2-webdav php84 \
 RUN cat <<EOF >>/etc/apache2/conf.d/cgi.conf
 LoadModule cgi_module modules/mod_cgi.so
 SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=\$1
+
+# Pass environment variables to CGI scripts
+PassEnv MYSQL_HOST
+PassEnv MYSQL_PORT
+PassEnv MYSQL_USER
+PassEnv MYSQL_PASSWORD
+PassEnv MYSQL_DB
+PassEnv JWT_SECRET
+PassEnv APP_SECRET
+PassEnv AUTH_LDAP_ENABLED
+PassEnv AUTH_LDAP_SERVER_URI
+PassEnv AUTH_LDAP_BIND_DN
+PassEnv AUTH_LDAP_BIND_PASSWORD
+PassEnv AUTH_LDAP_USER_SEARCH_BASEDN
+PassEnv AUTH_LDAP_USER_SEARCH_ATTR
+PassEnv LDAP_IGNORE_CERT_ERRORS
 EOF
 
 ### Directory: /api-docs

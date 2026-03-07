@@ -58,7 +58,7 @@ $activeAgents = array_filter($agentsResponse['agents'] ?? [], function($agent) {
     return $agent['is_active'] == 1;
 });
 
-// Fetch down hosts
+// Fetch down monitors
 $monitorsResponse = callAPI('/monitors?current_loss=100&is_active=1');
 $downHosts = $monitorsResponse['monitors'] ?? [];
 
@@ -159,10 +159,10 @@ if (DEBUG_MODE) {
                 </div>
             </div>
 
-            <!-- Down Hosts -->
+            <!-- Down Monitors -->
             <div class="text-center mb-4">
                 <div class="d-flex justify-content-center align-items-center gap-3">
-                    <h3 class="mb-0">Down Hosts</h3>
+                    <h3 class="mb-0">Down Monitors</h3>
                     <a href="/cgi-bin/api/monitors?current_loss=100&is_active=1" class="btn btn-sm btn-outline-secondary" target="_blank" title="View raw API data" data-bs-toggle="tooltip">
                         <i class="bi bi-code-slash"></i> Raw Data
                     </a>
@@ -182,7 +182,7 @@ if (DEBUG_MODE) {
                     <tbody>
                     <?php if (empty($downHosts)): ?>
                         <tr>
-                            <td colspan="4" class="text-center">No down hosts</td>
+                            <td colspan="4" class="text-center">No down monitors</td>
                         </tr>
                     <?php else:
                         foreach ($downHosts as $monitor):

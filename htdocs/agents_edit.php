@@ -1,7 +1,16 @@
 <?php
 // agents_edit.php
 session_start();
+require_once 'check_session.php';
 require_once 'config.php';
+
+// Print session information
+// echo "<pre>";
+// echo "Session Information:\n";
+// print_r($_SESSION);
+// echo "\nCurrent time: " . date('Y-m-d H:i:s') . "\n";
+// echo "Session ID: " . session_id() . "\n";
+// echo "</pre>";
 
 // Check authentication
 if (!isset($_SESSION['user'])) {

@@ -1,6 +1,7 @@
 <?php
 // credential_view.php
 session_start();
+require_once 'check_session.php';
 require_once 'config.php';
 
 // Check authentication

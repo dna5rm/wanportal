@@ -1,3 +1,4 @@
+
 <?php
 session_start();
 require_once 'config.php';
@@ -16,15 +17,15 @@ if ($status === 200) {
         // Filter monitors for latency issues
         $latencyIssues = array_filter($data['monitors'], function($monitor) {
             // Only include active monitors
-            if ($monitor['is_active'] != 1 || 
-                $monitor['agent_is_active'] != 1 || 
+            if ($monitor['is_active'] != 1 ||
+                $monitor['agent_is_active'] != 1 ||
                 $monitor['target_is_active'] != 1) {
                 return false;
             }
-            
-            // Calculate threshold (avg_median + (2 * avg_stddev))
-            $threshold = $monitor['avg_median'] + (2 * $monitor['avg_stddev']);
-            
+
+            // Calculate threshold (avg_max + (5 * avg_stddev))
+            $threshold = $monitor['avg_max'] + (5 * $monitor['avg_stddev']);
+
             // Return true if current_median exceeds threshold
             return $monitor['current_median'] > $threshold;
         });
@@ -32,8 +33,8 @@ if ($status === 200) {
 }
 
 // Get server name safely
-$server_name = isset($_SERVER['SERVER_NAME']) ? 
-    strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0]) : 
+$server_name = isset($_SERVER['SERVER_NAME']) ?
+    strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0]) :
     'NETPING';
 ?>
 <!DOCTYPE html>
@@ -97,11 +98,11 @@ $server_name = isset($_SERVER['SERVER_NAME']) ?
             <?php else:
                 foreach ($latencyIssues as $monitor):
                     // Calculate threshold
-                    $threshold = $monitor['avg_median'] + (2 * $monitor['avg_stddev']);
-                    
+                    $threshold = $monitor['avg_max'] + (5 * $monitor['avg_stddev']);
+
                     // Calculate how much over threshold
                     $percentOver = (($monitor['current_median'] - $threshold) / $threshold) * 100;
-                    
+
                     // Determine severity class based on percentage over threshold
                     if ($percentOver >= 100) {
                         $rowClass = 'table-danger';      // More than double the threshold

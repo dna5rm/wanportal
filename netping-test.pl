@@ -1,4 +1,5 @@
 #!/usr/bin/env perl
+
 use Net::Ping;
 print "Net::Ping Version: $Net::Ping::VERSION\n";
 

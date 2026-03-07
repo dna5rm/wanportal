@@ -169,12 +169,14 @@ try {
 <div class="container-fluid">
     <!-- Header Row -->
     <div class="row mb-3">
+        <!--
         <div class="col">
             <h3>
                 Monitor:
                 <?= htmlspecialchars(!empty($monitor['description']) ? $monitor['description'] : $monitor['id']) ?>
             </h3>
         </div>
+        -->
         <div class="col text-end">
             <div class="btn-group" role="group">
                 <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
@@ -363,6 +365,11 @@ try {
             <div class="mb-3">
                 <div class="d-flex flex-column" style="height: 60vh;">                    
                     <div class="flex-grow-1 d-flex flex-column">
+                        <div class="card-body mx-auto">
+                            <h4 class="card-title">
+                                <?= htmlspecialchars(!empty($monitor['description']) ? $monitor['description'] : $monitor['id']) ?>
+                            </h4>
+                        </div>
                         <div id="chartContainer" class="flex-grow-1">
                             <canvas id="networkChart"></canvas>
                         </div>

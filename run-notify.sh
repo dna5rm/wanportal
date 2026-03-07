@@ -12,21 +12,7 @@ else
     exit 0
 fi
 
-# Function to check if all required email variables are set
-check_email_vars() {
-    [ -n "${SITE_URL:-}" ] && [ -n "${SMTP_SERVER:-}" ] && [ -n "${FROM_EMAIL:-}" ] && [ -n "${TO_EMAIL:-}" ]
-}
-
-# Function to check if all required NTFY variables are set
-check_ntfy_vars() {
-    [ -n "${NTFY_SERVER:-}" ] && [ -n "${NTFY_TOPIC:-}" ]
-}
-
-# Check which notification method to use
-if check_ntfy_vars; then
-    # Running NTFY notification script
-    /srv/notify-ntfy.pl
-elif check_email_vars; then
-    # Running email notification script
+# RUN: notify-email.pl
+if [ -n "${SMTP_SERVER:-}" ] && [ -n "${FROM_EMAIL:-}" ] && [ -n "${TO_EMAIL:-}" ]; then
     /srv/notify-email.pl
 fi
