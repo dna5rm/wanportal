@@ -1,5 +1,5 @@
 # Dockerfile
-FROM alpine:latest
+FROM alpine:3.21
 
 ENV CRYFS_NO_UPDATE_CHECK=TRUE
 ENV CRYFS_FRONTEND=noninteractive
@@ -15,7 +15,7 @@ COPY . .
 RUN apk -q update && apk -q upgrade
 
 ## Core Packages
-RUN apk add --no-cache cronie font-freefont mariadb-client nano rrdtool rrdtool-dev curl jq tzdata
+RUN apk add --no-cache bash cronie font-freefont mariadb-client nano py3-pip rrdtool rrdtool-dev curl jq tzdata
 
 ## Build Dependencies
 RUN apk add --no-cache build-base boost-dev cmake curl-dev \
@@ -24,33 +24,34 @@ RUN apk add --no-cache build-base boost-dev cmake curl-dev \
 ## Perl Lang
 RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-regexp-common perl-email-mime \
     perl-dbd-mysql perl-dbi perl-crypt-jwt perl-mojolicious perl-try-tiny perl-timedate perl-yaml-xs \
-    perl-lwp-protocol-https perl-lwp-useragent-determined perl-io-socket-ssl perl-rrd \
-    perl-parallel-forkmanager perl-sys-cpu perl-net-snmp perl-net-ldap
+    perl-lwp-useragent-determined perl-io-socket-ssl perl-rrd perl-parallel-forkmanager perl-sys-cpu
+
+## Python / Ansible
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /opt/venv/bin/pip install --no-cache-dir ansible ansible-vault dnspython fqdn && \
+    /opt/venv/bin/ansible-galaxy collection install ansible.netcommon && \
+    /opt/venv/bin/ansible-galaxy collection install community.general
+
+ENV PATH="/opt/venv/bin:$PATH"
 
 ## Web Server + PHP
 RUN apk add --no-cache apache2 apache2-utils apache2-webdav php84 \
     php84-apache2 php84-curl php84-mysqli php84-session php84-simplexml php84-xml
 
+# AllowOverride within DocumentRoot
+RUN sed -i '/<Directory "\/var\/www\/localhost\/htdocs">/,/<\/Directory>/s/AllowOverride None/AllowOverride All/' /etc/apache2/httpd.conf
+
 ### Enable mod_cgi
 RUN cat <<EOF >>/etc/apache2/conf.d/cgi.conf
 LoadModule cgi_module modules/mod_cgi.so
 SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=\$1
+EOF
 
-# Pass environment variables to CGI scripts
-PassEnv MYSQL_HOST
-PassEnv MYSQL_PORT
-PassEnv MYSQL_USER
-PassEnv MYSQL_PASSWORD
-PassEnv MYSQL_DB
-PassEnv JWT_SECRET
-PassEnv APP_SECRET
-PassEnv AUTH_LDAP_ENABLED
-PassEnv AUTH_LDAP_SERVER_URI
-PassEnv AUTH_LDAP_BIND_DN
-PassEnv AUTH_LDAP_BIND_PASSWORD
-PassEnv AUTH_LDAP_USER_SEARCH_BASEDN
-PassEnv AUTH_LDAP_USER_SEARCH_ATTR
-PassEnv LDAP_IGNORE_CERT_ERRORS
+### Enable mod_rewrite
+RUN cat <<EOF >>/etc/apache2/conf.d/rewrite.conf
+LoadModule rewrite_module modules/mod_rewrite.so
+LoadModule headers_module modules/mod_headers.so
 EOF
 
 ### Directory: /api-docs
@@ -73,6 +74,8 @@ EOF
 RUN cat <<EOF >>/etc/crontabs/root
 */1 * * * * /srv/run-agent.sh  > /proc/1/fd/1 2>/proc/1/fd/2
 */5 * * * * /srv/run-notify.sh > /proc/1/fd/1 2>/proc/1/fd/2
+# php session cleanup
+* * */1 * * find /tmp -name "sess_*" -type f -mmin +180 -delete
 EOF
 
 # # Build: CryFS
@@ -91,10 +94,11 @@ RUN install -d -o apache -g apache -m 775 /var/rrd
 RUN install -d -o apache -g apache -m 775 /var/run/lock/dav
 RUN find . -type f -exec chmod 644 {} \;
 RUN find . -type d -exec chmod 755 {} \;
-RUN chown -R apache:apache *
-RUN chmod 755 cgi-bin/api *.pl *.sh
 RUN rm -rf htdocs/index.html /var/www/localhost /var/cache/apk/*
 RUN ln -sf /srv /var/www/localhost
+RUN touch /var/log/cron.log
+RUN chown -R apache:apache *
+RUN chmod 755 cgi-bin/api *.pl *.sh
 
 # Exposed ports
 EXPOSE 80

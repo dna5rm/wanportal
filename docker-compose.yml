@@ -6,18 +6,21 @@ services:
       dockerfile: Dockerfile
     image: wanportal
     container_name: wanportal
+    depends_on:
+      wandb:
+        condition: service_healthy
     volumes:
       - rrd:/var/rrd:rw
       # .:/srv:rw # DEV
     ports:
       - "${HTTP_LISTEN:-0.0.0.0}:${HTTP_PORT:-8080}:80"
     restart: unless-stopped
-    # healthcheck:
-    #   test: CMD curl -f http://localhost/cgi-bin/api/agent || exit 1
-    #   interval: 1m
-    #   timeout: 10s
-    #   retries: 3
-    #   start_period: 30s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/cgi-bin/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     environment:
       # LDAP (optional - remove or set to false to use local auth only)
       - AUTH_LDAP_ENABLED=${AUTH_LDAP_ENABLED:-false}
@@ -40,6 +43,12 @@ services:
     image: mariadb:latest
     command: --default-authentication-plugin=mysql_native_password
     container_name: wandb
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD:-netops}
       - MYSQL_DATABASE=${MYSQL_DB:-netops}
@@ -56,6 +65,7 @@ networks:
   netops:
     enable_ipv6: true
     driver: bridge
+    name: netops
     ipam:
       driver: default
       config:

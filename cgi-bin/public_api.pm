@@ -16,6 +16,14 @@ my $datadir = '/var/rrd';  # RRD storage directory
 sub register_public_endpoints {
     my ($db_config) = @_;
 
+    # @summary Health check
+    # @description Public endpoint to verify the API is running.
+    # @tags System
+    main::get '/health' => sub {
+        my $c = shift;
+        return $c->render(json => { status => 'ok' });
+    };
+
     # @summary List all agents
     # @description Returns a list of all monitoring agents in the system without sensitive information.
     # Passwords are never included in the response.
@@ -32,6 +40,7 @@ sub register_public_endpoints {
         });
         $sth->execute();
         my $agents = $sth->fetchall_arrayref({});
+        $sth->finish;
         $dbh->disconnect;
         
         return $c->render(json => {
@@ -55,6 +64,7 @@ sub register_public_endpoints {
         });
         $sth->execute();
         my $targets = $sth->fetchall_arrayref({});
+        $sth->finish;
         $dbh->disconnect;
         
         return $c->render(json => {
@@ -121,6 +131,7 @@ sub register_public_endpoints {
         my $sth = $dbh->prepare($sql);
         $sth->execute(@params);
         my $monitors = $sth->fetchall_arrayref({});
+        $sth->finish;
         $dbh->disconnect;
 
         return $c->render(json => {
