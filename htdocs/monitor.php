@@ -106,6 +106,41 @@ try {
             height: 400px;
             width: 100%;
         }
+        /* Time-range card: frame the start/end inputs and the preset
+           buttons in a single card so the form sits cleanly under the
+           chart instead of floating bare against the page background. */
+        .time-range-card {
+            max-width: 640px;
+            margin: 0 auto;
+        }
+        .time-range-card .card-body {
+            padding: 0.75rem 1rem;
+        }
+        /* Quick-preset button row above the chart. Each button is a
+           "Last Nh/Nd" shortcut that re-fetches the data via the
+           existing API endpoint with no page reload. */
+        .time-presets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center;
+            /* Visual breathing room: a real gap above (between the
+               chart and the buttons) and a slightly larger one
+               below (between the buttons and the time-range card).
+               1.5rem above, 1.25rem below. */
+            margin-top: 1.5rem;
+            margin-bottom: 1.25rem;
+        }
+        .time-presets .btn {
+            font-size: 0.85rem;
+        }
+        /* Extra space below the time-range card so the form doesn't
+           sit hard against whatever follows (the closing column /
+           row of the page). */
+        .time-range-form {
+            margin-top: 0.5rem;
+            margin-bottom: 2.5rem;
+        }
     </style>
 </head>
 <body>
@@ -308,17 +343,12 @@ try {
 
             <!-- Network Performance Graph -->
             <div class="mb-3">
-                <div class="d-flex flex-column" style="height: 60vh;">                    
+                <div class="d-flex flex-column" style="height: 60vh;">
                     <div class="flex-grow-1 d-flex flex-column">
-                        <div class="card-body mx-auto">
-                            <h4 class="card-title">
-                                <?= htmlspecialchars(!empty($monitor['description']) ? $monitor['description'] : $monitor['id']) ?>
-                            </h4>
-                        </div>
                         <div id="chartContainer" class="flex-grow-1">
                             <canvas id="networkChart"></canvas>
                         </div>
-                        
+
                         <div id="legacyGraphContainer" class="flex-grow-1 text-center" style="display: none;">
                             <br />
                             <img id="legacyRttGraph" src="" alt="Legacy RTT Graph" class="img-fluid" width="800">
@@ -326,14 +356,37 @@ try {
                             <img id="legacyLossGraph" src="" alt="Legacy Loss Graph" class="img-fluid" width="800">
                         </div>
                     </div>
-                    
-                    <form action="monitor_graph.php" method="GET" id="dateTimeForm" class="mt-3">
-                        <div class="input-group">
-                            <span class="input-group-text">UTC</span>
-                            <input type="datetime-local" class="form-control" name="start" value="<?= htmlspecialchars($start) ?>">
-                            <input type="datetime-local" class="form-control" name="end" value="<?= htmlspecialchars($end) ?>">
-                            <input type="hidden" name="id" value="<?= htmlspecialchars($id) ?>">
-                            <button type="submit" class="btn btn-primary">Submit</button>
+
+                    <!-- Quick time-range presets. Each button sets
+                         the start/end inputs to a relative range
+                         and re-fetches the chart data via the API
+                         with no page reload. The chart title (which
+                         lives inside the Chart.js options) and the
+                         legacy-graph toggle persistence are
+                         preserved across range changes. -->
+                    <div class="time-presets" id="timePresets">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-range-hours="1">Last 1h</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-range-hours="6">Last 6h</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-range-hours="24">Last 24h</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-range-hours="72">Last 3d</button>
+                    </div>
+
+                    <form action="monitor_graph.php" method="GET" id="dateTimeForm" class="time-range-form">
+                        <div class="card time-range-card shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="bi bi-calendar3 me-2"></i>
+                                    <span class="fw-semibold">Time range (UTC)</span>
+                                </div>
+                                <div class="input-group">
+                                    <span class="input-group-text">From</span>
+                                    <input type="datetime-local" class="form-control" name="start" id="startTime" value="<?= htmlspecialchars($start) ?>">
+                                    <span class="input-group-text">To</span>
+                                    <input type="datetime-local" class="form-control" name="end" id="endTime" value="<?= htmlspecialchars($end) ?>">
+                                    <input type="hidden" name="id" value="<?= htmlspecialchars($id) ?>">
+                                    <button type="submit" class="btn btn-primary">Apply</button>
+                                </div>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -348,6 +401,27 @@ try {
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script>
+// Expose the monitor's display name to JS so the Chart.js title
+// can show it (the title is rendered inside the chart canvas
+// itself, not in the surrounding HTML). Falls back to the monitor
+// id if description is empty.
+const MONITOR_TITLE = <?= json_encode(
+    !empty($monitor['description']) ? $monitor['description'] : $monitor['id'],
+    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+) ?>;
+</script>
+<script>
+// Format a Date as the value expected by an <input type="datetime-local">:
+// "YYYY-MM-DDTHH:MM" in *local* time. The input ignores the trailing
+// seconds and treats its value as local time; we keep things consistent
+// by sending the user's local clock to the input, then letting the form
+// submit (or the API URL build) re-encode the range. The chart adapter
+// below parses the same string back into a Date in the same local zone.
+function toLocalDatetimeInputValue(d) {
+    const pad = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+         + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
 let chart;
 
 function debugLog(message) {
@@ -369,22 +443,51 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const dataUrl = `/cgi-bin/api/rrd?id=${monitorId}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
 
-    // Initialize with the new chart
-    fetchDataAndCreateChart(dataUrl);
+    // Legacy-graph preference persistence. We mirror the dark-mode
+    // pattern from footer.php: read the user's choice from
+    // localStorage, apply it on init, and write it back on change.
+    // The toggle's default is "modern graph" (the persisted value
+    // is missing or unrecognized). Persisting the modern-graph case
+    // too is intentional — if the user explicitly switches back, we
+    // remember that across navigations.
+    const LEGACY_GRAPH_KEY = 'wanportal-legacy-graph';
+    let useLegacyGraph = false;
+    try {
+        useLegacyGraph = localStorage.getItem(LEGACY_GRAPH_KEY) === '1';
+    } catch (e) { /* localStorage may be disabled; default to modern */ }
+
+    const graphToggle = document.getElementById('graphToggle');
+    const chartContainer = document.getElementById('chartContainer');
+    const legacyContainer = document.getElementById('legacyGraphContainer');
+
+    // Apply the persisted preference on load: check the box and
+    // show the matching container, then trigger the initial render
+    // for whichever mode the user last chose.
+    graphToggle.checked = useLegacyGraph;
+    if (useLegacyGraph) {
+        chartContainer.style.display = 'none';
+        legacyContainer.style.display = 'block';
+        updateLegacyGraphs(monitorId, start, end);
+    } else {
+        chartContainer.style.display = 'block';
+        legacyContainer.style.display = 'none';
+        fetchDataAndCreateChart(dataUrl);
+    }
 
     // Handle toggle switch
-    const graphToggle = document.getElementById('graphToggle');
     graphToggle.addEventListener('change', function() {
         if (this.checked) {
             // Switch to legacy graph
-            document.getElementById('chartContainer').style.display = 'none';
-            document.getElementById('legacyGraphContainer').style.display = 'block';
+            chartContainer.style.display = 'none';
+            legacyContainer.style.display = 'block';
             updateLegacyGraphs(monitorId, start, end);
+            try { localStorage.setItem(LEGACY_GRAPH_KEY, '1'); } catch (e) {}
         } else {
             // Switch to new chart
-            document.getElementById('chartContainer').style.display = 'block';
-            document.getElementById('legacyGraphContainer').style.display = 'none';
+            chartContainer.style.display = 'block';
+            legacyContainer.style.display = 'none';
             fetchDataAndCreateChart(dataUrl);
+            try { localStorage.setItem(LEGACY_GRAPH_KEY, '0'); } catch (e) {}
         }
     });
 
@@ -399,12 +502,39 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Auto-refresh page every 60 seconds if monitor is active
-    <?php if ($monitor['effectively_active']): ?>
-        setTimeout(function() {
-            location.reload();
-        }, 60000);
-    <?php endif; ?>
+    // Quick time-range preset buttons. Each sets the start/end
+    // inputs to "now minus N hours" and re-fetches the chart
+    // (or legacy graphs) without a page reload. The legacy-graph
+    // toggle state is honored: if the user is in legacy mode, the
+    // preset re-fetches the legacy images instead.
+    document.querySelectorAll('#timePresets [data-range-hours]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const hours = parseFloat(this.dataset.rangeHours);
+            if (!isFinite(hours) || hours <= 0) return;
+            const endDate = new Date();
+            const startDate = new Date(endDate.getTime() - hours * 60 * 60 * 1000);
+            const startStr = toLocalDatetimeInputValue(startDate);
+            const endStr = toLocalDatetimeInputValue(endDate);
+            document.getElementById('startTime').value = startStr;
+            document.getElementById('endTime').value = endStr;
+            // Reflect the new range in the URL so a hard refresh
+            // or a shared link preserves the selected preset.
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('start', startStr);
+            newUrl.searchParams.set('end', endStr);
+            window.history.replaceState({}, '', newUrl);
+            // Update module-scoped start/end so the chart re-fetch
+            // uses the new range, then re-render the active view.
+            start = startStr;
+            end = endStr;
+            const newDataUrl = `/cgi-bin/api/rrd?id=${monitorId}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+            if (graphToggle.checked) {
+                updateLegacyGraphs(monitorId, start, end);
+            } else {
+                fetchDataAndCreateChart(newDataUrl);
+            }
+        });
+    });
 });
 
 function updateLegacyGraphs(monitorId, start, end) {
@@ -462,21 +592,25 @@ function createChart(data) {
                     label: 'RTT (ms)',
                     data: data.data.map(item => item.rtt),
                     borderColor: 'rgb(75, 192, 192)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.15)',
                     yAxisID: 'y',
                     pointRadius: 0,
-                    borderWidth: 3,
-                    tension: 0.1
+                    pointHoverRadius: 4,
+                    borderWidth: 2,
+                    tension: 0.25,
+                    fill: true
                 },
                 {
                     label: 'Loss (%)',
                     data: data.data.map(item => item.loss),
                     borderColor: 'rgb(255, 99, 132)',
-                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.10)',
                     yAxisID: 'y1',
                     pointRadius: 0,
-                    borderWidth: 3,
-                    tension: 0.1
+                    pointHoverRadius: 4,
+                    borderWidth: 2,
+                    tension: 0.25,
+                    fill: true
                 }
             ]
         },
@@ -491,15 +625,43 @@ function createChart(data) {
             plugins: {
                 title: {
                     display: true,
-                    text: 'Network Performance: RTT and Loss',
+                    text: MONITOR_TITLE,
                     font: {
-                        size: 18
+                        size: 16,
+                        weight: '600'
+                    },
+                    padding: {
+                        top: 4,
+                        bottom: 12
+                    }
+                },
+                legend: {
+                    position: 'top',
+                    align: 'end',
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        boxWidth: 8,
+                        boxHeight: 8,
+                        padding: 16
                     }
                 },
                 tooltip: {
+                    backgroundColor: 'rgba(33, 37, 41, 0.95)',
+                    titleColor: '#fff',
+                    bodyColor: '#fff',
+                    padding: 10,
+                    cornerRadius: 6,
                     callbacks: {
                         title: function(context) {
                             return context[0].label;
+                        },
+                        label: function(context) {
+                            const value = context.parsed.y;
+                            if (context.dataset.yAxisID === 'y') {
+                                return '  RTT:  ' + value + ' ms';
+                            }
+                            return '  Loss: ' + value + ' %';
                         }
                     }
                 }
@@ -517,6 +679,9 @@ function createChart(data) {
                     title: {
                         display: true,
                         text: 'Time (UTC)'
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.06)'
                     }
                 },
                 y: {
@@ -531,6 +696,9 @@ function createChart(data) {
                     max: rttAxisMax,
                     ticks: {
                         stepSize: rttAxisMax / 8
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.06)'
                     }
                 },
                 y1: {
@@ -570,13 +738,6 @@ function showError(message) {
     }
     console.error(`Error: ${message}`);
 }
-
-// Auto-refresh page every 60 seconds if monitor is active
-<?php if ($monitor['effectively_active']): ?>
-    setTimeout(function() {
-        location.reload();
-    }, 60000);
-<?php endif; ?>
 </script>
 </body>
 </html>
