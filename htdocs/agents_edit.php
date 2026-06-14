@@ -4,13 +4,6 @@ session_start();
 require_once 'check_session.php';
 require_once 'config.php';
 
-// Print session information
-// echo "<pre>";
-// echo "Session Information:\n";
-// print_r($_SESSION);
-// echo "\nCurrent time: " . date('Y-m-d H:i:s') . "\n";
-// echo "Session ID: " . session_id() . "\n";
-// echo "</pre>";
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
@@ -54,72 +47,79 @@ if ($id) {
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Debug output to console
-    print("Form submitted: " . print_r($_POST, true) . "\n");
-
-    // Collect form data
-    $agentData = [
-        'name' => $_POST['name'] ?? '',
-        'address' => $_POST['address'] ?? '',
-        'description' => $_POST['description'] ?? '',
-        'is_active' => isset($_POST['is_active'])
-    ];
-
-    // Add password if provided
-    if (!empty($_POST['password'])) {
-        $agentData['password'] = $_POST['password'];
-    }
-
-    // Debug output
-    print("Agent data to send: " . json_encode($agentData) . "\n");
-
-    // Make API request
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            "Authorization: Bearer " . $_SESSION['token'],
-            "Content-Type: application/json"
-        ]
-    ]);
-
-    if ($id) {
-        // Update existing agent
-        curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/agent/$id");
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+    // CSRF check (closes the cross-site form-submission
+    // gap). The token is rendered as a hidden input by the
+    // template below; this verifies the posted value
+    // matches the session token.
+    if (!wanportal_csrf_valid()) {
+        $error = 'Invalid CSRF token. Please reload the page and try again.';
     } else {
-        // Create new agent
-        curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/agent");
-        curl_setopt($ch, CURLOPT_POST, true);
-    }
+        // Debug output to console
+        print("Form submitted: " . print_r($_POST, true) . "\n");
 
-    $postData = json_encode($agentData);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
-    
-    $response = curl_exec($ch);
-    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        // Collect form data
+        $agentData = [
+            'name' => $_POST['name'] ?? '',
+            'address' => $_POST['address'] ?? '',
+            'description' => $_POST['description'] ?? '',
+            'is_active' => isset($_POST['is_active'])
+        ];
 
-    // Debug output
-    // print("API Response Status: $status\n");
-    // print("API Response: $response\n");
-
-    curl_close($ch);
-
-    if ($status === 200) {
-        $data = json_decode($response, true);
-        if ($data['status'] === 'success') {
-            header('Location: /agents.php');
-            exit;
-        } else {
-            $error = $data['message'] ?? 'Unknown error occurred';
+        // Add password if provided
+        if (!empty($_POST['password'])) {
+            $agentData['password'] = $_POST['password'];
         }
-    } else {
-        $error = "Failed to save agent (Status: $status, Response: $response)";
-    }
 
-    // If there was an error, keep the submitted data
-    if ($error) {
-        $agent = $agentData;
+        // Debug output
+        print("Agent data to send: " . json_encode($agentData) . "\n");
+
+        // Make API request
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                "Authorization: Bearer " . $_SESSION['token'],
+                "Content-Type: application/json"
+            ]
+        ]);
+
+        if ($id) {
+            // Update existing agent
+            curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/agent/$id");
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+        } else {
+            // Create new agent
+            curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/agent");
+            curl_setopt($ch, CURLOPT_POST, true);
+        }
+
+        $postData = json_encode($agentData);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+    
+        $response = curl_exec($ch);
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        // Debug output
+
+        curl_close($ch);
+
+        if ($status === 200) {
+            $data = json_decode($response, true);
+            if ($data['status'] === 'success') {
+                header('Location: /agents.php?saved=1');
+                exit;
+            } else {
+                $error = $data['message'] ?? 'Unknown error occurred';
+            }
+        } else {
+            $error = "Failed to save agent (Status: $status, Response: $response)";
+        }
+
+        // If there was an error, keep the submitted data
+        if ($error) {
+            $agent = $agentData;
+        }
+
     }
 }
 ?>
@@ -131,8 +131,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= $id ? 'Edit' : 'New' ?> Agent</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/assets/base.css">
 </head>
 <body>
@@ -161,6 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="card">
                 <div class="card-body">
                     <form method="POST" class="needs-validation" novalidate>
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                         <div class="mb-3">
                             <label for="name" class="form-label">Name *</label>
                             <input type="text" class="form-control" id="name" name="name" 

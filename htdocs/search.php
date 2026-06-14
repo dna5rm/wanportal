@@ -1,7 +1,6 @@
 <?php
-session_start();
 require_once 'config.php';
-
+wanportal_session_start();
 $search = trim($_GET['q'] ?? '');
 if (empty($search)) {
     header('Location: /index.php');
@@ -57,34 +56,14 @@ try {
     ];
 
     while ($row = $result->fetch_assoc()) {
-        // Calculate status colors (same as in monitor.php)
-        $current_median = floatval($row['current_median']);
-        $current_loss = floatval($row['current_loss']);
-        $avg_median = floatval($row['avg_median']);
-        $avg_stddev = floatval($row['avg_stddev']);
-
-        // Add color classes based on thresholds (same as monitor.php)
-        if ($current_median > $avg_median + 2*$avg_stddev)
-            $row['current_median_color'] = 'bg-danger';
-        elseif ($current_median > $avg_median)
-            $row['current_median_color'] = 'bg-warning';
-        elseif ($current_median == $avg_median)
-            $row['current_median_color'] = 'bg-info';
-        else
-            $row['current_median_color'] = 'bg-success';
-
-        if ($current_loss >= 75)
-            $row['current_loss_color'] = 'bg-danger';
-        elseif ($current_loss >= 50)
-            $row['current_loss_color'] = 'bg-warning';
-        elseif ($current_loss >= 2)
-            $row['current_loss_color'] = 'bg-info';
-        else
-            $row['current_loss_color'] = 'bg-success';
+        // Compute the color classes used by the results table.
+        // (search.php only renders the current_* colors; the avg_*
+        // ones are computed but unused — harmless.)
+        monitor_color_classes($row);
 
         // Calculate effective status
-        $row['effectively_active'] = $row['is_active'] && 
-                                   $row['agent_is_active'] && 
+        $row['effectively_active'] = $row['is_active'] &&
+                                   $row['agent_is_active'] &&
                                    $row['target_is_active'];
 
         // Update statistics
@@ -115,10 +94,10 @@ try {
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Search Results</title>
     <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <!-- DataTables -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.11/css/dataTables.bootstrap5.min.css">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/assets/base.css">
 </head>
@@ -186,25 +165,25 @@ try {
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             Active Monitors
-                            <span class="badge bg-success rounded-pill">
+                            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle rounded-pill">
                                 <?= $stats['active'] ?>
                             </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             Inactive Monitors
-                            <span class="badge bg-warning rounded-pill">
+                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill">
                                 <?= $stats['inactive'] ?>
                             </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             Effectively Inactive
-                            <span class="badge bg-secondary rounded-pill">
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle rounded-pill">
                                 <?= $stats['effectively_inactive'] ?>
                             </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             Total Results
-                            <span class="badge bg-primary rounded-pill">
+                            <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle rounded-pill">
                                 <?= $stats['total'] ?>
                             </span>
                         </li>
@@ -217,7 +196,7 @@ try {
         <div class="col-md-9">
             <!-- Results Table -->
             <div class="table-responsive">
-                <table id="tablePager" class="table table-light table-bordered table-striped table-hover">
+                <table id="tablePager" class="table table-light table-bordered table-striped table-hover" data-empty-message="No results found">
                     <thead>                     
                         <tr>
                             <th>Monitor</th>
@@ -230,11 +209,7 @@ try {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php if (empty($monitors)): ?>
-                            <tr>
-                                <td colspan="7" class="text-center">No results found</td>
-                            </tr>
-                        <?php else: ?>
+                        <?php if (!empty($monitors)): ?>
                             <?php foreach ($monitors as $m): ?>
                                 <?php
                                 // Skip if inactive and not showing inactive

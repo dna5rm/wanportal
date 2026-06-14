@@ -160,6 +160,66 @@ curl -s -X POST http://localhost/cgi-bin/api/monitor -H "Authorization: Bearer $
 netping-agent.pl
 ```
 
+## Security Model
+
+The PHP frontend and Perl CGI backend share a layered defense.
+Every layer below can fail without compromising the others.
+
+### Session hardening (PHP)
+
+`htdocs/.user.ini` and `htdocs/config.php::wanportal_session_start()`
+together set:
+
+- `session.cookie_httponly = 1` — JS cannot read the session cookie
+- `session.cookie_samesite = Lax` — CSRF on cross-site requests is blocked
+- `session.use_strict_mode = 1` — session fixation is prevented
+- `session.cookie_secure = 1` — cookie only sent over HTTPS (set
+  dynamically when the request is HTTPS, including via
+  `X-Forwarded-Proto` if a reverse proxy is in front)
+
+### CSRF protection (PHP forms)
+
+Every state-changing form (`*_edit.php`) includes a hidden
+`csrf_token` input rendered from `$_SESSION['csrf_token']` and
+verified on POST via `wanportal_csrf_valid()` (constant-time
+`hash_equals` compare). The token is generated once per session
+by `navbar.php`.
+
+### Same-origin proxy for state-changing API calls (PHP)
+
+`htdocs/proxy.php` is a same-origin endpoint that accepts JSON
+envelopes from the browser and forwards them to the internal
+`cgi-bin/api/*` with the session JWT attached server-side. The
+browser never sees the JWT, so an XSS or a malicious browser
+extension cannot exfiltrate it. The proxy also enforces CSRF on
+the DELETE/PUT methods that previously had no protection.
+
+Use `window.proxyRequest('DELETE', '/credentials/42')` from
+page JavaScript (loaded via `htdocs/assets/js/proxy.js`).
+
+### HTTP response headers (Apache)
+
+`htdocs/.htaccess` sets:
+
+- `X-Content-Type-Options: nosniff` — anti-MIME-sniffing
+- `X-Frame-Options: DENY` — anti-clickjacking
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy` — disables camera/mic/geolocation/etc.
+- `Content-Security-Policy` — restricts script/style sources to
+  the actual CDNs the wanportal uses
+
+The Dockerfile also enables `ServerTokens Prod` so the
+`Server:` header reads just `Server: Apache` (not the version).
+
+### LDAP login error logging (Perl)
+
+`cgi-bin/auth.pm::_ldap_authenticate` opens a fresh `Net::LDAP`
+connection for the user-bind step and wraps the bind in
+`eval { ... }`. Failed binds log the actual LDAP error code
+(`invalidCredentials`, `insufficientAccessRights`, etc.) to the
+Apache error log, distinguishing them from generic connection
+failures or upstream `die()` exceptions.
+
 ## Development/Customization
 
 - **Modules**: each endpoint is a modular `.pm` file (`agent.pm`, `monitor.pm`, etc.)

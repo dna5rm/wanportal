@@ -1,8 +1,8 @@
 <?php
-// Start session only if it hasn't been started already
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+// session_start() is invoked by the caller (via wanportal_session_start()
+// from config.php), so by the time we get here the session is already
+// active. We don't call session_start() again — it's a no-op in PHP
+// anyway, but skipping it is cleaner.
 
 // Handle logout
 if (isset($_POST['logout'])) {
@@ -31,9 +31,17 @@ if (!isset($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+// Expose the CSRF token to client-side JavaScript so that
+// proxy.php can be called from fetch() with the X-CSRF-Token
+// header. The CSRF token is designed to be readable by the
+// browser, unlike the session JWT, so echoing it here is safe.
+?>
+<meta name="csrf-token" content="<?= htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+<?php
+
 // Add Bootstrap Icons in head if not already loaded
 if (!defined('NAVBAR_LOADED')): ?>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <?php define('NAVBAR_LOADED', true);
 endif;
 

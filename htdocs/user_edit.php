@@ -44,8 +44,6 @@ if ($id) {
     curl_close($ch);
 
     // Debug output
-    // print("API Response Status: $status\n");
-    // print("API Response: $response\n");
 
     if ($status === 200) {
         $data = json_decode($response, true);
@@ -71,73 +69,82 @@ if ($id) {
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Collect form data
-    $userData = [
-        'username' => $_POST['username'] ?? '',
-        'full_name' => $_POST['full_name'] ?? '',
-        'email' => $_POST['email'] ?? '',
-        'is_admin' => isset($_POST['is_admin']),
-        'is_active' => isset($_POST['is_active'])
-    ];
-
-    // Add password if provided
-    if (!empty($_POST['password'])) {
-        $userData['password'] = $_POST['password'];
-    }
-
-    // Validate required fields
-    if (empty($userData['username'])) {
-        $error = 'Username is required.';
+    // CSRF check (closes the cross-site form-submission
+    // gap). The token is rendered as a hidden input by the
+    // template below; this verifies the posted value
+    // matches the session token.
+    if (!wanportal_csrf_valid()) {
+        $error = 'Invalid CSRF token. Please reload the page and try again.';
     } else {
-        // Make API request
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                "Authorization: Bearer " . $_SESSION['token'],
-                "Content-Type: application/json"
-            ]
-        ]);
+        // Collect form data
+        $userData = [
+            'username' => $_POST['username'] ?? '',
+            'full_name' => $_POST['full_name'] ?? '',
+            'email' => $_POST['email'] ?? '',
+            'is_admin' => isset($_POST['is_admin']),
+            'is_active' => isset($_POST['is_active'])
+        ];
 
-        if ($id) {
-            // Update existing user
-            curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/users/$id");
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+        // Add password if provided
+        if (!empty($_POST['password'])) {
+            $userData['password'] = $_POST['password'];
+        }
+
+        // Validate required fields
+        if (empty($userData['username'])) {
+            $error = 'Username is required.';
         } else {
-            // Create new user
-            curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/users");
-            curl_setopt($ch, CURLOPT_POST, true);
-            
-            // Password required for new users
-            if (empty($userData['password'])) {
-                $error = 'Password is required for new users.';
-            }
-        }
+            // Make API request
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    "Authorization: Bearer " . $_SESSION['token'],
+                    "Content-Type: application/json"
+                ]
+            ]);
 
-        if (!$error) {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($userData));
-            
-            $response = curl_exec($ch);
-            $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($status === 200) {
-                $data = json_decode($response, true);
-                if ($data['status'] === 'success') {
-                    header('Location: /users.php');
-                    exit;
-                } else {
-                    $error = $data['message'] ?? 'Unknown error occurred';
-                }
+            if ($id) {
+                // Update existing user
+                curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/users/$id");
+                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
             } else {
-                $error = 'Failed to save user';
+                // Create new user
+                curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/users");
+                curl_setopt($ch, CURLOPT_POST, true);
+            
+                // Password required for new users
+                if (empty($userData['password'])) {
+                    $error = 'Password is required for new users.';
+                }
+            }
+
+            if (!$error) {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($userData));
+            
+                $response = curl_exec($ch);
+                $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+
+                if ($status === 200) {
+                    $data = json_decode($response, true);
+                    if ($data['status'] === 'success') {
+                        header('Location: /users.php?saved=1');
+                        exit;
+                    } else {
+                        $error = $data['message'] ?? 'Unknown error occurred';
+                    }
+                } else {
+                    $error = 'Failed to save user';
+                }
             }
         }
-    }
 
-    // If there was an error, keep the submitted data
-    if ($error) {
-        $user = $userData;
+        // If there was an error, keep the submitted data
+        if ($error) {
+            $user = $userData;
+        }
+
     }
 }
 ?>
@@ -149,8 +156,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= $id ? 'Edit' : 'New' ?> User</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/assets/base.css">
 </head>
 <body>
@@ -179,6 +186,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="card">
                 <div class="card-body">
                     <form method="POST" class="needs-validation" novalidate>
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                         <div class="mb-3">
                             <label for="username" class="form-label">Username *</label>
                             <input type="text" class="form-control" id="username" name="username" 
@@ -279,14 +287,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <?php if (isset($user['failed_attempts']) && $user['failed_attempts'] > 0): ?>
                             <dt class="col-sm-4">Failed Attempts</dt>
                             <dd class="col-sm-8">
-                                <span class="badge bg-warning"><?= $user['failed_attempts'] ?></span>
+                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle"><?= $user['failed_attempts'] ?></span>
                             </dd>
                         <?php endif; ?>
 
                         <?php if (isset($user['locked_until']) && $user['locked_until']): ?>
                             <dt class="col-sm-4">Locked Until</dt>
                             <dd class="col-sm-8">
-                                <span class="badge bg-danger">
+                                <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">
                                     <?= date('Y-m-d H:i', strtotime($user['locked_until'])) ?>
                                 </span>
                             </dd>

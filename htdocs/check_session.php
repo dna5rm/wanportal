@@ -1,9 +1,9 @@
 <?php
 // check_session.php
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+// session_start() is invoked by the caller (via wanportal_session_start()
+// from config.php, which is included before this file). No need to
+// start the session again here.
 
 function debug_to_console($data) {
     $output = $data;

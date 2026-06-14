@@ -47,24 +47,22 @@ if ($status === 200) {
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Users</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/assets/base.css">
 </head>
 <body>
 <?php include 'navbar.php'; ?>
 
 <div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col">
-            <h3>User Management</h3>
-        </div>
-        <div class="col text-end">
-            <a href="/user_edit.php" class="btn btn-primary btn-sm">
-                <i class="bi bi-person-plus"></i> New User
-            </a>
-        </div>
-    </div>
+    <?php page_header(
+        'Users',
+        [
+            ['Home', '/'],
+            ['Users', null],
+        ],
+        '<a href="/user_edit.php" class="btn btn-primary"><i class="bi bi-person-plus"></i> New User</a>'
+    ); ?>
 
     <!-- Search/Filter -->
     <div class="row mb-3">
@@ -123,12 +121,12 @@ if ($status === 200) {
                             <?php endif; ?>
                         </td>
                         <td>
-                            <span class="badge bg-<?= $user['is_admin'] ? 'danger' : 'primary' ?>">
+                            <span class="badge bg-<?= $user['is_admin'] ? 'danger-subtle text-danger-emphasis border border-danger-subtle' : 'primary-subtle text-primary-emphasis border border-primary-subtle' ?>">
                                 <?= $user['is_admin'] ? 'Admin' : 'User' ?>
                             </span>
                         </td>
                         <td>
-                            <span class="badge bg-<?= $user['is_active'] ? 'success' : 'warning' ?>">
+                            <span class="badge bg-<?= $user['is_active'] ? 'success-subtle text-success-emphasis border border-success-subtle' : 'warning-subtle text-warning-emphasis border border-warning-subtle' ?>">
                                 <?= $user['is_active'] ? 'Active' : 'Inactive' ?>
                             </span>
                         </td>

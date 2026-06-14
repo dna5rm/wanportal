@@ -79,8 +79,6 @@ if ($id) {
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    // print("Fetch monitor response: $response\n");
-    // print("Fetch monitor status: $status\n");
 
     if ($status === 200) {
         $data = json_decode($response, true);
@@ -92,77 +90,84 @@ if ($id) {
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    print("Form submitted: " . print_r($_POST, true) . "\n");
-
-    // Collect form data
-    $monitorData = [
-        'description' => $_POST['description'] ?? '',
-        'agent_id' => $_POST['agent_id'] ?? '',
-        'target_id' => $_POST['target_id'] ?? '',
-        'protocol' => $_POST['protocol'] ?? 'ICMP',
-        'dscp' => $_POST['dscp'] ?? 'BE',
-        'is_active' => isset($_POST['is_active'])
-    ];
-
-    // Add port if protocol is TCP
-    if ($_POST['protocol'] === 'TCP' && isset($_POST['port'])) {
-        $monitorData['port'] = intval($_POST['port']);
-    }
-
-    // Add polling parameters only for new monitors
-    if (!$id) {
-        $monitorData['pollcount'] = intval($_POST['pollcount'] ?? 5);
-        $monitorData['pollinterval'] = intval($_POST['pollinterval'] ?? 60);
-    }
-
-    print("Monitor data to send: " . json_encode($monitorData) . "\n");
-
-    // Make API request
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            "Authorization: Bearer " . $_SESSION['token'],
-            "Content-Type: application/json"
-        ]
-    ]);
-
-    if ($id) {
-        // Update existing monitor
-        curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/monitor/$id");
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+    // CSRF check (closes the cross-site form-submission
+    // gap). The token is rendered as a hidden input by the
+    // template below; this verifies the posted value
+    // matches the session token.
+    if (!wanportal_csrf_valid()) {
+        $error = 'Invalid CSRF token. Please reload the page and try again.';
     } else {
-        // Create new monitor
-        curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/monitor");
-        curl_setopt($ch, CURLOPT_POST, true);
-    }
+        print("Form submitted: " . print_r($_POST, true) . "\n");
 
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($monitorData));
-    
-    $response = curl_exec($ch);
-    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        // Collect form data
+        $monitorData = [
+            'description' => $_POST['description'] ?? '',
+            'agent_id' => $_POST['agent_id'] ?? '',
+            'target_id' => $_POST['target_id'] ?? '',
+            'protocol' => $_POST['protocol'] ?? 'ICMP',
+            'dscp' => $_POST['dscp'] ?? 'BE',
+            'is_active' => isset($_POST['is_active'])
+        ];
 
-    // Debug output
-    // print("API Response Status: $status\n");
-    // print("API Response: $response\n");
-
-    curl_close($ch);
-
-    if ($status === 200) {
-        $data = json_decode($response, true);
-        if ($data['status'] === 'success') {
-            header('Location: /monitors.php');
-            exit;
-        } else {
-            $error = $data['message'] ?? 'Unknown error occurred';
+        // Add port if protocol is TCP
+        if ($_POST['protocol'] === 'TCP' && isset($_POST['port'])) {
+            $monitorData['port'] = intval($_POST['port']);
         }
-    } else {
-        $error = "Failed to save monitor (Status: $status, Response: $response)";
-    }
 
-    // If there was an error, keep the submitted data
-    if ($error) {
-        $monitor = $monitorData;
+        // Add polling parameters only for new monitors
+        if (!$id) {
+            $monitorData['pollcount'] = intval($_POST['pollcount'] ?? 5);
+            $monitorData['pollinterval'] = intval($_POST['pollinterval'] ?? 60);
+        }
+
+        print("Monitor data to send: " . json_encode($monitorData) . "\n");
+
+        // Make API request
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                "Authorization: Bearer " . $_SESSION['token'],
+                "Content-Type: application/json"
+            ]
+        ]);
+
+        if ($id) {
+            // Update existing monitor
+            curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/monitor/$id");
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+        } else {
+            // Create new monitor
+            curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/monitor");
+            curl_setopt($ch, CURLOPT_POST, true);
+        }
+
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($monitorData));
+    
+        $response = curl_exec($ch);
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        // Debug output
+
+        curl_close($ch);
+
+        if ($status === 200) {
+            $data = json_decode($response, true);
+            if ($data['status'] === 'success') {
+                header('Location: /monitors.php?saved=1');
+                exit;
+            } else {
+                $error = $data['message'] ?? 'Unknown error occurred';
+            }
+        } else {
+            $error = "Failed to save monitor (Status: $status, Response: $response)";
+        }
+
+        // If there was an error, keep the submitted data
+        if ($error) {
+            $monitor = $monitorData;
+        }
+
     }
 }
 ?>
@@ -174,9 +179,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= $id ? 'Edit' : 'New' ?> Monitor</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/assets/base.css">
 </head>
 <body>
@@ -205,6 +210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="card">
                 <div class="card-body">
                     <form method="POST" class="needs-validation" novalidate>
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                         <div class="mb-3">
                             <label for="description" class="form-label">Description</label>
                             <input type="text" class="form-control" id="description" name="description" 

@@ -1,7 +1,6 @@
-
 <?php
-session_start();
 require_once 'config.php';
+wanportal_session_start();
 
 // Fetch monitors from API
 $ch = curl_init(API_BASE_URL . '/monitors');
@@ -47,10 +46,10 @@ $server_name = isset($_SERVER['SERVER_NAME']) ?
     <meta http-equiv="refresh" content="300">
     <title><?= $server_name ?> :: Latency Report</title>
     <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <!-- DataTables -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.11/css/dataTables.bootstrap5.min.css">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/assets/base.css">
 </head>
@@ -79,7 +78,7 @@ $server_name = isset($_SERVER['SERVER_NAME']) ?
 
     <!-- Latency Table -->
     <div class="table-responsive">
-        <table id="tablePager" class="table table-striped table-hover">
+        <table id="tablePager" class="table table-striped table-hover" data-empty-message="No latency issues detected">
             <thead class="table-light">
                 <tr>
                     <th>Monitor</th>
@@ -91,11 +90,7 @@ $server_name = isset($_SERVER['SERVER_NAME']) ?
                 </tr>
             </thead>
             <tbody>
-            <?php if (empty($latencyIssues)): ?>
-                <tr>
-                    <td colspan="6" class="text-center">No latency issues detected</td>
-                </tr>
-            <?php else:
+            <?php if (!empty($latencyIssues)):
                 foreach ($latencyIssues as $monitor):
                     // Calculate threshold
                     $threshold = $monitor['avg_max'] + (5 * $monitor['avg_stddev']);

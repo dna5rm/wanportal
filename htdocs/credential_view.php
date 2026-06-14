@@ -59,8 +59,8 @@ $cred = $data['credential'];
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: View Credential</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/assets/base.css">
     <style>
         .password-field {
@@ -110,7 +110,7 @@ $cred = $data['credential'];
                         <dd class="col-sm-9"><?= htmlspecialchars($cred['site'] ?? 'N/A') ?></dd>
 
                         <dt class="col-sm-3">Type</dt>
-                        <dd class="col-sm-9"><span class="badge bg-<?= getBadgeColor($cred['type']) ?>"><?= htmlspecialchars($cred['type']) ?></span></dd>
+                        <dd class="col-sm-9"><span class="badge <?= getBadgeColor($cred['type']) ?>"><?= htmlspecialchars($cred['type']) ?></span></dd>
 
                         <dt class="col-sm-3">Username</dt>
                         <dd class="col-sm-9">
@@ -159,7 +159,7 @@ $cred = $data['credential'];
 
                         <dt class="col-sm-3">Sensitivity</dt>
                         <dd class="col-sm-9">
-                            <span class="badge bg-<?= getSensitivityColor($cred['sensitivity']) ?>">
+                            <span class="badge <?= getSensitivityColor($cred['sensitivity']) ?>">
                                 <?= htmlspecialchars($cred['sensitivity']) ?>
                             </span>
                         </dd>
@@ -221,9 +221,9 @@ $cred = $data['credential'];
                         <dt class="col-sm-3">Status</dt>
                         <dd class="col-sm-9">
                             <?php if ($cred['is_active']): ?>
-                                <span class="badge bg-success">Active</span>
+                                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Active</span>
                             <?php else: ?>
-                                <span class="badge bg-danger">Inactive</span>
+                                <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">Inactive</span>
                             <?php endif; ?>
                         </dd>
                     </dl>
@@ -259,25 +259,38 @@ function copyToClipboard(element) {
 }
 
 <?php
+// Both helpers below return a full Bootstrap 5.3 class string
+// (including the `bg-` prefix) so the call sites can be
+// `class="badge BADGE_CLASS_STRING"`. The `-subtle` background
+// + matching text + matching border flips cleanly with the
+// `data-bs-theme="dark"` toggle on <html>. The solid
+// `bg-{color}` variants stay vivid in both themes and look out
+// of place on a dark page.
 function getBadgeColor($type) {
     $colors = [
-        'ACCOUNT' => 'primary',
-        'CERTIFICATE' => 'success',
-        'API' => 'info',
-        'PSK' => 'warning',
-        'CODE' => 'secondary'
+        'ACCOUNT'     => 'bg-primary-subtle text-primary-emphasis border border-primary-subtle',
+        'CERTIFICATE' => 'bg-success-subtle text-success-emphasis border border-success-subtle',
+        'API'         => 'bg-info-subtle text-info-emphasis border border-info-subtle',
+        'PSK'         => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle',
+        'CODE'        => 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle',
     ];
-    return $colors[$type] ?? 'secondary';
+    return $colors[$type] ?? 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle';
 }
 
 function getSensitivityColor($sensitivity) {
     $colors = [
-        'LOW' => 'success',
-        'MEDIUM' => 'warning',
-        'HIGH' => 'danger',
-        'CRITICAL' => 'dark'
+        'LOW'    => 'bg-success-subtle text-success-emphasis border border-success-subtle',
+        'MEDIUM' => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle',
+        'HIGH'   => 'bg-danger-subtle text-danger-emphasis border border-danger-subtle',
+        // CRITICAL used to be `bg-dark` (pure black). That
+        // disappears against a dark page background, defeating
+        // the point of marking something as the highest
+        // sensitivity. `bg-danger-subtle` is the most severe of
+        // the visible-in-both-modes tokens and conveys "this is
+        // the worst level" without becoming invisible.
+        'CRITICAL' => 'bg-danger-subtle text-danger-emphasis border border-danger-subtle',
     ];
-    return $colors[$sensitivity] ?? 'secondary';
+    return $colors[$sensitivity] ?? 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle';
 }
 ?>
 </script>

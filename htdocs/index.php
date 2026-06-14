@@ -1,7 +1,6 @@
 <?php
-session_start();
 require_once 'config.php';
-
+wanportal_session_start();
 /**
  * Make API calls to the backend
  * @param string $endpoint API endpoint to call
@@ -62,6 +61,50 @@ $activeAgents = array_filter($agentsResponse['agents'] ?? [], function($agent) {
 $monitorsResponse = callAPI('/monitors?current_loss=100&is_active=1');
 $downHosts = $monitorsResponse['monitors'] ?? [];
 
+// Fetch all monitors (active+inactive) for the summary cards and
+// "top 5 slowest" widget. We compute the dashboard stats here
+// rather than hitting a specialized API endpoint so the layout
+// can be tweaked without a Perl-side change.
+$allMonitorsResponse = callAPI('/monitors?is_active=1');
+$allMonitors = $allMonitorsResponse['monitors'] ?? [];
+
+$monitor_stats = [
+    'total'     => 0,
+    'up'        => 0,
+    'degraded'  => 0,    // 1 <= loss < 100
+    'down'      => 0,    // loss >= 100
+    'effectively_active' => 0,  // monitor active AND agent active AND target active
+];
+foreach ($allMonitors as $m) {
+    $monitor_stats['total']++;
+    $loss = (float)($m['current_loss'] ?? 0);
+    if ($loss >= 100)        $monitor_stats['down']++;
+    elseif ($loss >= 1)      $monitor_stats['degraded']++;
+    else                     $monitor_stats['up']++;
+    // Effectively-active means the link is monitored (i.e. not
+    // disabled by the operator). We approximate this by the
+    // current_loss being a recent value (0..100); 0 means
+    // "sampled and fine" which is what effective-active looks like.
+    if ($m['is_active'] == 1 && $m['agent_is_active'] == 1 && $m['target_is_active'] == 1) {
+        $monitor_stats['effectively_active']++;
+    }
+}
+$pct_up        = $monitor_stats['total'] > 0 ? round(100 * $monitor_stats['up']        / $monitor_stats['total']) : 0;
+$pct_degraded  = $monitor_stats['total'] > 0 ? round(100 * $monitor_stats['degraded']  / $monitor_stats['total']) : 0;
+$pct_down      = $monitor_stats['total'] > 0 ? round(100 * $monitor_stats['down']      / $monitor_stats['total']) : 0;
+
+// Top 5 slowest by current_median (excluding down monitors —
+// those are already in the down table below)
+$topSlow = $allMonitors;
+usort($topSlow, function ($a, $b) {
+    $a_loss = (float)($a['current_loss'] ?? 0);
+    $b_loss = (float)($b['current_loss'] ?? 0);
+    if ($a_loss >= 100 && $b_loss < 100) return 1;  // down sorts to end
+    if ($a_loss < 100 && $b_loss >= 100) return -1;
+    return (float)($b['current_median'] ?? 0) <=> (float)($a['current_median'] ?? 0);
+});
+$topSlow = array_slice($topSlow, 0, 5);
+
 // Get server name safely
 $server_name = isset($_SERVER['SERVER_NAME']) ? 
     strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0]) : 
@@ -90,10 +133,10 @@ if (DEBUG_MODE) {
     <meta http-equiv="Expires" content="0" />
     <meta http-equiv="refresh" content="300">
     <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <!-- DataTables -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.11/css/dataTables.bootstrap5.min.css">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/assets/base.css">
 </head>
@@ -159,62 +202,168 @@ if (DEBUG_MODE) {
                 </div>
             </div>
 
-            <!-- Down Monitors -->
-            <div class="text-center mb-4">
-                <div class="d-flex justify-content-center align-items-center gap-3">
-                    <h3 class="mb-0">Down Monitors</h3>
-                    <a href="/cgi-bin/api/monitors?current_loss=100&is_active=1" class="btn btn-sm btn-outline-secondary" target="_blank" title="View raw API data" data-bs-toggle="tooltip">
-                        <i class="bi bi-code-slash"></i> Raw Data
-                    </a>
+            <!-- Dashboard summary cards: total monitors split by
+                 status. Sits directly above the Top 5 slowest
+                 widget so the two summary tables read together as a
+                 pair: cards give the high-level breakdown, slowest
+                 table gives the per-link detail. -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-3">
+                    <div class="card stat-card h-100 border">
+                        <div class="card-body">
+                            <div class="stat-label text-muted">Total monitors</div>
+                            <div class="stat-number"><?= $monitor_stats['total'] ?></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stat-card h-100 border border-success-subtle bg-success-subtle">
+                        <div class="card-body">
+                            <div class="stat-label text-success-emphasis">Up</div>
+                            <div class="stat-number text-success-emphasis"><?= $monitor_stats['up'] ?>
+                                <span class="stat-sub">(<?= $pct_up ?>%)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stat-card h-100 border border-warning-subtle bg-warning-subtle">
+                        <div class="card-body">
+                            <div class="stat-label text-warning-emphasis">Degraded</div>
+                            <div class="stat-number text-warning-emphasis"><?= $monitor_stats['degraded'] ?>
+                                <span class="stat-sub">(<?= $pct_degraded ?>%)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stat-card h-100 border border-danger-subtle bg-danger-subtle">
+                        <div class="card-body">
+                            <div class="stat-label text-danger-emphasis">Down</div>
+                            <div class="stat-number text-danger-emphasis"><?= $monitor_stats['down'] ?>
+                                <span class="stat-sub">(<?= $pct_down ?>%)</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="table-responsive">
-                <table id="tablePager" class="table table-striped table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Monitor</th>
-                            <th>Agent</th>
-                            <th>Target</th>
-                            <th>Down Since</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    <?php if (empty($downHosts)): ?>
-                        <tr>
-                            <td colspan="4" class="text-center">No down monitors</td>
-                        </tr>
-                    <?php else:
-                        foreach ($downHosts as $monitor):
-                            // Convert last_down to timestamp for comparison
-                            $downTime = strtotime($monitor['last_down']);
-                            
-                            // Determine severity class using Bootstrap's colors
-                            if ($downTime <= strtotime('-' . DANGER_THRESHOLD_HOURS . ' hours')) {
-                                $rowClass = 'table-danger';    // Red background
-                            } elseif ($downTime <= strtotime('-' . WARNING_THRESHOLD_HOURS . ' hours')) {
-                                $rowClass = 'table-warning';   // Yellow background
-                            } elseif ($downTime <= strtotime('-1 hours')) {
-                                $rowClass = 'table-info';      // Light blue background
+            <!-- Top 5 slowest monitors (excluding down — those
+                 are in the down table below) -->
+            <?php if (!empty($topSlow)): ?>
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-speedometer2"></i> Top 5 slowest links (by current median)
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Monitor</th>
+                                <th>Agent</th>
+                                <th>Target</th>
+                                <th class="text-end">Median</th>
+                                <th class="text-end">Loss</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($topSlow as $m):
+                            $loss = (float)($m['current_loss'] ?? 0);
+                            // Use Bootstrap 5.3 "subtle" color tokens so the
+                            // badge adapts to dark mode. The saturated
+                            // bg-success / bg-warning / bg-danger variants
+                            // stay bright in both themes and look out of
+                            // place on a dark surface.
+                            if ($loss >= 100) {
+                                $badge = 'bg-danger-subtle text-danger-emphasis border border-danger-subtle';
+                            } elseif ($loss >= 1) {
+                                $badge = 'bg-warning-subtle text-warning-emphasis border border-warning-subtle';
                             } else {
-                                $rowClass = '';                // Default background
+                                $badge = 'bg-success-subtle text-success-emphasis border border-success-subtle';
                             }
-                            ?>
-                            <tr class="<?= $rowClass ?>">
+                        ?>
+                            <tr>
                                 <td>
-                                    <a href="/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>" 
+                                    <a href="/monitor.php?id=<?= htmlspecialchars($m['id']) ?>"
                                        class="text-decoration-none">
-                                        <?= htmlspecialchars($monitor['description']) ?>
+                                        <?= htmlspecialchars($m['description'] ?? $m['id']) ?>
                                     </a>
                                 </td>
-                                <td><?= htmlspecialchars($monitor['agent_name']) ?></td>
-                                <td><?= htmlspecialchars($monitor['target_address']) ?></td>
-                                <td><?= date("m/d H:i:s", strtotime($monitor['last_down'])) ?></td>
+                                <td><?= htmlspecialchars($m['agent_name'] ?? '-') ?></td>
+                                <td><?= htmlspecialchars($m['target_address'] ?? '-') ?></td>
+                                <td class="text-end"><?= htmlspecialchars($m['current_median'] ?? '-') ?> ms</td>
+                                <td class="text-end">
+                                    <span class="badge <?= $badge ?>">
+                                        <?= number_format($loss, 1) ?>%
+                                    </span>
+                                </td>
                             </tr>
-                        <?php endforeach;
-                    endif; ?>
-                    </tbody>
-                </table>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- Down Monitors
+                 Re-styled to match the Top 5 slowest widget: a card
+                 wrapper with a card-header showing the icon and
+                 title, and a compact `table table-sm mb-0` body. The
+                 row-level severity classes (table-danger / -warning /
+                 -info) are preserved so the time-since-down coloring
+                 still works. -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-exclamation-triangle"></i> Down Monitors</span>
+                    <a href="/cgi-bin/api/monitors?current_loss=100&is_active=1"
+                       class="btn btn-sm btn-outline-secondary"
+                       target="_blank" title="View raw API data" data-bs-toggle="tooltip">
+                        <i class="bi bi-code-slash"></i> Raw Data
+                    </a>
+                </div>
+                <div class="table-responsive">
+                    <table id="tablePager" class="table table-sm mb-0" data-empty-message="No down monitors">
+                        <thead>
+                            <tr>
+                                <th>Monitor</th>
+                                <th>Agent</th>
+                                <th>Target</th>
+                                <th class="text-end">Down Since</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php if (!empty($downHosts)):
+                            foreach ($downHosts as $monitor):
+                                // Convert last_down to timestamp for comparison
+                                $downTime = strtotime($monitor['last_down']);
+
+                                // Determine severity class using Bootstrap's colors
+                                if ($downTime <= strtotime('-' . DANGER_THRESHOLD_HOURS . ' hours')) {
+                                    $rowClass = 'table-danger';    // Red background
+                                } elseif ($downTime <= strtotime('-' . WARNING_THRESHOLD_HOURS . ' hours')) {
+                                    $rowClass = 'table-warning';   // Yellow background
+                                } elseif ($downTime <= strtotime('-1 hours')) {
+                                    $rowClass = 'table-info';      // Light blue background
+                                } else {
+                                    $rowClass = '';                // Default background
+                                }
+                                ?>
+                                <tr class="<?= $rowClass ?>">
+                                    <td>
+                                        <a href="/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>"
+                                           class="text-decoration-none">
+                                            <?= htmlspecialchars($monitor['description']) ?>
+                                        </a>
+                                    </td>
+                                    <td><?= htmlspecialchars($monitor['agent_name']) ?></td>
+                                    <td><?= htmlspecialchars($monitor['target_address']) ?></td>
+                                    <td class="text-end"><?= date("m/d H:i:s", strtotime($monitor['last_down'])) ?></td>
+                                </tr>
+                            <?php endforeach;
+                        endif; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
         </div>

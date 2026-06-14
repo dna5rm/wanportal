@@ -1,8 +1,8 @@
 <?php
 // agent.php
-session_start();
-require_once 'config.php';
 
+require_once 'config.php';
+wanportal_session_start();
 $id = $_GET['id'] ?? '';
 if (!$id) die("No agent ID specified");
 
@@ -69,74 +69,11 @@ try {
     ];
 
     while ($row = $result->fetch_assoc()) {
-        // Calculate status colors
-        $current_median = floatval($row['current_median']);
-        $current_loss = floatval($row['current_loss']);
-        $avg_median = floatval($row['avg_median']);
-        $avg_min = floatval($row['avg_min']);
-        $avg_max = floatval($row['avg_max']);
-        $avg_stddev = floatval($row['avg_stddev']);
-        $avg_loss = floatval($row['avg_loss']);
-
-        // Add color classes based on thresholds
-        if ($current_median > $avg_median + 2*$avg_stddev)
-            $row['current_median_color'] = 'bg-danger';
-        elseif ($current_median > $avg_median)
-            $row['current_median_color'] = 'bg-warning';
-        elseif ($current_median == $avg_median)
-            $row['current_median_color'] = 'bg-info';
-        else
-            $row['current_median_color'] = 'bg-success';
-
-        // Current loss thresholds
-        if ($current_loss >= 75)
-            $row['current_loss_color'] = 'bg-danger';
-        elseif ($current_loss >= 50)
-            $row['current_loss_color'] = 'bg-warning';
-        elseif ($current_loss >= 2)
-            $row['current_loss_color'] = 'bg-info';
-        else
-            $row['current_loss_color'] = 'bg-success';
-
-        // Average metrics colors
-        if ($avg_median > $avg_median + 2*$avg_stddev)
-            $row['avg_median_color'] = 'bg-danger';
-        elseif ($avg_median > $avg_median + $avg_stddev)
-            $row['avg_median_color'] = 'bg-warning';
-        elseif ($avg_median >= $avg_median)
-            $row['avg_median_color'] = 'bg-info';
-        else
-            $row['avg_median_color'] = 'bg-success';
-
-        if ($avg_min <= ($avg_median - 3*$avg_stddev))
-            $row['avg_minimum_color'] = 'bg-danger';
-        elseif ($avg_min <= ($avg_median - 2*$avg_stddev))
-            $row['avg_minimum_color'] = 'bg-warning';
-        elseif ($avg_min <= ($avg_median - $avg_stddev))
-            $row['avg_minimum_color'] = 'bg-info';
-        else
-            $row['avg_minimum_color'] = 'bg-success';
-
-        if ($avg_max >= ($avg_median + 3*$avg_stddev))
-            $row['avg_maximum_color'] = 'bg-danger';
-        elseif ($avg_max >= ($avg_median + 2*$avg_stddev))
-            $row['avg_maximum_color'] = 'bg-warning';
-        elseif ($avg_max >= ($avg_median + $avg_stddev))
-            $row['avg_maximum_color'] = 'bg-info';
-        else
-            $row['avg_maximum_color'] = 'bg-success';
-
-        $avg_stddev_threshold = abs(($avg_max - $avg_min) / 2);
-        $row['avg_stddev_color'] = ($avg_stddev > $avg_stddev_threshold) ? 'bg-info' : 'bg-success';
-
-        if ($avg_loss < 2)
-            $row['avg_loss_color'] = 'bg-success';
-        elseif ($avg_loss < 5)
-            $row['avg_loss_color'] = 'bg-info';
-        elseif ($avg_loss < 13)
-            $row['avg_loss_color'] = 'bg-warning';
-        else
-            $row['avg_loss_color'] = 'bg-danger';
+        // Compute the color classes used by the table (current vs
+        // average comparisons, and range-based comparisons for the
+        // lifetime averages). See lib/monitor_metrics.php for the
+        // threshold definitions.
+        monitor_color_classes($row);
 
         // Update statistics
         $monitor_stats['total']++;
@@ -166,10 +103,10 @@ try {
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= htmlspecialchars($agent['name']) ?></title>
     <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <!-- DataTables -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.11/css/dataTables.bootstrap5.min.css">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/assets/base.css">
 </head>
@@ -247,9 +184,9 @@ try {
                         <li class="list-group-item">
                             <strong>Status:</strong><br/>
                             <?php if ($agent['is_active']): ?>
-                                <span class="badge bg-success">Active</span>
+                                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Active</span>
                             <?php else: ?>
-                                <span class="badge bg-warning">Inactive</span>
+                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Inactive</span>
                             <?php endif; ?>
                         </li>
                         <li class="list-group-item">
@@ -267,25 +204,25 @@ try {
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             Active Monitors
-                            <span class="badge bg-success rounded-pill">
+                            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle rounded-pill">
                                 <?= $monitor_stats['active'] ?>
                             </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             Inactive Monitors
-                            <span class="badge bg-warning rounded-pill">
+                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill">
                                 <?= $monitor_stats['inactive'] ?>
                             </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             Effectively Inactive
-                            <span class="badge bg-secondary rounded-pill">
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle rounded-pill">
                                 <?= $monitor_stats['effectively_inactive'] ?>
                             </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             Total Monitors
-                            <span class="badge bg-primary rounded-pill">
+                            <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle rounded-pill">
                                 <?= $monitor_stats['total'] ?>
                             </span>
                         </li>
@@ -298,30 +235,26 @@ try {
         <div class="col-md-9">
             <!-- Monitors Table -->
             <div class="table-responsive">
-                <table id="tablePager" class="table table-light table-bordered table-striped table-hover">
+                <table id="tablePager" class="table table-bordered table-striped table-hover" data-empty-message="No monitors found">
                     <thead>
                         <tr>
                             <th>Monitor</th>
                             <th>Target</th>
                             <th>Protocol</th>
-                            <th class="text-center table-primary">Median</th>
-                            <th class="text-center table-primary">Loss</th>
+                            <th class="text-center bg-primary-subtle">Median</th>
+                            <th class="text-center bg-primary-subtle">Loss</th>
                             <!--
-                            <th class="text-center table-secondary">Median</th>
-                            <th class="text-center table-secondary">Min</th>
-                            <th class="text-center table-secondary">Max</th>
-                            <th class="text-center table-secondary">Std Dev</th>
-                            <th class="text-center table-secondary">Loss</th>
+                            <th class="text-center bg-secondary-subtle">Median</th>
+                            <th class="text-center bg-secondary-subtle">Min</th>
+                            <th class="text-center bg-secondary-subtle">Max</th>
+                            <th class="text-center bg-secondary-subtle">Std Dev</th>
+                            <th class="text-center bg-secondary-subtle">Loss</th>
                             -->
                             <th class="text-center">Last Update</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php if (empty($monitors)): ?>
-                            <tr>
-                                <td colspan="11" class="text-center">No monitors found</td>
-                            </tr>
-                        <?php else: ?>
+                        <?php if (!empty($monitors)): ?>
                             <?php foreach ($monitors as $m): ?>
                                 <?php
                                 // Calculate effective status
@@ -332,7 +265,7 @@ try {
                                     continue;
                                 }
                                 ?>
-                                <tr class="<?= $effectively_active ? '' : 'table-secondary' ?>">
+                                <tr class="<?= $effectively_active ? '' : 'bg-secondary-subtle' ?>">
                                     <td>
                                         <?php if (!$effectively_active): ?>
                                             <del class="text-muted">
@@ -375,38 +308,38 @@ try {
                                             <?php endif; ?>
                                         </span>
                                     </td>
-                                    <td class="text-center table-primary">
+                                    <td class="text-center bg-primary-subtle">
                                         <span class="badge <?= $effectively_active ? $m['current_median_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['current_median']) ?>
                                         </span>
                                     </td>
-                                    <td class="text-center table-primary">
+                                    <td class="text-center bg-primary-subtle">
                                         <span class="badge <?= $effectively_active ? $m['current_loss_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['current_loss']) ?>%
                                         </span>
                                     </td>
                                     <!--
-                                    <td class="text-center table-secondary">
+                                    <td class="text-center bg-secondary-subtle">
                                         <span class="badge <?= $effectively_active ? $m['avg_median_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['avg_median']) ?>
                                         </span>
                                     </td>
-                                    <td class="text-center table-secondary">
+                                    <td class="text-center bg-secondary-subtle">
                                         <span class="badge <?= $effectively_active ? $m['avg_minimum_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['avg_min']) ?>
                                         </span>
                                     </td>
-                                    <td class="text-center table-secondary">
+                                    <td class="text-center bg-secondary-subtle">
                                         <span class="badge <?= $effectively_active ? $m['avg_maximum_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['avg_max']) ?>
                                         </span>
                                     </td>
-                                    <td class="text-center table-secondary">
+                                    <td class="text-center bg-secondary-subtle">
                                         <span class="badge <?= $effectively_active ? $m['avg_stddev_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['avg_stddev']) ?>
                                         </span>
                                     </td>
-                                    <td class="text-center table-secondary">
+                                    <td class="text-center bg-secondary-subtle">
                                         <span class="badge <?= $effectively_active ? $m['avg_loss_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['avg_loss']) ?>%
                                         </span>

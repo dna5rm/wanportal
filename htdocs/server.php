@@ -1,7 +1,6 @@
 <?php
-session_start();
 require_once 'config.php';
-
+wanportal_session_start();
 /**
  * Make API calls to the backend
  * @param string $endpoint API endpoint to call
@@ -133,8 +132,8 @@ $server_name = isset($_SERVER['SERVER_NAME']) ?
     <meta http-equiv="Expires" content="0" />
     <meta http-equiv="refresh" content="300">
     <title><?= $server_name ?> :: Statistics</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/assets/base.css">
 </head>
 <body>
@@ -217,15 +216,6 @@ $server_name = isset($_SERVER['SERVER_NAME']) ?
                     </table>
                 </div>
             </div>
-
-            <br />
-            <?php if (isset($_SESSION['user'])): ?>
-                <div class="card shadow rounded">
-                    <div class="card-body p-0">
-                        <?php phpinfo(); ?>
-                    </div>
-                </div>
-            <?php endif; ?>
 
             <br />
         </div>

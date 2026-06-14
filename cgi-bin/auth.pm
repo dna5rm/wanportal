@@ -98,11 +98,58 @@ sub _ldap_authenticate {
                     )
                  // $username;
 
-    # Step 3: Bind as the user to verify their password
-    my $user_bind = $ldap->bind($user_dn, password => $password);
-    $ldap->unbind;
+    # Step 3: Bind as the user to verify their password.
+    #
+    # Two non-obvious bits here, both for debuggability:
+    #
+    #   1. We open a FRESH Net::LDAP connection for the user-bind
+    #      step instead of reusing the service-bind connection.
+    #      Some LDAP servers (OpenLDAP included) reject a re-bind
+    #      on an already-bound connection with an unhelpful error,
+    #      and that rejection looks like a credential problem
+    #      even when it isn't one. A fresh connection sidesteps
+    #      the issue.
+    #
+    #   2. We eval-wrap the bind and set onerror => undef. The
+    #      outer $ldap object was created with onerror => 'die'
+    #      (set at the top of this function), so a failed bind
+    #      raises a Perl exception. If that exception bubbled up
+    #      to the caller it would be turned into a generic
+    #      "Invalid username or password" by the calling code,
+    #      making every LDAP failure mode look identical. We
+    #      catch the exception, log the actual LDAP error code
+    #      to the Apache error log, and return a normal failure
+    #      status.
+    my $user_ldap = Net::LDAP->new(
+        $cfg->{server_uri},
+        verify  => $cfg->{ignore_cert} ? 'none' : 'require',
+        onerror => undef,    # don't die; we'll check ->code below
+    );
+    if (!$user_ldap) {
+        warn "[auth.pm] LDAP user-bind connection failed: $@";
+        return (0, "LDAP connection failed for user-bind");
+    }
 
+    my $user_bind = eval { $user_ldap->bind($user_dn, password => $password) };
+    $user_ldap->unbind;
+    if ($@) {
+        # The Perl layer raised (typically because of onerror => 'die'
+        # being set somewhere upstream). $@ holds the exception
+        # text; we don't get LDAP error codes in this branch.
+        warn "[auth.pm] LDAP user-bind raised: $@";
+        return (0, "LDAP user-bind error: $@");
+    }
     if ($user_bind->code) {
+        # Bind returned cleanly but the LDAP server rejected the
+        # bind. error_name is the symbolic LDAP code (e.g.
+        # 'invalidCredentials'), error_text is human-readable,
+        # code is the numeric resultCode. Log all three so the
+        # next "I can't log in" debug session takes seconds
+        # instead of hours.
+        warn "[auth.pm] LDAP user-bind failed for $user_dn: "
+           . "code=" . $user_bind->code
+           . " name=" . ($user_bind->error_name // 'undef')
+           . " text=" . ($user_bind->error_text // 'undef');
         return (0, 'Invalid LDAP credentials');
     }
 

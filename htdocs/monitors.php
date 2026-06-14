@@ -41,60 +41,56 @@ if ($status === 200) {
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Monitors</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/assets/base.css">
 </head>
 <body>
 <?php include 'navbar.php'; ?>
 
 <div class="container-fluid">
+    <!-- Header Row: matches the Back | Home | action-button
+         layout used by the detail pages (agent.php, target.php,
+         monitor.php) so navigation is consistent across the app.
+         The previous `page_header()` rendered a Home > Monitors
+         breadcrumb, which looked like a "back to home" link and
+         was confusing on a listing page. -->
     <div class="row mb-3">
         <div class="col">
-            <h3>Monitor Management</h3>
+            <h3>Monitors</h3>
         </div>
         <div class="col text-end">
-            <a href="/monitors_edit.php" class="btn btn-primary btn-sm">
-                <i class="bi bi-plus-circle"></i> New Monitor
-            </a>
-        </div>
-    </div>
-
-    <!-- Search/Filter -->
-    <div class="row mb-3">
-        <div class="col">
-            <div class="card">
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-3">
-                            <input type="text" id="searchFilter" class="form-control" placeholder="Search monitors...">
-                        </div>
-                        <div class="col-md-2">
-                            <select id="protocolFilter" class="form-select">
-                                <option value="">All Protocols</option>
-                                <option value="ICMP">ICMP</option>
-                                <option value="ICMPV6">ICMPv6</option>
-                                <option value="TCP">TCP</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="showInactive" 
-                                       <?= $show_inactive ? 'checked' : '' ?>>
-                                <label class="form-check-label" for="showInactive">
-                                    Show Inactive
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div class="btn-group" role="group">
+                <!-- BACK -->
+                <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
+                    <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Back
+                    </a>
+                <?php endif; ?>
+                <!-- HOME -->
+                <a href="/index.php" class="btn btn-secondary btn-sm">
+                    <i class="bi bi-house-door"></i> Home
+                </a>
+                <!-- NEW (the listing-page equivalent of the
+                     detail pages' Edit button: a primary action
+                     to create a new record, matching the style
+                     already used on credentials.php). -->
+                <?php if (isset($_SESSION['user'])): ?>
+                    <a href="/monitors_edit.php" class="btn btn-primary btn-sm">
+                        <i class="bi bi-plus-circle"></i> New Monitor
+                    </a>
+                <?php endif; ?>
             </div>
         </div>
     </div>
+    <!-- Listing table: now using DataTables (auto-initialized
+         by assets/js/listings.js). Bespoke filter card above
+         removed in favor of DataTables' built-in search. -->
 
     <!-- Monitors Table -->
+    <div class="card mb-4">
     <div class="table-responsive">
-        <table class="table table-hover">
+        <table id="tablePager" class="table table-hover" data-order='[[6, "desc"]]'>
             <thead>
                 <tr>
                     <th>Description</th>
@@ -109,12 +105,7 @@ if ($status === 200) {
                 </tr>
             </thead>
             <tbody>
-                <?php if (empty($monitors)): ?>
-                    <tr>
-                        <td colspan="9" class="text-center">No monitors found</td>
-                    </tr>
-                <?php else: ?>
-                    <?php foreach ($monitors as $monitor): ?>
+        <?php foreach ($monitors as $monitor): ?>
                         <?php
                         // Calculate effective active status
                         $effectively_active = ($monitor['is_active'] == 1 && 
@@ -123,9 +114,10 @@ if ($status === 200) {
                         ?>
                         <tr class="<?= $effectively_active ? '' : 'table-secondary' ?>">
                             <td>
-                                <a href="/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>" class="btn btn-sm">
-                                    <i class="bi bi-arrow-bar-left"></i>
-                                </a> <?= htmlspecialchars($monitor['description']) ?></td>
+                                <a href="/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>" class="text-decoration-none">
+                                    <?= htmlspecialchars($monitor['description']) ?>
+                                </a>
+                            </td>
                             <td>
                                 <a href="/agents_edit.php?id=<?= htmlspecialchars($monitor['agent_id']) ?>"
                                    class="<?= $monitor['agent_is_active'] == 1 ? '' : 'text-muted' ?>">
@@ -144,7 +136,7 @@ if ($status === 200) {
                             <td><?= $monitor['port'] ? htmlspecialchars($monitor['port']) : '-' ?></td>
                             <td><?= htmlspecialchars($monitor['dscp']) ?></td>
                             <td>
-                                <span class="badge bg-<?= $effectively_active ? 'success' : 'warning' ?>">
+                                <span class="badge bg-<?= $effectively_active ? 'success-subtle text-success-emphasis border border-success-subtle' : 'warning-subtle text-warning-emphasis border border-warning-subtle' ?>">
                                     <?php if ($effectively_active): ?>
                                         Active
                                     <?php else: ?>
@@ -185,83 +177,28 @@ if ($status === 200) {
                             </td>
                         </tr>
                     <?php endforeach; ?>
-                <?php endif; ?>
             </tbody>
         </table>
     </div>
 </div>
+</div>
 
 <?php include 'footer.php'; ?>
 
+
 <script>
-// Filter functionality
-document.getElementById('searchFilter').addEventListener('input', filterMonitors);
-document.getElementById('protocolFilter').addEventListener('change', filterMonitors);
-document.getElementById('showInactive').addEventListener('change', function() {
-    window.location.href = '?show_inactive=' + this.checked;
-});
-
-function filterMonitors() {
-    const search = document.getElementById('searchFilter').value.toLowerCase();
-    const protocol = document.getElementById('protocolFilter').value;
-    const showInactive = document.getElementById('showInactive').checked;
-    
-    const rows = document.querySelectorAll('tbody tr');
-    
-    rows.forEach(row => {
-        if (row.cells.length < 2) return; // Skip empty table messages
-        
-        const description = row.cells[0].textContent.toLowerCase();
-        const agent = row.cells[1].textContent.toLowerCase();
-        const target = row.cells[2].textContent.toLowerCase();
-        const rowProtocol = row.cells[3].textContent;
-        
-        // Check if row is inactive (has table-secondary class)
-        const isInactive = row.classList.contains('table-secondary');
-        
-        const searchMatch = description.includes(search) || 
-                          agent.includes(search) || 
-                          target.includes(search);
-        const protocolMatch = !protocol || rowProtocol === protocol;
-        
-        // Hide inactive rows unless showInactive is checked
-        let shouldShow = searchMatch && protocolMatch;
-        if (isInactive && !showInactive) {
-            shouldShow = false;
-        }
-        
-        row.style.display = shouldShow ? '' : 'none';
-    });
-}
-
-// Apply initial filtering on page load
-window.addEventListener('DOMContentLoaded', function() {
-    // Ensure initial filter is applied
-    filterMonitors();
-});
-
-// Delete confirmation
-function deleteMonitor(id, description) {
-    if (confirm(`Are you sure you want to delete monitor "${description}"?\nThis will also delete its RRD file.`)) {
-        fetch(`/cgi-bin/api/monitor/${id}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': 'Bearer <?= $_SESSION['token'] ?? '' ?>'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                location.reload();
-            } else {
-                alert('Error deleting monitor: ' + data.message);
-            }
-        })
-        .catch(error => {
-            alert('Error: ' + error);
-        });
+// Surface a toast on the listing page when the user was just
+// redirected here from an *edit.php save (the edit form
+// appends ?saved=1 on success). We strip the query param
+// after firing so a refresh doesn't re-toast.
+wanportalPageOnLoad = function() {
+    var url = new URL(window.location.href);
+    if (url.searchParams.get('saved') === '1') {
+        showToast('Monitor saved', 'success');
+        url.searchParams.delete('saved');
+        window.history.replaceState({}, '', url.toString());
     }
-}
+};
 </script>
 </body>
 </html>

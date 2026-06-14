@@ -58,78 +58,87 @@ if ($id) {
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Collect form data
-    $cred = [
-        'name' => $_POST['name'] ?? '',
-        'type' => $_POST['type'] ?? '',
-        'site' => $_POST['site'] ?? '',
-        'username' => $_POST['username'] ?? '',
-        'password' => $_POST['password'] ?? '',
-        'url' => $_POST['url'] ?? '',
-        'owner' => $_POST['owner'] ?? '',
-        'comment' => $_POST['comment'] ?? '',
-        'sensitivity' => $_POST['sensitivity'] ?? 'MEDIUM',
-        'metadata' => $_POST['metadata'] ?? '',
-        'expiry_date' => $_POST['expiry_date'] ?? null,
-        'is_active' => isset($_POST['is_active'])
-    ];
-
-    // Validate required fields
-    if (empty($cred['name']) || empty($cred['type'])) {
-        $error = 'Name and Type are required fields.';
+    // CSRF check (closes the cross-site form-submission
+    // gap). The token is rendered as a hidden input by the
+    // template below; this verifies the posted value
+    // matches the session token.
+    if (!wanportal_csrf_valid()) {
+        $error = 'Invalid CSRF token. Please reload the page and try again.';
     } else {
-        // Validate metadata JSON if provided
-        if (!empty($cred['metadata'])) {
-            json_decode($cred['metadata']);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                $error = 'Invalid JSON in metadata field.';
-            }
-        }
+        // Collect form data
+        $cred = [
+            'name' => $_POST['name'] ?? '',
+            'type' => $_POST['type'] ?? '',
+            'site' => $_POST['site'] ?? '',
+            'username' => $_POST['username'] ?? '',
+            'password' => $_POST['password'] ?? '',
+            'url' => $_POST['url'] ?? '',
+            'owner' => $_POST['owner'] ?? '',
+            'comment' => $_POST['comment'] ?? '',
+            'sensitivity' => $_POST['sensitivity'] ?? 'MEDIUM',
+            'metadata' => $_POST['metadata'] ?? '',
+            'expiry_date' => $_POST['expiry_date'] ?? null,
+            'is_active' => isset($_POST['is_active'])
+        ];
 
-        if (!$error) {
-            // Prepare data for API
-            $apiData = array_filter($cred, function($value) {
-                return $value !== '';
-            });
-
-            // Make API request
-            $ch = curl_init();
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER => [
-                    "Authorization: Bearer " . $_SESSION['token'],
-                    "Content-Type: application/json"
-                ]
-            ]);
-
-            if ($id) {
-                // Update existing credential
-                curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/credentials/$id");
-                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
-            } else {
-                // Create new credential
-                curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/credentials");
-                curl_setopt($ch, CURLOPT_POST, true);
-            }
-
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($apiData));
-            
-            $response = curl_exec($ch);
-            $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($status === 200) {
-                $data = json_decode($response, true);
-                if ($data['status'] === 'success') {
-                    header('Location: /credentials.php');
-                    exit;
-                } else {
-                    $error = $data['message'] ?? 'Unknown error occurred';
+        // Validate required fields
+        if (empty($cred['name']) || empty($cred['type'])) {
+            $error = 'Name and Type are required fields.';
+        } else {
+            // Validate metadata JSON if provided
+            if (!empty($cred['metadata'])) {
+                json_decode($cred['metadata']);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    $error = 'Invalid JSON in metadata field.';
                 }
-            } else {
-                $error = 'Failed to save credential';
+            }
+
+            if (!$error) {
+                // Prepare data for API
+                $apiData = array_filter($cred, function($value) {
+                    return $value !== '';
+                });
+
+                // Make API request
+                $ch = curl_init();
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_HTTPHEADER => [
+                        "Authorization: Bearer " . $_SESSION['token'],
+                        "Content-Type: application/json"
+                    ]
+                ]);
+
+                if ($id) {
+                    // Update existing credential
+                    curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/credentials/$id");
+                    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+                } else {
+                    // Create new credential
+                    curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/credentials");
+                    curl_setopt($ch, CURLOPT_POST, true);
+                }
+
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($apiData));
+            
+                $response = curl_exec($ch);
+                $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+
+                if ($status === 200) {
+                    $data = json_decode($response, true);
+                    if ($data['status'] === 'success') {
+                        header('Location: /credentials.php?saved=1');
+                        exit;
+                    } else {
+                        $error = $data['message'] ?? 'Unknown error occurred';
+                    }
+                } else {
+                    $error = 'Failed to save credential';
+                }
             }
         }
+
     }
 }
 ?>
@@ -141,8 +150,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= $id ? 'Edit' : 'New' ?> Credential</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/assets/base.css">
 </head>
 <body>
@@ -167,6 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php endif; ?>
 
     <form method="POST" class="row g-3">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
         <div class="col-md-6">
             <div class="card">
                 <div class="card-body">

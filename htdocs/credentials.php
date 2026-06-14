@@ -87,10 +87,7 @@ if ($status === 200) {
                         <div class="col-md-3">
                             <input type="text" id="siteFilter" class="form-control" placeholder="Filter by site...">
                         </div>
-                        <div class="col-md-4">
-                            <input type="text" id="searchFilter" class="form-control" placeholder="Search...">
-                        </div>
-<div class="col-md-2">
+<div class="col-md-3">
     <select id="activeFilter" class="form-select form-select-sm">
         <option value="1">Active</option>
         <option value="0">Inactive</option>
@@ -104,7 +101,7 @@ if ($status === 200) {
 
     <!-- Credentials Table -->
     <div class="table-responsive">
-        <table class="table table-bordered table-striped table-hover <?= ($is_active == '0') ? 'table-dark' : '' ?> rounded-bottom">
+        <table id="tablePager" class="table table-bordered table-striped table-hover <?= ($is_active == '0') ? 'table-dark' : '' ?> rounded-bottom">
             <thead>
                 <tr>
                     <th>Name</th>
@@ -176,7 +173,6 @@ if ($status === 200) {
 // Filter functionality
 document.getElementById('typeFilter').addEventListener('change', filterCredentials);
 document.getElementById('siteFilter').addEventListener('input', filterCredentials);
-document.getElementById('searchFilter').addEventListener('input', filterCredentials);
 document.getElementById('activeFilter').addEventListener('change', function() {
     // Debug log
     console.log('Changing active filter to:', this.value);
@@ -207,18 +203,14 @@ function getBadgeColor(type) {
 function filterCredentials() {
     const type = document.getElementById('typeFilter').value.toLowerCase();
     const site = document.getElementById('siteFilter').value.toLowerCase();
-    const search = document.getElementById('searchFilter').value.toLowerCase();
 
     const rows = document.querySelectorAll('tbody tr');
 
     rows.forEach(row => {
         const typeMatch = !type || row.querySelector('td:nth-child(2)').textContent.toLowerCase().includes(type);
         const siteMatch = !site || row.querySelector('td:nth-child(3)').textContent.toLowerCase().includes(site);
-        const searchMatch = !search || Array.from(row.querySelectorAll('td')).some(td =>
-            td.textContent.toLowerCase().includes(search)
-        );
-        
-        row.style.display = (typeMatch && siteMatch && searchMatch) ? '' : 'none';
+
+        row.style.display = (typeMatch && siteMatch) ? '' : 'none';
     });
 }
 

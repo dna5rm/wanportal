@@ -1,7 +1,6 @@
 <?php
-session_start();
 require_once 'config.php';
-
+wanportal_session_start();
 // Check if user already logged in
 if (isset($_SESSION['user'])) {
     header('Location: /index.php');
@@ -78,7 +77,7 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Login</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/base.css">
     <style>
         .login-container {

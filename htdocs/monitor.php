@@ -1,7 +1,6 @@
 <?php
-session_start();
 require_once 'config.php';
-
+wanportal_session_start();
 $id = $_GET['id'] ?? '';
 if (!$id) die("No monitor ID specified");
 
@@ -65,74 +64,11 @@ try {
         'effectively_active' => $monitor['is_active'] && $monitor['agent_is_active'] && $monitor['target_is_active']
     ];
 
-    // Calculate status colors
-    $current_median = floatval($monitor['current_median']);
-    $current_loss = floatval($monitor['current_loss']);
-    $avg_median = floatval($monitor['avg_median']);
-    $avg_min = floatval($monitor['avg_min']);
-    $avg_max = floatval($monitor['avg_max']);
-    $avg_stddev = floatval($monitor['avg_stddev']);
-    $avg_loss = floatval($monitor['avg_loss']);
-
-    // Add color classes based on thresholds
-    if ($current_median > $avg_median + 2*$avg_stddev)
-        $monitor['current_median_color'] = 'bg-danger';
-    elseif ($current_median > $avg_median)
-        $monitor['current_median_color'] = 'bg-warning';
-    elseif ($current_median == $avg_median)
-        $monitor['current_median_color'] = 'bg-info';
-    else
-        $monitor['current_median_color'] = 'bg-success';
-
-    // Current loss thresholds
-    if ($current_loss >= 75)
-        $monitor['current_loss_color'] = 'bg-danger';
-    elseif ($current_loss >= 50)
-        $monitor['current_loss_color'] = 'bg-warning';
-    elseif ($current_loss >= 2)
-        $monitor['current_loss_color'] = 'bg-info';
-    else
-        $monitor['current_loss_color'] = 'bg-success';
-
-    // Average metrics colors
-    if ($avg_median > $avg_median + 2*$avg_stddev)
-        $monitor['avg_median_color'] = 'bg-danger';
-    elseif ($avg_median > $avg_median + $avg_stddev)
-        $monitor['avg_median_color'] = 'bg-warning';
-    elseif ($avg_median >= $avg_median)
-        $monitor['avg_median_color'] = 'bg-info';
-    else
-        $monitor['avg_median_color'] = 'bg-success';
-
-    if ($avg_min <= ($avg_median - 3*$avg_stddev))
-        $monitor['avg_minimum_color'] = 'bg-danger';
-    elseif ($avg_min <= ($avg_median - 2*$avg_stddev))
-        $monitor['avg_minimum_color'] = 'bg-warning';
-    elseif ($avg_min <= ($avg_median - $avg_stddev))
-        $monitor['avg_minimum_color'] = 'bg-info';
-    else
-        $monitor['avg_minimum_color'] = 'bg-success';
-
-    if ($avg_max >= ($avg_median + 3*$avg_stddev))
-        $monitor['avg_maximum_color'] = 'bg-danger';
-    elseif ($avg_max >= ($avg_median + 2*$avg_stddev))
-        $monitor['avg_maximum_color'] = 'bg-warning';
-    elseif ($avg_max >= ($avg_median + $avg_stddev))
-        $monitor['avg_maximum_color'] = 'bg-info';
-    else
-        $monitor['avg_maximum_color'] = 'bg-success';
-
-    $avg_stddev_threshold = abs(($avg_max - $avg_min) / 2);
-    $monitor['avg_stddev_color'] = ($avg_stddev > $avg_stddev_threshold) ? 'bg-info' : 'bg-success';
-
-    if ($avg_loss < 2)
-        $monitor['avg_loss_color'] = 'bg-success';
-    elseif ($avg_loss < 5)
-        $monitor['avg_loss_color'] = 'bg-info';
-    elseif ($avg_loss < 13)
-        $monitor['avg_loss_color'] = 'bg-warning';
-    else
-        $monitor['avg_loss_color'] = 'bg-danger';
+    // Compute the color classes used by the lifetime-average table
+    // and the "current" badges (current vs average comparisons, and
+    // range-based comparisons for the lifetime averages). See
+    // lib/monitor_metrics.php for the threshold definitions.
+    monitor_color_classes($monitor);
 
 } catch (Exception $e) {
     die("Error: " . $e->getMessage());
@@ -147,13 +83,13 @@ try {
     <meta http-equiv="Expires" content="0" />
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= htmlspecialchars($monitor['description']) ?></title>
     <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <!-- DataTables -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.11/css/dataTables.bootstrap5.min.css">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/assets/base.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         .chart-container {
@@ -252,9 +188,9 @@ try {
                         <li class="list-group-item">
                             <strong>Status:</strong><br/>
                             <?php if ($monitor['is_active'] && $monitor['agent_is_active'] && $monitor['target_is_active']): ?>
-                                <span class="badge bg-success">Active</span>
+                                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Active</span>
                             <?php else: ?>
-                                <span class="badge bg-warning">Inactive</span>
+                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Inactive</span>
                                 <sup>
                                     <?php if (!$monitor['is_active']): ?>
                                         <small>(Monitor disabled)</small>
@@ -279,13 +215,13 @@ try {
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             Total Samples
-                            <span class="badge bg-primary rounded-pill">
+                            <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle rounded-pill">
                                 <?= $monitor_stats['total_samples'] ?>
                             </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             Total Down Events
-                            <span class="badge bg-danger rounded-pill">
+                            <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle rounded-pill">
                                 <?= $monitor_stats['total_down'] ?>
                             </span>
                         </li>
@@ -400,7 +336,7 @@ try {
 
 <?php include 'footer.php'; ?>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script>
 let chart;
