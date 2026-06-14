@@ -79,7 +79,7 @@ $server_name = isset($_SERVER['SERVER_NAME']) ?
     <!-- Latency Table -->
     <div class="table-responsive">
         <table id="tablePager" class="table table-striped table-hover" data-empty-message="No latency issues detected">
-            <thead class="table-light">
+            <thead>
                 <tr>
                     <th>Monitor</th>
                     <th>Agent</th>
@@ -98,13 +98,15 @@ $server_name = isset($_SERVER['SERVER_NAME']) ?
                     // Calculate how much over threshold
                     $percentOver = (($monitor['current_median'] - $threshold) / $threshold) * 100;
 
-                    // Determine severity class based on percentage over threshold
+                    // Determine severity class based on percentage over threshold.
+                    // Use bg-*-subtle (not table-*) so the row tints flip
+                    // cleanly with the dark-mode theme.
                     if ($percentOver >= 100) {
-                        $rowClass = 'table-danger';      // More than double the threshold
+                        $rowClass = 'bg-danger-subtle text-danger-emphasis';   // More than double the threshold
                     } elseif ($percentOver >= 50) {
-                        $rowClass = 'table-warning';     // 50-100% over threshold
+                        $rowClass = 'bg-warning-subtle text-warning-emphasis'; // 50-100% over threshold
                     } else {
-                        $rowClass = 'table-info';        // Up to 50% over threshold
+                        $rowClass = 'bg-info-subtle text-info-emphasis';       // Up to 50% over threshold
                     }
                     ?>
                     <tr class="<?= $rowClass ?>">

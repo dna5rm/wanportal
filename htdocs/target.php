@@ -347,6 +347,25 @@ try {
 </div>
 
 <?php include 'footer.php'; ?>
+
+<script>
+    // Persist the "Show Inactive" toggle across page navigations.
+    // The PHP session keeps the value once it's set, so we just
+    // round-trip the new value through the URL on every change.
+    // Preserves all other query params (e.g. ?id=...) and the
+    // hash fragment. Listings pages (agents/targets/monitors) have
+    // their own client-side filter via listings.js and don't need
+    // this hook.
+    window.pageSpecificScripts = function () {
+        var toggle = document.getElementById('showInactive');
+        if (!toggle) { return; }
+        toggle.addEventListener('change', function () {
+            var url = new URL(window.location.href);
+            url.searchParams.set('show_inactive', toggle.checked ? 'true' : 'false');
+            window.location.assign(url.toString());
+        });
+    };
+</script>
 </body>
 </html>
 <?php $mysqli->close(); ?>

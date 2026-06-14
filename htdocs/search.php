@@ -196,15 +196,15 @@ try {
         <div class="col-md-9">
             <!-- Results Table -->
             <div class="table-responsive">
-                <table id="tablePager" class="table table-light table-bordered table-striped table-hover" data-empty-message="No results found">
-                    <thead>                     
+                <table id="tablePager" class="table table-bordered table-striped table-hover" data-empty-message="No results found">
+                    <thead>
                         <tr>
                             <th>Monitor</th>
                             <th>Agent</th>
                             <th>Target</th>
                             <th>Protocol</th>
-                            <th class="text-center table-primary">Median</th>
-                            <th class="text-center table-primary">Loss</th>
+                            <th class="text-center bg-primary-subtle">Median</th>
+                            <th class="text-center bg-primary-subtle">Loss</th>
                             <th class="text-center">Last Update</th>
                         </tr>
                     </thead>
@@ -249,12 +249,12 @@ try {
                                             <?php endif; ?>
                                         </span>
                                     </td>
-                                    <td class="text-center table-primary">
+                                    <td class="text-center bg-primary-subtle">
                                         <span class="badge <?= $m['effectively_active'] ? $m['current_median_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['current_median']) ?>
                                         </span>
                                     </td>
-                                    <td class="text-center table-primary">
+                                    <td class="text-center bg-primary-subtle">
                                         <span class="badge <?= $m['effectively_active'] ? $m['current_loss_color'] : 'bg-secondary' ?>">
                                             <?= htmlspecialchars($m['current_loss']) ?>%
                                         </span>
@@ -277,6 +277,25 @@ try {
 </div>
 
 <?php include 'footer.php'; ?>
+
+<script>
+    // Persist the "Show Inactive" toggle across page navigations.
+    // The PHP session keeps the value once it's set, so we just
+    // round-trip the new value through the URL on every change.
+    // Preserves all other query params (e.g. ?id=..., ?start=...,
+    // ?end=...) and the hash fragment. Listing pages
+    // (agents/targets/monitors) have their own client-side filter
+    // via listings.js and don't need this hook.
+    window.pageSpecificScripts = function () {
+        var toggle = document.getElementById('showInactive');
+        if (!toggle) { return; }
+        toggle.addEventListener('change', function () {
+            var url = new URL(window.location.href);
+            url.searchParams.set('show_inactive', toggle.checked ? 'true' : 'false');
+            window.location.assign(url.toString());
+        });
+    };
+</script>
 </body>
 </html>
 <?php $mysqli->close(); ?>
