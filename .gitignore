@@ -9,6 +9,7 @@
 !htdocs/
 !htdocs/lib/
 !htdocs/favicon.ico
+!htdocs/assets/js/
 !htdocs/assets/kinetic.*
 !docker-compose.yml
 !Dockerfile*
