@@ -79,10 +79,29 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Login</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/base.css">
+    <script>
+        // Apply the persisted dark-mode choice *before* paint so dark-mode
+        // users don't see a flash of the light background. The full toggle
+        // and persistence lives in footer.php; this just mirrors its
+        // restore-from-localStorage step synchronously in <head>.
+        (function () {
+            try {
+                if (localStorage.getItem('wanportal-theme') === 'dark') {
+                    document.documentElement.setAttribute('data-bs-theme', 'dark');
+                }
+            } catch (e) { /* localStorage may be disabled; default to light */ }
+        })();
+    </script>
     <style>
         .login-container {
             min-height: calc(100vh - 72px); /* Account for navbar height */
-            background-color: #f8f9fa;
+            /* Use Bootstrap's --bs-body-bg so the page area matches the
+               body color and blends with the navbar in both themes.
+               The previous --bs-tertiary-bg created a hard 1px line at
+               the navbar boundary (#f8f9fa in light, #2b3035 in dark
+               against the navy navbar) that read as a separator even
+               after we removed the box-shadow. */
+            background-color: var(--bs-body-bg);
         }
         .login-card {
             min-width: 320px;
@@ -102,6 +121,20 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         .btn-primary:hover {
             background-color: #0c6590;
             border-color: #0c6590;
+        }
+        /* Dark-mode: soften the card shadow and use the same darker
+           btn-primary shade that the rest of the app uses. */
+        [data-bs-theme="dark"] .login-card {
+            --bs-card-bg: var(--bs-body-bg);
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.5) !important;
+        }
+        [data-bs-theme="dark"] .btn-primary {
+            background-color: #0c6590;
+            border-color: #0c6590;
+        }
+        [data-bs-theme="dark"] .btn-primary:hover {
+            background-color: #0a5378;
+            border-color: #0a5378;
         }
         .alert {
             padding: 0.5rem 1rem;

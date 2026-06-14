@@ -64,6 +64,15 @@ try {
         'effectively_active' => $monitor['is_active'] && $monitor['agent_is_active'] && $monitor['target_is_active']
     ];
 
+    // Mirror `effectively_active` onto the monitor row itself. The
+    // template uses `$monitor['effectively_active']` in several
+    // places (lifetime-average badges at lines ~265-285, the
+    // auto-refresh block at line ~394); without this, those reads
+    // emit "Undefined array key" warnings and the ternaries fall
+    // through to the `bg-secondary` (inactive) fallback for every
+    // monitor, on every page load.
+    $monitor['effectively_active'] = $monitor_stats['effectively_active'];
+
     // Compute the color classes used by the lifetime-average table
     // and the "current" badges (current vs average comparisons, and
     // range-based comparisons for the lifetime averages). See
@@ -262,27 +271,27 @@ try {
                             <tbody>
                                 <tr>
                                     <td class="text-center">
-                                        <span class="badge <?= $monitor['effectively_active'] ? $monitor['avg_median_color'] : 'bg-secondary' ?>">
+                                        <span class="badge <?= $monitor['effectively_active'] ? $monitor['avg_median_color'] : 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle' ?>">
                                             <?= htmlspecialchars($monitor['avg_median']) ?>
                                         </span>
                                     </td>
                                     <td class="text-center">
-                                        <span class="badge <?= $monitor['effectively_active'] ? $monitor['avg_minimum_color'] : 'bg-secondary' ?>">
+                                        <span class="badge <?= $monitor['effectively_active'] ? $monitor['avg_minimum_color'] : 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle' ?>">
                                             <?= htmlspecialchars($monitor['avg_min']) ?>
                                         </span>
                                     </td>
                                     <td class="text-center">
-                                        <span class="badge <?= $monitor['effectively_active'] ? $monitor['avg_maximum_color'] : 'bg-secondary' ?>">
+                                        <span class="badge <?= $monitor['effectively_active'] ? $monitor['avg_maximum_color'] : 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle' ?>">
                                             <?= htmlspecialchars($monitor['avg_max']) ?>
                                         </span>
                                     </td>
                                     <td class="text-center">
-                                        <span class="badge <?= $monitor['effectively_active'] ? $monitor['avg_stddev_color'] : 'bg-secondary' ?>">
+                                        <span class="badge <?= $monitor['effectively_active'] ? $monitor['avg_stddev_color'] : 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle' ?>">
                                             <?= htmlspecialchars($monitor['avg_stddev']) ?>
                                         </span>
                                     </td>
                                     <td class="text-center">
-                                        <span class="badge <?= $monitor['effectively_active'] ? $monitor['avg_loss_color'] : 'bg-secondary' ?>">
+                                        <span class="badge <?= $monitor['effectively_active'] ? $monitor['avg_loss_color'] : 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle' ?>">
                                             <?= htmlspecialchars($monitor['avg_loss']) ?>%
                                         </span>
                                     </td>

@@ -49,7 +49,7 @@ endif;
 $current_page = basename($_SERVER['PHP_SELF']);
 ?>
 
-<nav class="navbar navbar-expand navbar-dark mb-4" style="background-color: #102444; box-shadow: 0 3px 10px #000000;">
+<nav class="navbar navbar-expand navbar-dark mb-4" style="background-color: #102444; border-bottom: 0;">
     <div class="container-fluid">
         <!-- Brand and toggler -->
         <a class="navbar-brand d-flex align-items-center" href="/">
