@@ -160,27 +160,27 @@ try {
                         <hr />
                         <div class="installation-steps">
                             <p><strong>To load the image:</strong></p>
-                            <pre class="bg-light p-2 rounded text-wrap"><code>gunzip -c netping_latest.tar.gz | docker load</code></pre>
-                            
+                            <pre class="bg-secondary-subtle p-2 rounded text-wrap"><code>gunzip -c netping_latest.tar.gz | docker load</code></pre>
+
                             <p><strong>To run the container:</strong></p>
                             <?php if ($agent): ?>
-                                <pre class="bg-light p-2 rounded text-wrap"><code>docker run -d --name netping-<?= strtolower(htmlspecialchars($agent['name'])) ?> --network host --restart unless-stopped -e SERVER="https://<?= htmlspecialchars($server_name) ?>/cgi-bin/api" -e AGENT_ID="<?= htmlspecialchars($agent['id']) ?>" -e PASSWORD="<?= htmlspecialchars($agent['password']) ?>" netping:latest</code></pre>
+                                <pre class="bg-secondary-subtle p-2 rounded text-wrap"><code>docker run -d --name netping-<?= strtolower(htmlspecialchars($agent['name'])) ?> --network host --restart unless-stopped -e SERVER="https://<?= htmlspecialchars($server_name) ?>/cgi-bin/api" -e AGENT_ID="<?= htmlspecialchars($agent['id']) ?>" -e PASSWORD="<?= htmlspecialchars($agent['password']) ?>" netping:latest</code></pre>
                             <?php else: ?>
-                                <pre class="bg-light p-2 rounded text-wrap"><code>docker run -d --name netping-agent --network host --restart unless-stopped -e SERVER="https://<?= htmlspecialchars($server_name) ?>/cgi-bin/api" -e AGENT_ID="&lt;AGENT_ID&gt;" -e PASSWORD="&lt;PASSWORD&gt;" netping:latest</code></pre>
+                                <pre class="bg-secondary-subtle p-2 rounded text-wrap"><code>docker run -d --name netping-agent --network host --restart unless-stopped -e SERVER="https://<?= htmlspecialchars($server_name) ?>/cgi-bin/api" -e AGENT_ID="&lt;AGENT_ID&gt;" -e PASSWORD="&lt;PASSWORD&gt;" netping:latest</code></pre>
                             <?php endif; ?>
 
                             <p><strong>To verify the container is running:</strong></p>
                             <?php if ($agent): ?>
-                            <pre class="bg-light p-2 rounded text-wrap"><code>docker ps | grep netping-<?= strtolower(htmlspecialchars($agent['name'])) ?></code></pre>
+                            <pre class="bg-secondary-subtle p-2 rounded text-wrap"><code>docker ps | grep netping-<?= strtolower(htmlspecialchars($agent['name'])) ?></code></pre>
                             <?php else: ?>
-                            <pre class="bg-light p-2 rounded text-wrap"><code>docker ps | grep netping-agent</code></pre>
+                            <pre class="bg-secondary-subtle p-2 rounded text-wrap"><code>docker ps | grep netping-agent</code></pre>
                             <?php endif; ?>
 
                             <p><strong>To view container logs:</strong></p>
                             <?php if ($agent): ?>
-                            <pre class="bg-light p-2 rounded text-wrap"><code>docker logs netping-<?= strtolower(htmlspecialchars($agent['name'])) ?></code></pre>
+                            <pre class="bg-secondary-subtle p-2 rounded text-wrap"><code>docker logs netping-<?= strtolower(htmlspecialchars($agent['name'])) ?></code></pre>
                             <?php else: ?>
-                            <pre class="bg-light p-2 rounded text-wrap"><code>docker logs netping-agent</code></pre>
+                            <pre class="bg-secondary-subtle p-2 rounded text-wrap"><code>docker logs netping-agent</code></pre>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -195,8 +195,17 @@ try {
                     <!-- Hidden input for copy functionality -->
                     <input type="hidden" id="codeContent" value="<?= htmlspecialchars($content) ?>" />
                     
-                    <!-- Displayed code with syntax highlighting -->
-                    <pre class="m-0"><code class="language-perl line-numbers"><?= htmlspecialchars($content) ?></code></pre>
+                    <!-- Displayed code with syntax highlighting.
+                         The <pre> needs a "language-" class for
+                         Prism's okaidia theme to apply its dark
+                         background -- without it, the <code>'s
+                         light foreground renders against the page
+                         background and the script is unreadable in
+                         light mode. With language-perl on both
+                         elements, the dark code block stands out in
+                         both themes (the standard "code block" look)
+                         and Prism's Perl grammar highlights it. -->
+                    <pre class="m-0 language-perl"><code class="language-perl line-numbers"><?= htmlspecialchars($content) ?></code></pre>
                 </div>
             </div>
         </div>
