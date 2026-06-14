@@ -343,9 +343,20 @@ try {
 
             <!-- Network Performance Graph -->
             <div class="mb-3">
-                <div class="d-flex flex-column" style="height: 60vh;">
+                <!-- The chart/legacy container is given a min-height
+                     so the modern chart has a usable area on first
+                     paint (before data arrives) and so the layout
+                     doesn't collapse around an empty canvas. The
+                     wrapper itself is *not* height-constrained —
+                     letting it grow to fit the legacy images means
+                     the time-range form sits below whatever the
+                     graph produces, with its 2.5rem margin-bottom
+                     providing real breathing room above the page
+                     footer instead of being clipped by a 60vh
+                     column's edge. -->
+                <div class="d-flex flex-column">
                     <div class="flex-grow-1 d-flex flex-column">
-                        <div id="chartContainer" class="flex-grow-1">
+                        <div id="chartContainer" class="flex-grow-1" style="min-height: 60vh;">
                             <canvas id="networkChart"></canvas>
                         </div>
 
