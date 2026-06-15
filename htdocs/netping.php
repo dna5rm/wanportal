@@ -2,6 +2,7 @@
 // netping.php
 
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
 // Allow Authenticated users to view the script.
 
@@ -72,47 +73,19 @@ try {
 } catch (Exception $e) {
     die("Error: " . $e->getMessage());
 }
+// Prism syntax highlighting: the CSS lives in <head>, the JS
+// after the page content. We pass both through head_extras
+// because that's the only place to inject <script src> in the
+// page chrome.
+$head_extras  = '    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism-okaidia.min.css" rel="stylesheet" />' . "\n";
+$head_extras .= '    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />' . "\n";
+$head_extras .= '    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/prism.min.js"></script>' . "\n";
+$head_extras .= '    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-perl.min.js"></script>' . "\n";
+$head_extras .= '    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/line-numbers/prism-line-numbers.min.js"></script>' . "\n";
+
+wanportal_render_head(basename(htmlspecialchars($filename)), ['head_extras' => $head_extras]);
+wanportal_render_header_row('Script: ' . basename(htmlspecialchars($filename, ENT_QUOTES, 'UTF-8')));
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= basename(htmlspecialchars($filename)) ?></title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism-okaidia.min.css" rel="stylesheet" />
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="/assets/base.css">
-</head>
-<body>
-<?php include 'navbar.php'; ?>
-
-<div class="container-fluid">
-    <!-- Header Row -->
-    <div class="row mb-3">
-        <div class="col">
-            <h3>
-                Script: <?= basename(htmlspecialchars($filename)) ?>
-            </h3>
-        </div>
-        <div class="col text-end">
-            <div class="btn-group" role="group">
-                <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
-                    <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-arrow-left"></i> Back
-                    </a>
-                <?php endif; ?>                
-                <a href="/index.php" class="btn btn-secondary btn-sm">
-                    <i class="bi bi-house-door"></i> Home
-                </a>
-            </div>
-        </div>
-    </div>
-
-    <div class="row">
         <div class="col-md-3">
             <!-- Script Info Column -->
             <div class="card mb-3">
@@ -212,10 +185,4 @@ try {
     </div>
 </div>
 
-<?php include 'footer.php'; ?>
-<!-- Include Prism.js and its plugins -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/prism.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-perl.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/line-numbers/prism-line-numbers.min.js"></script>
-</body>
-</html>
+<?php wanportal_render_page_end(); ?>

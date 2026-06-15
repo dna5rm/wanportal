@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
 
 // Fetch monitors from API
@@ -35,46 +36,15 @@ if ($status === 200) {
 $server_name = isset($_SERVER['SERVER_NAME']) ?
     strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0]) :
     'NETPING';
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <meta http-equiv="refresh" content="300">
-    <title><?= $server_name ?> :: Latency Report</title>
-    <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
-    <!-- DataTables -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.11/css/dataTables.bootstrap5.min.css">
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="/assets/base.css">
-</head>
-<body>
-<?php include 'navbar.php'; ?>
 
-<div class="container-fluid">
-    <!-- Header Row -->
-    <div class="row mb-3">
-        <div class="col">
-            <h3>Latency Report</h3>
-        </div>
-        <div class="col text-end">
-            <div class="btn-group">
-                <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
-                    <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-arrow-left"></i> Back
-                    </a>
-                <?php endif; ?>
-                <a href="/index.php" class="btn btn-secondary btn-sm">
-                    <i class="bi bi-house-door"></i> Home
-                </a>
-            </div>
-        </div>
-    </div>
+// Latency Report auto-refreshes every 5 minutes. Pass the meta
+// tag through head_extras so it lives inside <head> (required
+// for browsers to honor it).
+$head_extras = '    <meta http-equiv="refresh" content="300">' . "\n";
+
+wanportal_render_head('Latency Report', ['datatables' => true, 'head_extras' => $head_extras]);
+wanportal_render_header_row('Latency Report');
+?>
 
     <!-- Latency Table -->
     <div class="table-responsive">
@@ -126,8 +96,5 @@ $server_name = isset($_SERVER['SERVER_NAME']) ?
             </tbody>
         </table>
     </div>
-</div>
 
-<?php include 'footer.php'; ?>
-</body>
-</html>
+    <?php wanportal_render_page_end(); ?>

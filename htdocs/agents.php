@@ -2,6 +2,7 @@
 session_start();
 require_once 'check_session.php';
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
@@ -9,11 +10,11 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
-// Handle show_inactive preference
-$show_inactive = isset($_GET['show_inactive']) ?
-    filter_var($_GET['show_inactive'], FILTER_VALIDATE_BOOLEAN) :
-    ($_SESSION['show_inactive'] ?? false);
-$_SESSION['show_inactive'] = $show_inactive;
+// Read+write the per-user show_inactive preference. The value
+// flows to the detail pages (agent.php, target.php) that DO
+// render a toggle, so the listing pages keep it in sync even
+// though they don't render the toggle themselves.
+$show_inactive = wanportal_get_show_inactive();
 
 // Fetch agents from API
 $ch = curl_init("http://localhost/cgi-bin/api/agents");
@@ -32,66 +33,23 @@ if ($status === 200) {
         $agents = $data['agents'];
     }
 }
+
+// Standard page chrome + header row. DataTables is used here so
+// we pass 'datatables' => true in the head options. The "New
+// Agent" action matches the listing-page convention documented
+// in the wanportal skill: a primary button on the right of the
+// header row, gated on auth.
+wanportal_render_head('Agents', ['datatables' => true]);
+wanportal_render_header_row('Agents', [
+    [
+        'url'     => '/agents_edit.php',
+        'icon'    => 'bi bi-plus-circle',
+        'label'   => 'New Agent',
+        'variant' => 'primary',
+        'auth'    => true,
+    ],
+]);
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Agents</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="/assets/base.css">
-</head>
-<body>
-<?php include 'navbar.php'; ?>
-
-<div class="container-fluid">
-    <!-- Header Row: matches the Back | Home | action-button
-         layout used by the detail pages (agent.php, target.php,
-         monitor.php) so navigation is consistent across the app.
-         The previous `page_header()` rendered a Home > Agents
-         breadcrumb, which looked like a "back to home" link and
-         was confusing on a listing page. -->
-    <div class="row mb-3">
-        <div class="col">
-            <h3>Agents</h3>
-        </div>
-        <div class="col text-end">
-            <div class="btn-group" role="group">
-                <!-- BACK -->
-                <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
-                    <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-arrow-left"></i> Back
-                    </a>
-                <?php endif; ?>
-                <!-- HOME -->
-                <a href="/index.php" class="btn btn-secondary btn-sm">
-                    <i class="bi bi-house-door"></i> Home
-                </a>
-                <!-- NEW (the listing-page equivalent of the
-                     detail pages' Edit button: a primary action
-                     to create a new record, matching the style
-                     already used on credentials.php). -->
-                <?php if (isset($_SESSION['user'])): ?>
-                    <a href="/agents_edit.php" class="btn btn-primary btn-sm">
-                        <i class="bi bi-plus-circle"></i> New Agent
-                    </a>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-    <!-- Agents Table: now using DataTables (auto-initialized
-         by assets/js/listings.js). The header search box above
-         has been removed in favor of DataTables' built-in global
-         search. The "Show Inactive" toggle below stays since
-         DataTables' built-in search doesn't cover that case. -->
-
-    <!-- Agents Table -->
-    <div class="card mb-4">
-    <div class="table-responsive">
         <table id="tablePager" class="table table-hover" data-order='[[3, "desc"]]'>
             <thead>
                 <tr>
@@ -153,9 +111,6 @@ if ($status === 200) {
 </div>
 </div>
 
-<?php include 'footer.php'; ?>
-
-
 <script>
 // Surface a toast on the listing page when the user was just
 // redirected here from an *edit.php save (the edit form
@@ -170,5 +125,4 @@ wanportalPageOnLoad = function() {
     }
 };
 </script>
-</body>
-</html>
+<?php wanportal_render_page_end(); ?>

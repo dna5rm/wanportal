@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
 /**
  * Make API calls to the backend
@@ -122,29 +123,18 @@ if ($agentsResponse === null || $monitorsResponse === null) {
 if (DEBUG_MODE) {
     $start_time = microtime(true);
 }
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title><?= $server_name ?> :: Console</title>
-    <meta charset="utf-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <meta http-equiv="refresh" content="300">
-    <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
-    <!-- DataTables -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.11/css/dataTables.bootstrap5.min.css">
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="/assets/base.css">
-</head>
-<body>
-<?php include 'navbar.php'; ?>
 
-<div class="container-fluid">
-    <?php if ($error_message): ?>
+// Standard page chrome. The dashboard auto-refreshes every 5
+// minutes via a meta tag, which we pass in 'head_extras' since
+// it must live inside <head> to be honored by the browser.
+// DataTables is used by the Down Monitors table at the bottom
+// of the page.
+wanportal_render_head('Console', [
+    'datatables'  => true,
+    'head_extras' => '<meta http-equiv="refresh" content="300">',
+]);
+?>
+<?php if ($error_message): ?>
     <div class="alert alert-danger alert-dismissible fade show" role="alert">
         <?= htmlspecialchars($error_message) ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
@@ -370,7 +360,7 @@ if (DEBUG_MODE) {
     </div>
 </div>
 
-<?php include 'footer.php'; ?>
+<?php wanportal_render_page_end(); ?>
 
 <?php
 // Log execution time if in debug mode
@@ -379,5 +369,3 @@ if (DEBUG_MODE) {
     error_log("Page generated in {$execution_time} seconds");
 }
 ?>
-</body>
-</html>

@@ -1,8 +1,43 @@
 <?php
+// Both helpers below return a full Bootstrap 5.3 class string
+// (including the `bg-` prefix) so the call sites can be
+// `class="badge BADGE_CLASS_STRING"`. The `-subtle` background
+// + matching text + matching border flips cleanly with the
+// `data-bs-theme="dark"` toggle on <html>. The solid
+// `bg-{color}` variants stay vivid in both themes and look out
+// of place on a dark page.
+function getBadgeColor($type) {
+    $colors = [
+        'ACCOUNT'     => 'bg-primary-subtle text-primary-emphasis border border-primary-subtle',
+        'CERTIFICATE' => 'bg-success-subtle text-success-emphasis border border-success-subtle',
+        'API'         => 'bg-info-subtle text-info-emphasis border border-info-subtle',
+        'PSK'         => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle',
+        'CODE'        => 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle',
+    ];
+    return $colors[$type] ?? 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle';
+}
+
+function getSensitivityColor($sensitivity) {
+    $colors = [
+        'LOW'    => 'bg-success-subtle text-success-emphasis border border-success-subtle',
+        'MEDIUM' => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle',
+        'HIGH'   => 'bg-danger-subtle text-danger-emphasis border border-danger-subtle',
+        // CRITICAL used to be `bg-dark` (pure black). That
+        // disappears against a dark page background, defeating
+        // the point of marking something as the highest
+        // sensitivity. `bg-danger-subtle` is the most severe of
+        // the visible-in-both-modes tokens and conveys "this is
+        // the worst level" without becoming invisible.
+        'CRITICAL' => 'bg-danger-subtle text-danger-emphasis border border-danger-subtle',
+    ];
+    return $colors[$sensitivity] ?? 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle';
+}
+
 // credential_view.php
 session_start();
 require_once 'check_session.php';
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
@@ -29,13 +64,6 @@ curl_setopt_array($ch, [
 $response = curl_exec($ch);
 $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-// var_dump([
-//     'API Response Status' => $status,
-//     'Raw Response' => $response,
-//     'Decoded Data' => json_decode($response, true),
-//     'Session Token' => $_SESSION['token']
-// ]);
-
 curl_close($ch);
 
 if ($status !== 200) {
@@ -50,52 +78,31 @@ if ($data['status'] !== 'success' || !isset($data['credential'])) {
 }
 
 $cred = $data['credential'];
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: View Credential</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="/assets/base.css">
-    <style>
-        .password-field {
-            position: relative;
-        }
-        .password-field .toggle-password {
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            cursor: pointer;
-        }
-    </style>
-</head>
-<body>
-<?php include 'navbar.php'; ?>
 
-<div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col">
-            <h3>
-                View Credential: <?= htmlspecialchars($cred['name']) ?>
-            </h3>
-        </div>
-        <div class="col text-end">
-            <div class="btn-group" role="group">
-                <a href="/credentials.php" class="btn btn-secondary btn-sm">
-                    <i class="bi bi-arrow-left"></i> Back
-                </a>
-                <a href="/credential_edit.php?id=<?= htmlspecialchars($id) ?>" class="btn btn-danger btn-sm">
-                    <i class="bi bi-pencil"></i> Edit
-                </a>
-            </div>
-        </div>
-    </div>
+// Page-specific CSS: the password-field / toggle-password
+// styles for the credential viewer. Inlined via head_extras so
+// it lives in <head> alongside the rest of the page chrome.
+$head_extras  = '    <style>' . "\n";
+$head_extras .= '        .password-field { position: relative; }' . "\n";
+$head_extras .= '        .password-field .toggle-password { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; }' . "\n";
+$head_extras .= '    </style>';
+
+wanportal_render_head('View Credential', ['head_extras' => $head_extras]);
+wanportal_render_header_row('View Credential: ' . htmlspecialchars($cred['name'], ENT_QUOTES, 'UTF-8'), [
+    [
+        'url'     => '/credentials.php',
+        'icon'    => 'bi bi-arrow-left',
+        'label'   => 'Back',
+        'variant' => 'secondary',
+    ],
+    [
+        'url'     => '/credential_edit.php?id=' . htmlspecialchars($id, ENT_QUOTES, 'UTF-8'),
+        'icon'    => 'bi bi-pencil',
+        'label'   => 'Edit',
+        'variant' => 'danger',
+    ],
+]);
+?>
 
     <div class="row">
         <div class="col-md-6">
@@ -233,7 +240,7 @@ $cred = $data['credential'];
     </div>
 </div>
 
-<?php include 'footer.php'; ?>
+<?php wanportal_render_page_end(); ?>
 
 <script>
 // Password visibility toggle
@@ -248,7 +255,7 @@ function togglePassword(button) {
 function copyToClipboard(element) {
     element.select();
     document.execCommand('copy');
-    
+
     // Show feedback on the clipboard button
     const button = element.parentElement.querySelector('.bi-clipboard').parentElement;
     const originalHTML = button.innerHTML;
@@ -257,42 +264,4 @@ function copyToClipboard(element) {
         button.innerHTML = originalHTML;
     }, 1000);
 }
-
-<?php
-// Both helpers below return a full Bootstrap 5.3 class string
-// (including the `bg-` prefix) so the call sites can be
-// `class="badge BADGE_CLASS_STRING"`. The `-subtle` background
-// + matching text + matching border flips cleanly with the
-// `data-bs-theme="dark"` toggle on <html>. The solid
-// `bg-{color}` variants stay vivid in both themes and look out
-// of place on a dark page.
-function getBadgeColor($type) {
-    $colors = [
-        'ACCOUNT'     => 'bg-primary-subtle text-primary-emphasis border border-primary-subtle',
-        'CERTIFICATE' => 'bg-success-subtle text-success-emphasis border border-success-subtle',
-        'API'         => 'bg-info-subtle text-info-emphasis border border-info-subtle',
-        'PSK'         => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle',
-        'CODE'        => 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle',
-    ];
-    return $colors[$type] ?? 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle';
-}
-
-function getSensitivityColor($sensitivity) {
-    $colors = [
-        'LOW'    => 'bg-success-subtle text-success-emphasis border border-success-subtle',
-        'MEDIUM' => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle',
-        'HIGH'   => 'bg-danger-subtle text-danger-emphasis border border-danger-subtle',
-        // CRITICAL used to be `bg-dark` (pure black). That
-        // disappears against a dark page background, defeating
-        // the point of marking something as the highest
-        // sensitivity. `bg-danger-subtle` is the most severe of
-        // the visible-in-both-modes tokens and conveys "this is
-        // the worst level" without becoming invisible.
-        'CRITICAL' => 'bg-danger-subtle text-danger-emphasis border border-danger-subtle',
-    ];
-    return $colors[$sensitivity] ?? 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle';
-}
-?>
 </script>
-</body>
-</html>

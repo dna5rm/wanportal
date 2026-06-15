@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
 $search = trim($_GET['q'] ?? '');
 if (empty($search)) {
@@ -7,11 +8,7 @@ if (empty($search)) {
     exit;
 }
 
-// Get show_inactive preference from GET or session
-$show_inactive = isset($_GET['show_inactive']) ?
-    filter_var($_GET['show_inactive'], FILTER_VALIDATE_BOOLEAN) :
-    ($_SESSION['show_inactive'] ?? false);
-$_SESSION['show_inactive'] = $show_inactive;
+$show_inactive = wanportal_get_show_inactive();
 
 try {
     // Search query with prepared statement
@@ -84,79 +81,33 @@ try {
 } catch (Exception $e) {
     die("Error: " . $e->getMessage());
 }
+wanportal_render_head('Search Results', ['datatables' => true]);
+wanportal_render_header_row('Search: ' . htmlspecialchars($search, ENT_QUOTES, 'UTF-8'), [], [
+    'show_inactive_toggle' => true,
+]);
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Search Results</title>
-    <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
-    <!-- DataTables -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.11/css/dataTables.bootstrap5.min.css">
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="/assets/base.css">
-</head>
-<body>
-<?php include 'navbar.php'; ?>
 
-<div class="container-fluid">
-    <!-- Header Row -->
-    <div class="row mb-3">
-        <div class="col">
-            <h3>
-                Search: <?= htmlspecialchars($search) ?>
-            </h3>
-        </div>
-        <div class="col text-end">
-            <div class="d-flex justify-content-end align-items-center gap-2">
-            <!-- Header Button Group -->
-            <div class="btn-group" role="group">
-                <!-- BACK -->
-                <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
-                    <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-arrow-left"></i> Back
-                    </a>
-                <?php endif; ?>  
-                <!-- HOME -->                
-                <a href="/index.php" class="btn btn-secondary btn-sm">
-                    <i class="bi bi-house-door"></i> Home
-                </a>
-                <!-- Show Inactive Switch -->
-                <div class="btn btn-secondary btn-sm d-flex align-items-center" style="gap: 5px;">
-                    <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" id="showInactive" 
-                            <?= $show_inactive ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="showInactive">
-                            Inactive
-                        </label>
-                    </div>
-                </div>
-            </div>
-
-                <!-- Search Form -->
-                <form action="/search.php" method="GET" class="d-flex align-items-center">
-                    <div class="input-group input-group-sm">
-                        <input type="text" 
-                            name="q" 
-                            class="form-control" 
-                            value="<?= htmlspecialchars($search) ?>" 
-                            placeholder="Search monitors..."
-                            aria-label="Search monitors">
-                        <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="bi bi-search"></i>
-                        </button>
-                    </div>
-                </form>
-            </div>
+<!-- Search form. Lives in its own row after the standard header
+     so the user can re-run a search without scrolling back up to
+     the page title. The form is a thin row (mb-2) so it doesn't
+     compete with the page title visually. -->
+<form action="/search.php" method="GET" class="row mb-2 justify-content-end">
+    <div class="col-md-4 col-lg-3">
+        <div class="input-group input-group-sm">
+            <input type="text"
+                name="q"
+                class="form-control"
+                value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>"
+                placeholder="Search monitors..."
+                aria-label="Search monitors">
+            <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-search"></i>
+            </button>
         </div>
     </div>
+</form>
 
-    <div class="row">
+<div class="row">
         <!-- Statistics Column -->
         <div class="col-md-3">
             <div class="card mb-3">
@@ -276,26 +227,5 @@ try {
     </div>
 </div>
 
-<?php include 'footer.php'; ?>
-
-<script>
-    // Persist the "Show Inactive" toggle across page navigations.
-    // The PHP session keeps the value once it's set, so we just
-    // round-trip the new value through the URL on every change.
-    // Preserves all other query params (e.g. ?id=..., ?start=...,
-    // ?end=...) and the hash fragment. Listing pages
-    // (agents/targets/monitors) have their own client-side filter
-    // via listings.js and don't need this hook.
-    window.pageSpecificScripts = function () {
-        var toggle = document.getElementById('showInactive');
-        if (!toggle) { return; }
-        toggle.addEventListener('change', function () {
-            var url = new URL(window.location.href);
-            url.searchParams.set('show_inactive', toggle.checked ? 'true' : 'false');
-            window.location.assign(url.toString());
-        });
-    };
-</script>
-</body>
-</html>
+<?php wanportal_render_page_end(); ?>
 <?php $mysqli->close(); ?>

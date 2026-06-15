@@ -3,13 +3,14 @@
 session_start();
 require_once 'check_session.php';
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
+
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
     header('Location: /login.php');
     exit;
 }
-
 // Initialize variables
 $id = $_GET['id'] ?? null;
 $error = '';
@@ -141,33 +142,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     }
 }
+wanportal_render_head(($id ? 'Edit' : 'New') . ' Credential');
+wanportal_render_header_row(($id ? 'Edit' : 'New') . ' Credential', [
+    [
+        'url'     => '/credentials.php',
+        'icon'    => 'bi bi-arrow-left',
+        'label'   => 'Back',
+        'variant' => 'secondary',
+    ],
+]);
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= $id ? 'Edit' : 'New' ?> Credential</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="/assets/base.css">
-</head>
-<body>
-<?php include 'navbar.php'; ?>
-
-<div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col">
-            <h3><?= $id ? 'Edit' : 'New' ?> Credential</h3>
-        </div>
-        <div class="col text-end">
-            <a href="/credentials.php" class="btn btn-secondary btn-sm">
-                <i class="bi bi-arrow-left"></i> Back
-            </a>
-        </div>
-    </div>
 
     <?php if ($error): ?>
         <div class="alert alert-danger">
@@ -300,7 +284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
 </div>
 
-<?php include 'footer.php'; ?>
+<?php wanportal_render_page_end(); ?>
 
 <script>
 // Toggle password visibility
@@ -343,5 +327,3 @@ document.querySelector('form').addEventListener('submit', function(e) {
     }
 });
 </script>
-</body>
-</html>

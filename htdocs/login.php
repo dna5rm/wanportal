@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
 // Check if user already logged in
 if (isset($_SESSION['user'])) {
@@ -66,86 +67,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Generate CSRF token
-$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Login</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="/assets/base.css">
-    <script>
-        // Apply the persisted dark-mode choice *before* paint so dark-mode
-        // users don't see a flash of the light background. The full toggle
-        // and persistence lives in footer.php; this just mirrors its
-        // restore-from-localStorage step synchronously in <head>.
-        (function () {
-            try {
-                if (localStorage.getItem('wanportal-theme') === 'dark') {
-                    document.documentElement.setAttribute('data-bs-theme', 'dark');
-                }
-            } catch (e) { /* localStorage may be disabled; default to light */ }
-        })();
-    </script>
-    <style>
-        .login-container {
-            min-height: calc(100vh - 72px); /* Account for navbar height */
-            /* Use Bootstrap's --bs-body-bg so the page area matches the
-               body color and blends with the navbar in both themes.
-               The previous --bs-tertiary-bg created a hard 1px line at
-               the navbar boundary (#f8f9fa in light, #2b3035 in dark
-               against the navy navbar) that read as a separator even
-               after we removed the box-shadow. */
-            background-color: var(--bs-body-bg);
-        }
-        .login-card {
-            min-width: 320px;
-            max-width: 340px;
-        }
-        .login-card .card-body {
-            padding: 2rem;
-        }
-        .form-control:focus {
-            box-shadow: 0 0 0 0.25rem rgba(14, 118, 168, 0.25);
-            border-color: #0e76a8;
-        }
-        .btn-primary {
-            background-color: #0e76a8;
-            border-color: #0e76a8;
-        }
-        .btn-primary:hover {
-            background-color: #0c6590;
-            border-color: #0c6590;
-        }
-        /* Dark-mode: soften the card shadow and use the same darker
-           btn-primary shade that the rest of the app uses. */
-        [data-bs-theme="dark"] .login-card {
-            --bs-card-bg: var(--bs-body-bg);
-            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.5) !important;
-        }
-        [data-bs-theme="dark"] .btn-primary {
-            background-color: #0c6590;
-            border-color: #0c6590;
-        }
-        [data-bs-theme="dark"] .btn-primary:hover {
-            background-color: #0a5378;
-            border-color: #0a5378;
-        }
-        .alert {
-            padding: 0.5rem 1rem;
-            margin-bottom: 1rem;
-        }
-    </style>
-</head>
-<body>
-    <?php include 'navbar.php'; ?>
+// Login-specific CSS. The login card sits on top of the navbar
+// with the same background color as the body (--bs-body-bg) so
+// it blends in both light and dark themes without a visible
+// separator line. Moved into head_extras so it lives in <head>
+// alongside the rest of the page chrome.
+$head_extras  = '    <style>' . "\n";
+$head_extras .= '        .login-container { min-height: calc(100vh - 72px); background-color: var(--bs-body-bg); }' . "\n";
+$head_extras .= '        .login-card { min-width: 320px; max-width: 340px; }' . "\n";
+$head_extras .= '        .login-card .card-body { padding: 2rem; }' . "\n";
+$head_extras .= '        .form-control:focus { box-shadow: 0 0 0 0.25rem rgba(14, 118, 168, 0.25); border-color: #0e76a8; }' . "\n";
+$head_extras .= '        .btn-primary { background-color: #0e76a8; border-color: #0e76a8; }' . "\n";
+$head_extras .= '        .btn-primary:hover { background-color: #0c6590; border-color: #0c6590; }' . "\n";
+$head_extras .= '        [data-bs-theme="dark"] .login-card { --bs-card-bg: var(--bs-body-bg); box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.5) !important; }' . "\n";
+$head_extras .= '        [data-bs-theme="dark"] .btn-primary { background-color: #0c6590; border-color: #0c6590; }' . "\n";
+$head_extras .= '        [data-bs-theme="dark"] .btn-primary:hover { background-color: #0a5378; border-color: #0a5378; }' . "\n";
+$head_extras .= '        .alert { padding: 0.5rem 1rem; margin-bottom: 1rem; }' . "\n";
+$head_extras .= '    </style>';
 
-    <div class="login-container d-flex align-items-center justify-content-center">
+wanportal_render_head('Login', ['head_extras' => $head_extras]);
+?>
+
+<div class="login-container d-flex align-items-center justify-content-center">
         <div class="login-card card shadow">
             <div class="card-body">
                 <h4 class="mb-4 text-center">Login</h4>
@@ -187,10 +130,8 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         </div>
     </div>
 
-    <?php include 'footer.php'; ?>
-</body>
-</html>
-<?php 
+<?php wanportal_render_page_end(); ?>
+<?php
 // Clear sensitive data
 $password = null;
 $mysqli->close();

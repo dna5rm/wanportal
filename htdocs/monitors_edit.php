@@ -3,13 +3,14 @@
 session_start();
 require_once 'check_session.php';
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
+
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
     header('Location: /login.php');
     exit;
 }
-
 // Initialize variables
 $id = $_GET['id'] ?? null;
 $error = '';
@@ -170,34 +171,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     }
 }
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= $id ? 'Edit' : 'New' ?> Monitor</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="/assets/base.css">
-</head>
-<body>
-<?php include 'navbar.php'; ?>
+// select2 CSS is loaded for the agent/target/protocol
+// dropdowns (vestigial: the JS isn't loaded so the standard
+// <select> styling applies, but the CSS link stays for safety).
+$head_extras  = '    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />' . "\n";
 
-<div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col">
-            <h3><?= $id ? 'Edit' : 'New' ?> Monitor</h3>
-        </div>
-        <div class="col text-end">
-            <a href="/monitors.php" class="btn btn-secondary btn-sm">
-                <i class="bi bi-arrow-left"></i> Back
-            </a>
-        </div>
-    </div>
+wanportal_render_head(($id ? 'Edit' : 'New') . ' Monitor');
+wanportal_render_header_row(($id ? 'Edit' : 'New') . ' Monitor', [
+    [
+        'url'     => '/monitors.php',
+        'icon'    => 'bi bi-arrow-left',
+        'label'   => 'Back',
+        'variant' => 'secondary',
+    ],
+]);
+?>
 
     <?php if ($error): ?>
         <div class="alert alert-danger">
@@ -337,7 +325,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </div>
 
-<?php include 'footer.php'; ?>
+<?php wanportal_render_page_end(); ?>
 
 <script>
 // Show/hide port field based on protocol
@@ -372,5 +360,3 @@ document.getElementById('protocol').dispatchEvent(new Event('change'));
     })
 })()
 </script>
-</body>
-</html>

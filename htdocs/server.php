@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
 /**
  * Make API calls to the backend
@@ -122,42 +123,14 @@ $stats = [
 $server_name = isset($_SERVER['SERVER_NAME']) ? 
     strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0]) : 
     'NETPING';
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <meta http-equiv="refresh" content="300">
-    <title><?= $server_name ?> :: Statistics</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="/assets/base.css">
-</head>
-<body>
-<?php include 'navbar.php'; ?>
+// Local Server auto-refreshes every 5 minutes (uptime / agent
+// counts change slowly). Pass the meta tag through head_extras
+// so it lives inside <head> (required for browsers to honor it).
+$head_extras = '    <meta http-equiv="refresh" content="300">' . "\n";
 
-<div class="container-fluid">
-    <!-- Header Row -->
-    <div class="row mb-3">
-        <div class="col">
-            <h3>Local Server</h3>
-        </div>
-        <div class="col text-end">
-            <div class="btn-group">
-                <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
-                    <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-arrow-left"></i> Back
-                    </a>
-                <?php endif; ?>
-                <a href="/index.php" class="btn btn-secondary btn-sm">
-                    <i class="bi bi-house-door"></i> Home
-                </a>
-            </div>
-        </div>
-    </div>
+wanportal_render_head('Statistics', ['head_extras' => $head_extras]);
+wanportal_render_header_row('Local Server');
+?>
 
     <div class="row">
         <div class="col-md-8 mx-auto">
@@ -222,6 +195,4 @@ $server_name = isset($_SERVER['SERVER_NAME']) ?
     </div>
 </div>
 
-<?php include 'footer.php'; ?>
-</body>
-</html>
+<?php wanportal_render_page_end(); ?>

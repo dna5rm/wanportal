@@ -3,6 +3,7 @@
 session_start();
 require_once 'check_session.php';
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
 
 // Check authentication and admin status
 if (!isset($_SESSION['user'])) {
@@ -38,31 +39,25 @@ if ($status === 200) {
         $users = $data['users'];
     }
 }
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Users</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="/assets/base.css">
-</head>
-<body>
-<?php include 'navbar.php'; ?>
 
-<div class="container-fluid">
-    <?php page_header(
-        'Users',
-        [
-            ['Home', '/'],
-            ['Users', null],
-        ],
-        '<a href="/user_edit.php" class="btn btn-primary"><i class="bi bi-person-plus"></i> New User</a>'
-    ); ?>
+// Render the standard page chrome (head, opening body, navbar,
+// container). No CDN features are needed on this page beyond the
+// defaults, so the options array is empty.
+wanportal_render_head('Users');
+wanportal_render_header_row('Users', [
+    [
+        'url'     => '/user_edit.php',
+        'icon'    => 'bi bi-person-plus',
+        'label'   => 'New User',
+        'variant' => 'primary',
+        // The "New User" button should only show for admins -- this
+        // page is already admin-gated above, so the button is safe
+        // to render unconditionally. (We could also pass 'auth' =>
+        // true here, but on this page auth and admin are equivalent
+        // by the time we reach the header row.)
+    ],
+]);
+?>
 
     <!-- Search/Filter -->
     <div class="row mb-3">
@@ -164,8 +159,6 @@ if ($status === 200) {
     </div>
 </div>
 
-<?php include 'footer.php'; ?>
-
 <script>
 // Filter functionality
 document.getElementById('searchFilter').addEventListener('input', filterUsers);
@@ -223,5 +216,4 @@ function deleteUser(id, username) {
     }
 }
 </script>
-</body>
-</html>
+<?php wanportal_render_page_end(); ?>

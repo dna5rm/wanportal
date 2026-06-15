@@ -2,43 +2,43 @@
 // agent.php
 
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
 $id = $_GET['id'] ?? '';
 if (!$id) die("No agent ID specified");
 
-// Get show_inactive preference from GET or session
-$show_inactive = isset($_GET['show_inactive']) ? 
-    filter_var($_GET['show_inactive'], FILTER_VALIDATE_BOOLEAN) : 
-    ($_SESSION['show_inactive'] ?? false);
-$_SESSION['show_inactive'] = $show_inactive;
+// Read+write the per-user show_inactive preference. The
+// show_inactive_toggle option in the header row below reads the
+// session value to decide whether the toggle is checked.
+$show_inactive = wanportal_get_show_inactive();
 
 try {
     // Fetch agent info with prepared statement
     $stmt = $mysqli->prepare("
-        SELECT id, name, address, description, last_seen, is_active 
-        FROM agents 
+        SELECT id, name, address, description, last_seen, is_active
+        FROM agents
         WHERE id = ?
     ");
     if (!$stmt) {
         throw new Exception("Prepare failed: " . $mysqli->error);
     }
-    
+
     $stmt->bind_param("s", $id);
     if (!$stmt->execute()) {
         throw new Exception("Execute failed: " . $stmt->error);
     }
-    
+
     $result = $stmt->get_result();
     if (!$result || $result->num_rows === 0) {
         throw new Exception("Agent not found");
     }
-    
+
     $agent = $result->fetch_assoc();
     $stmt->close();
 
     // Fetch monitors with all related info using JOIN
     $stmt = $mysqli->prepare("
-        SELECT 
+        SELECT
             m.*,
             t.address as target_address,
             t.description as target_description,
@@ -51,15 +51,15 @@ try {
     if (!$stmt) {
         throw new Exception("Prepare failed: " . $mysqli->error);
     }
-    
+
     $stmt->bind_param("s", $id);
     if (!$stmt->execute()) {
         throw new Exception("Execute failed: " . $stmt->error);
     }
-    
+
     $result = $stmt->get_result();
     $monitors = [];
-    
+
     // Calculate monitor statistics while fetching
     $monitor_stats = [
         'total' => 0,
@@ -93,73 +93,35 @@ try {
 } catch (Exception $e) {
     die("Error: " . $e->getMessage());
 }
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: <?= htmlspecialchars($agent['name']) ?></title>
-    <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
-    <!-- DataTables -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.11/css/dataTables.bootstrap5.min.css">
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="/assets/base.css">
-</head>
-<body>
-<?php include 'navbar.php'; ?>
 
-<div class="container-fluid">
-    <!-- Header Row -->
-    <div class="row mb-3">
-        <div class="col">
-            <h3>
-                Agent: 
-                <?= htmlspecialchars(!empty($agent['name']) ? $agent['name'] : $agent['id']) ?>
-            </h3>
-        </div>
-        <div class="col text-end">
-            <!-- Header Button Group -->
-            <div class="btn-group" role="group">
-                <!-- BACK -->
-                <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
-                    <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-arrow-left"></i> Back
-                    </a>
-                <?php endif; ?>  
-                <!-- HOME -->                
-                <a href="/index.php" class="btn btn-secondary btn-sm">
-                    <i class="bi bi-house-door"></i> Home
-                </a>
-                <!-- User Session Options -->                
-                <?php if (isset($_SESSION['user'])): ?>
-                    <?php if ($agent['name'] != "LOCAL") : ?>
-                        <a href="/netping.php?id=<?= htmlspecialchars($agent['id']) ?>" class="btn btn-warning btn-sm">
-                            <i class="bi bi-play-circle"></i> Agent
-                        </a>
-                    <?php endif; ?>
-                    
-                    <a href="/agents_edit.php?id=<?= htmlspecialchars($agent['id']) ?>" class="btn btn-danger btn-sm">
-                        <i class="bi bi-pencil"></i> Edit
-                    </a>
-                <?php endif; ?>
-                <!-- Show Inactive Switch -->
-                <div class="btn btn-secondary btn-sm d-flex align-items-center" style="gap: 5px;">
-                    <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" id="showInactive" 
-                            <?= $show_inactive ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="showInactive">
-                            Inactive
-                        </label>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+// Build the action list. The "Agent" action is conditional on
+// the agent's name (LOCAL agents don't have a netping script to
+// show), and both actions are gated on auth.
+$actions = [];
+if (isset($_SESSION['user']) && $agent['name'] != "LOCAL") {
+    $actions[] = [
+        'url'     => '/netping.php?id=' . htmlspecialchars($agent['id'], ENT_QUOTES, 'UTF-8'),
+        'icon'    => 'bi bi-play-circle',
+        'label'   => 'Agent',
+        'variant' => 'warning',
+    ];
+}
+if (isset($_SESSION['user'])) {
+    $actions[] = [
+        'url'     => '/agents_edit.php?id=' . htmlspecialchars($agent['id'], ENT_QUOTES, 'UTF-8'),
+        'icon'    => 'bi bi-pencil',
+        'label'   => 'Edit',
+        'variant' => 'danger',
+    ];
+}
+
+wanportal_render_head('Agent: ' . (!empty($agent['name']) ? $agent['name'] : $agent['id']), ['datatables' => true]);
+wanportal_render_header_row(
+    'Agent: ' . (!empty($agent['name']) ? $agent['name'] : $agent['id']),
+    $actions,
+    ['show_inactive_toggle' => true]
+);
+?>
 
     <div class="row">
         <!-- Agent Info Column -->
@@ -197,38 +159,16 @@ try {
                 </div>
             </div>
 
-            <!-- Monitor Statistics Card -->
-            <div class="card mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">Statistics</h5>
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Active Monitors
-                            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle rounded-pill">
-                                <?= $monitor_stats['active'] ?>
-                            </span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Inactive Monitors
-                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill">
-                                <?= $monitor_stats['inactive'] ?>
-                            </span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Effectively Inactive
-                            <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle rounded-pill">
-                                <?= $monitor_stats['effectively_inactive'] ?>
-                            </span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Total Monitors
-                            <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle rounded-pill">
-                                <?= $monitor_stats['total'] ?>
-                            </span>
-                        </li>
-                    </ul>
-                </div>
-            </div>
+            <!-- Monitor Statistics Card (now rendered by the
+                 shared partial; the layout, color tokens, and
+                 list-group structure match the previous hand-rolled
+                 version exactly). -->
+            <?php wanportal_render_stats_card('Statistics', [
+                ['Active Monitors',         $monitor_stats['active'],              'success'],
+                ['Inactive Monitors',       $monitor_stats['inactive'],            'warning'],
+                ['Effectively Inactive',    $monitor_stats['effectively_inactive'], 'secondary'],
+                ['Total Monitors',          $monitor_stats['total'],               'primary'],
+            ]); ?>
         </div>
 
         <!-- Monitors Column -->
@@ -362,26 +302,5 @@ try {
     </div>
 </div>
 
-<?php include 'footer.php'; ?>
-
-<script>
-    // Persist the "Show Inactive" toggle across page navigations.
-    // The PHP session keeps the value once it's set, so we just
-    // round-trip the new value through the URL on every change.
-    // Preserves all other query params (e.g. ?id=...) and the
-    // hash fragment. Listings pages (agents/targets/monitors) have
-    // their own client-side filter via listings.js and don't need
-    // this hook.
-    window.pageSpecificScripts = function () {
-        var toggle = document.getElementById('showInactive');
-        if (!toggle) { return; }
-        toggle.addEventListener('change', function () {
-            var url = new URL(window.location.href);
-            url.searchParams.set('show_inactive', toggle.checked ? 'true' : 'false');
-            window.location.assign(url.toString());
-        });
-    };
-</script>
-</body>
-</html>
+<?php wanportal_render_page_end(); ?>
 <?php $mysqli->close(); ?>

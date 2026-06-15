@@ -1,8 +1,24 @@
 <?php
+// Helper function for badge colors (PHP version) -- defined
+// here rather than in lib/page.php because it's only used by
+// the credentials page and its two associated pages
+// (credential_edit.php, credential_view.php).
+function getBadgeColor($type) {
+    $colors = [
+        'ACCOUNT' => 'primary',
+        'CERTIFICATE' => 'success',
+        'API' => 'info',
+        'PSK' => 'warning',
+        'CODE' => 'secondary'
+    ];
+    return $colors[$type] ?? 'secondary';
+}
+
 // credentials.php - Main listing page
 session_start();
 require_once 'check_session.php';
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
@@ -40,33 +56,23 @@ if ($status === 200) {
         $credentials = $data['credentials'];
     }
 }
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Credentials</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="/assets/base.css">
-</head>
-<body>
-<?php include 'navbar.php'; ?>
 
-<div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col">
-            <h3>Credentials Management</h3>
-        </div>
-        <div class="col text-end">
-            <a href="/credential_edit.php" class="btn btn-primary btn-sm">
-                <i class="bi bi-plus-circle"></i> New Credential
-            </a>
-        </div>
-    </div>
+// Standard page chrome + header row. DataTables is used here so
+// we pass 'datatables' => true in the head options. The "New
+// Credential" action matches the listing-page convention
+// documented in the wanportal skill: a primary button on the
+// right of the header row, gated on auth.
+wanportal_render_head('Credentials Management', ['datatables' => true]);
+wanportal_render_header_row('Credentials Management', [
+    [
+        'url'     => '/credential_edit.php',
+        'icon'    => 'bi bi-plus-circle',
+        'label'   => 'New Credential',
+        'variant' => 'primary',
+        'auth'    => true,
+    ],
+]);
+?>
 
     <!-- Filters -->
     <div class="row mb-3">
@@ -167,7 +173,7 @@ if ($status === 200) {
     </div>
 </div>
 
-<?php include 'footer.php'; ?>
+<?php wanportal_render_page_end(); ?>
 
 <script>
 // Filter functionality
@@ -176,14 +182,14 @@ document.getElementById('siteFilter').addEventListener('input', filterCredential
 document.getElementById('activeFilter').addEventListener('change', function() {
     // Debug log
     console.log('Changing active filter to:', this.value);
-    
+
     // Construct new URL with the is_active parameter
     let url = new URL(window.location.href);
     url.searchParams.set('is_active', this.value);
-    
+
     // Debug log
     console.log('Redirecting to:', url.toString());
-    
+
     // Redirect to new URL
     window.location.href = url.toString();
 });
@@ -243,24 +249,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const urlParams = new URLSearchParams(window.location.search);
     const isActive = urlParams.get('is_active') || '1';
     document.getElementById('activeFilter').value = isActive;
-    
+
     // Apply initial filtering
     filterCredentials();
 });
 </script>
-
-<?php
-// Helper function for badge colors (PHP version)
-function getBadgeColor($type) {
-    $colors = [
-        'ACCOUNT' => 'primary',
-        'CERTIFICATE' => 'success',
-        'API' => 'info',
-        'PSK' => 'warning',
-        'CODE' => 'secondary'
-    ];
-    return $colors[$type] ?? 'secondary';
-}
-?>
-</body>
-</html>

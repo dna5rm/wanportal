@@ -2,6 +2,7 @@
 session_start();
 require_once 'check_session.php';
 require_once 'config.php';
+require_once __DIR__ . '/lib/page.php';
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
@@ -9,11 +10,11 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
-// Handle show_inactive preference
-$show_inactive = isset($_GET['show_inactive']) ?
-    filter_var($_GET['show_inactive'], FILTER_VALIDATE_BOOLEAN) :
-    ($_SESSION['show_inactive'] ?? false);
-$_SESSION['show_inactive'] = $show_inactive;
+// Read+write the per-user show_inactive preference. The value
+// flows to the detail pages (agent.php, target.php) that DO
+// render a toggle, so the listing pages keep it in sync even
+// though they don't render the toggle themselves.
+$show_inactive = wanportal_get_show_inactive();
 
 // Fetch monitors from API (includes agent and target info)
 $ch = curl_init("http://localhost/cgi-bin/api/monitors");
@@ -32,64 +33,23 @@ if ($status === 200) {
         $monitors = $data['monitors'];
     }
 }
+
+// Standard page chrome + header row. DataTables is used here so
+// we pass 'datatables' => true in the head options. The "New
+// Monitor" action matches the listing-page convention documented
+// in the wanportal skill: a primary button on the right of the
+// header row, gated on auth.
+wanportal_render_head('Monitors', ['datatables' => true]);
+wanportal_render_header_row('Monitors', [
+    [
+        'url'     => '/monitors_edit.php',
+        'icon'    => 'bi bi-plus-circle',
+        'label'   => 'New Monitor',
+        'variant' => 'primary',
+        'auth'    => true,
+    ],
+]);
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title><?= strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING') ?> :: Monitors</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="/assets/base.css">
-</head>
-<body>
-<?php include 'navbar.php'; ?>
-
-<div class="container-fluid">
-    <!-- Header Row: matches the Back | Home | action-button
-         layout used by the detail pages (agent.php, target.php,
-         monitor.php) so navigation is consistent across the app.
-         The previous `page_header()` rendered a Home > Monitors
-         breadcrumb, which looked like a "back to home" link and
-         was confusing on a listing page. -->
-    <div class="row mb-3">
-        <div class="col">
-            <h3>Monitors</h3>
-        </div>
-        <div class="col text-end">
-            <div class="btn-group" role="group">
-                <!-- BACK -->
-                <?php if (isset($_SERVER['HTTP_REFERER'])): ?>
-                    <a href="<?= htmlspecialchars($_SERVER['HTTP_REFERER']) ?>" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-arrow-left"></i> Back
-                    </a>
-                <?php endif; ?>
-                <!-- HOME -->
-                <a href="/index.php" class="btn btn-secondary btn-sm">
-                    <i class="bi bi-house-door"></i> Home
-                </a>
-                <!-- NEW (the listing-page equivalent of the
-                     detail pages' Edit button: a primary action
-                     to create a new record, matching the style
-                     already used on credentials.php). -->
-                <?php if (isset($_SESSION['user'])): ?>
-                    <a href="/monitors_edit.php" class="btn btn-primary btn-sm">
-                        <i class="bi bi-plus-circle"></i> New Monitor
-                    </a>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-    <!-- Listing table: now using DataTables (auto-initialized
-         by assets/js/listings.js). Bespoke filter card above
-         removed in favor of DataTables' built-in search. -->
-
-    <!-- Monitors Table -->
-    <div class="card mb-4">
-    <div class="table-responsive">
         <table id="tablePager" class="table table-hover" data-order='[[6, "desc"]]'>
             <thead>
                 <tr>
@@ -183,9 +143,6 @@ if ($status === 200) {
 </div>
 </div>
 
-<?php include 'footer.php'; ?>
-
-
 <script>
 // Surface a toast on the listing page when the user was just
 // redirected here from an *edit.php save (the edit form
@@ -200,5 +157,4 @@ wanportalPageOnLoad = function() {
     }
 };
 </script>
-</body>
-</html>
+<?php wanportal_render_page_end(); ?>
