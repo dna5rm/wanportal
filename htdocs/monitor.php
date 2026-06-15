@@ -370,8 +370,8 @@ const MONITOR_TITLE = <?= json_encode(
 // by sending the user's local clock to the input.
 function formatLocalDatetime(date) {
     const pad = n => String(n).padStart(2, '0');
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
-         + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+         + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
 }
 let chart;
 
