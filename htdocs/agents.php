@@ -10,13 +10,11 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
-// Read+write the per-user show_inactive preference. The value
-// flows to the detail pages (agent.php, target.php) that DO
-// render a toggle, so the listing pages keep it in sync even
-// though they don't render the toggle themselves.
+// Per-user show_inactive preference. The listing pages don't
+// render the toggle, but they keep the session value in sync
+// with the detail pages (agent.php, target.php) that do.
 $show_inactive = wanportal_get_show_inactive();
 
-// Fetch agents from API
 $ch = curl_init("http://localhost/cgi-bin/api/agents");
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true
@@ -34,11 +32,6 @@ if ($status === 200) {
     }
 }
 
-// Standard page chrome + header row. DataTables is used here so
-// we pass 'datatables' => true in the head options. The "New
-// Agent" action matches the listing-page convention documented
-// in the wanportal skill: a primary button on the right of the
-// header row, gated on auth.
 wanportal_render_head('Agents', ['datatables' => true]);
 wanportal_render_header_row('Agents', [
     [
@@ -112,10 +105,8 @@ wanportal_render_header_row('Agents', [
 </div>
 
 <script>
-// Surface a toast on the listing page when the user was just
-// redirected here from an *edit.php save (the edit form
-// appends ?saved=1 on success). We strip the query param
-// after firing so a refresh doesn't re-toast.
+// Toast on redirect from agents_edit.php?saved=1; strip the
+// query param after firing so a refresh doesn't re-toast.
 wanportalPageOnLoad = function() {
     var url = new URL(window.location.href);
     if (url.searchParams.get('saved') === '1') {

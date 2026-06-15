@@ -10,13 +10,11 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
-// Read+write the per-user show_inactive preference. The value
-// flows to the detail pages (agent.php, target.php) that DO
-// render a toggle, so the listing pages keep it in sync even
-// though they don't render the toggle themselves.
+// Per-user show_inactive preference. The listing pages don't
+// render the toggle, but they keep the session value in sync
+// with the detail pages (agent.php, target.php) that do.
 $show_inactive = wanportal_get_show_inactive();
 
-// Fetch monitors from API (includes agent and target info)
 $ch = curl_init("http://localhost/cgi-bin/api/monitors");
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true
@@ -34,11 +32,6 @@ if ($status === 200) {
     }
 }
 
-// Standard page chrome + header row. DataTables is used here so
-// we pass 'datatables' => true in the head options. The "New
-// Monitor" action matches the listing-page convention documented
-// in the wanportal skill: a primary button on the right of the
-// header row, gated on auth.
 wanportal_render_head('Monitors', ['datatables' => true]);
 wanportal_render_header_row('Monitors', [
     [
@@ -67,15 +60,13 @@ wanportal_render_header_row('Monitors', [
             <tbody>
         <?php foreach ($monitors as $monitor): ?>
                         <?php
-                        // Calculate effective active status
-                        $effectively_active = ($monitor['is_active'] == 1 && 
-                                           $monitor['agent_is_active'] == 1 && 
+                        $effectively_active = ($monitor['is_active'] == 1 &&
+                                           $monitor['agent_is_active'] == 1 &&
                                            $monitor['target_is_active'] == 1);
                         ?>
                         <tr class="<?= $effectively_active ? '' : 'table-secondary' ?>">
                             <td>
-                                <a href="/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>" class="text-decoration-none">
-                                    <?= htmlspecialchars($monitor['description']) ?>
+                                <a href="/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>" class="text-decoration-none"><?= htmlspecialchars($monitor['description']) ?>
                                 </a>
                             </td>
                             <td>
@@ -144,10 +135,7 @@ wanportal_render_header_row('Monitors', [
 </div>
 
 <script>
-// Surface a toast on the listing page when the user was just
-// redirected here from an *edit.php save (the edit form
-// appends ?saved=1 on success). We strip the query param
-// after firing so a refresh doesn't re-toast.
+// Toast on redirect from monitors_edit.php?saved=1.
 wanportalPageOnLoad = function() {
     var url = new URL(window.location.href);
     if (url.searchParams.get('saved') === '1') {

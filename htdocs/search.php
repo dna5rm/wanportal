@@ -53,9 +53,7 @@ try {
     ];
 
     while ($row = $result->fetch_assoc()) {
-        // Compute the color classes used by the results table.
-        // (search.php only renders the current_* colors; the avg_*
-        // ones are computed but unused — harmless.)
+        // Color classes for the results table.
         monitor_color_classes($row);
 
         // Calculate effective status

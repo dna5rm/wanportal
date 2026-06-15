@@ -46,10 +46,6 @@ if ($id) {
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // CSRF check (closes the cross-site form-submission
-    // gap). The token is rendered as a hidden input by the
-    // template below; this verifies the posted value
-    // matches the session token.
     if (!wanportal_csrf_valid()) {
         $error = 'Invalid CSRF token. Please reload the page and try again.';
     } else {

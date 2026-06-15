@@ -1,11 +1,9 @@
 <?php
-// Both helpers below return a full Bootstrap 5.3 class string
-// (including the `bg-` prefix) so the call sites can be
-// `class="badge BADGE_CLASS_STRING"`. The `-subtle` background
-// + matching text + matching border flips cleanly with the
-// `data-bs-theme="dark"` toggle on <html>. The solid
-// `bg-{color}` variants stay vivid in both themes and look out
-// of place on a dark page.
+// Both helpers return a full Bootstrap 5.3 class string
+// (including the `bg-` prefix) so the call site is
+// `class="badge HELPER_RETURN_VALUE"`. The `-subtle` variants
+// flip cleanly with `data-bs-theme="dark"`; solid `bg-{color}`
+// stays vivid in both themes and looks out of place on dark.
 function getBadgeColor($type) {
     $colors = [
         'ACCOUNT'     => 'bg-primary-subtle text-primary-emphasis border border-primary-subtle',
@@ -22,12 +20,10 @@ function getSensitivityColor($sensitivity) {
         'LOW'    => 'bg-success-subtle text-success-emphasis border border-success-subtle',
         'MEDIUM' => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle',
         'HIGH'   => 'bg-danger-subtle text-danger-emphasis border border-danger-subtle',
-        // CRITICAL used to be `bg-dark` (pure black). That
-        // disappears against a dark page background, defeating
-        // the point of marking something as the highest
-        // sensitivity. `bg-danger-subtle` is the most severe of
-        // the visible-in-both-modes tokens and conveys "this is
-        // the worst level" without becoming invisible.
+        // CRITICAL used to be `bg-dark` (pure black) which
+        // disappears against a dark page background. bg-danger-subtle
+        // is the most severe of the visible-in-both-modes tokens
+        // and conveys "this is the worst level" without vanishing.
         'CRITICAL' => 'bg-danger-subtle text-danger-emphasis border border-danger-subtle',
     ];
     return $colors[$sensitivity] ?? 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle';
@@ -79,9 +75,7 @@ if ($data['status'] !== 'success' || !isset($data['credential'])) {
 
 $cred = $data['credential'];
 
-// Page-specific CSS: the password-field / toggle-password
-// styles for the credential viewer. Inlined via head_extras so
-// it lives in <head> alongside the rest of the page chrome.
+// Page-specific CSS (password-field styles) inlined via head_extras.
 $head_extras  = '    <style>' . "\n";
 $head_extras .= '        .password-field { position: relative; }' . "\n";
 $head_extras .= '        .password-field .toggle-password { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; }' . "\n";
@@ -243,7 +237,6 @@ wanportal_render_header_row('View Credential: ' . htmlspecialchars($cred['name']
 <?php wanportal_render_page_end(); ?>
 
 <script>
-// Password visibility toggle
 function togglePassword(button) {
     const input = button.parentElement.querySelector('input');
     const type = input.getAttribute('type') === 'password' ? 'text' : 'password';
@@ -251,12 +244,11 @@ function togglePassword(button) {
     button.innerHTML = type === 'password' ? '<i class="bi bi-eye"></i>' : '<i class="bi bi-eye-slash"></i>';
 }
 
-// Copy to clipboard function
 function copyToClipboard(element) {
     element.select();
     document.execCommand('copy');
 
-    // Show feedback on the clipboard button
+    // Brief "copied" feedback (1s) on the button.
     const button = element.parentElement.querySelector('.bi-clipboard').parentElement;
     const originalHTML = button.innerHTML;
     button.innerHTML = '<i class="bi bi-check"></i>';

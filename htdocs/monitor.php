@@ -5,29 +5,19 @@ wanportal_session_start();
 $id = $_GET['id'] ?? '';
 if (!$id) die("No monitor ID specified");
 
-// Use UTC for all server-side operations
+// All times UTC so the chart and the "last update" labels line up
+// regardless of where the server runs.
 date_default_timezone_set('UTC');
 
-// Get current time in UTC
 $now = new DateTime('now', new DateTimeZone('UTC'));
-$three_hours_ago = new DateTime('now', new DateTimeZone('UTC'));
-$three_hours_ago->modify('-3 hours');
+$three_hours_ago = (clone $now)->modify('-3 hours');
 
-// Default values in UTC
-$start = isset($_GET['start']) ? $_GET['start'] : $three_hours_ago->format('Y-m-d\TH:i');
-$end = isset($_GET['end']) ? $_GET['end'] : $now->format('Y-m-d\TH:i');
+$start = $_GET['start'] ?? $three_hours_ago->format('Y-m-d\TH:i');
+$end   = $_GET['end']   ?? $now->format('Y-m-d\TH:i');
 
-// Read+write the per-user show_inactive preference. The
-// monitor.php page doesn't currently render a show_inactive
-// toggle, but it reads the session so the value flows in if
-// the user clicked "Inactive" on the listing page and drilled
-// down here. (The toggle would be hidden by show_inactive_toggle
-// = false in render_header_row, so this is just keeping the
-// session in sync.)
 $show_inactive = wanportal_get_show_inactive();
 
 try {
-    // Fetch monitor info with prepared statement
     $stmt = $mysqli->prepare("
         SELECT
             m.*,
@@ -60,7 +50,6 @@ try {
     $monitor = $result->fetch_assoc();
     $stmt->close();
 
-    // Calculate monitor statistics
     $monitor_stats = [
         'total_samples' => $monitor['sample'],
         'total_down' => $monitor['total_down'],
@@ -68,30 +57,21 @@ try {
         'effectively_active' => $monitor['is_active'] && $monitor['agent_is_active'] && $monitor['target_is_active']
     ];
 
-    // Mirror `effectively_active` onto the monitor row itself. The
-    // template uses `$monitor['effectively_active']` in several
-    // places (lifetime-average badges at lines ~265-285, the
-    // auto-refresh block at line ~394); without this, those reads
-    // emit "Undefined array key" warnings and the ternaries fall
-    // through to the `bg-secondary` (inactive) fallback for every
-    // monitor, on every page load.
+    // Mirror onto the row so the template's $monitor['effectively_active']
+    // reads are well-defined (the ternaries downstream fall through to
+    // the bg-secondary fallback without this).
     $monitor['effectively_active'] = $monitor_stats['effectively_active'];
 
-    // Compute the color classes used by the lifetime-average table
-    // and the "current" badges (current vs average comparisons, and
-    // range-based comparisons for the lifetime averages). See
-    // lib/monitor_metrics.php for the threshold definitions.
+    // Color classes for the row. Thresholds in lib/monitor_metrics.php.
     monitor_color_classes($monitor);
 
 } catch (Exception $e) {
     die("Error: " . $e->getMessage());
 }
 
-// Build the action list. The buttons here differ from agent/target:
-// this page has a "Raw Data" link, a "Reset Stats" button (only
-// for non-LOCAL monitors and only for authenticated users), and
-// the "Edit" button. No "Agent" button -- monitor.php is the
-// canonical page for the monitor itself.
+// Actions: Raw Data (always), Reset Stats (non-LOCAL, auth),
+// Edit (auth). No "Agent" button -- monitor.php is the canonical
+// page for the monitor itself.
 $actions = [];
 
 // Raw Data link -- always available, opens the RRD endpoint in a
@@ -104,16 +84,10 @@ $actions[] = [
 ];
 
 if (isset($_SESSION['user'])) {
-    // Reset Stats -- only on user-resettable monitors (skip the
-    // LOCAL agent's own monitors, same as the original page did
-    // implicitly by only showing this on the "Reset" button when
-    // the session user was set; we don't gate on agent name here
-    // because the original didn't either).
+    // Reset Stats -- gated on auth. We don't gate on agent name
+    // here (the original page didn't either).
     $actions[] = [
-        // No 'url' here -- the button triggers a JS confirmReset()
-        // call, not a navigation. We emit it as a button via the
-        // 'click' key in the action array.
-        'click'   => 'confirmReset(\'' . htmlspecialchars($monitor['id'], ENT_QUOTES, 'UTF-8') . '\', \'' . htmlspecialchars($_SESSION['token'], ENT_QUOTES, 'UTF-8') . '\')',
+        'click'  => 'confirmReset()',
         'icon'    => 'bi bi-arrow-counterclockwise',
         'label'   => 'Reset Stats',
         'variant' => 'warning',
@@ -128,12 +102,10 @@ if (isset($_SESSION['user'])) {
 
 $title = 'Monitor: ' . (!empty($monitor['description']) ? $monitor['description'] : $monitor['id']);
 
-// Legacy Graph toggle -- page-specific in-header control. It
-// doesn't fit the action[] shape (which is for <a>/<button>
-// elements) so we pass it through 'extra_buttons' as raw HTML.
-// The matching JS lives in the inline script at the bottom of
-// this page; it reads from localStorage and toggles between the
-// modern Chart.js canvas and the legacy RRD image.
+// Legacy Graph toggle. Doesn't fit the action[] shape (which is
+// for <a>/<button> elements), so we pass it through 'extra_buttons'
+// as raw HTML. The matching JS lives in the inline script at the
+// bottom of this page.
 $extra_buttons = '<div class="btn btn-secondary btn-sm d-flex align-items-center" style="gap: 5px;">' . "\n"
     . '                    <div class="form-check form-switch mb-0">' . "\n"
     . '                        <input class="form-check-input" type="checkbox" id="graphToggle">' . "\n"
@@ -141,10 +113,9 @@ $extra_buttons = '<div class="btn btn-secondary btn-sm d-flex align-items-center
     . '                    </div>' . "\n"
     . '                </div>';
 
-// Page-specific head extras: the chart.js + date-fns adapter
-// (loaded in <head> so it's ready before the inline chart script
-// at the bottom of the page) and the page's custom CSS for the
-// chart container and time-range card.
+// Page-specific head extras: chart.js + date-fns adapter (loaded
+// in <head> so they're ready before the inline chart script at
+// the bottom of the page) and the page's custom CSS.
 $head_extras  = '<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>' . "\n";
 $head_extras .= '    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>' . "\n";
 $head_extras .= '    <style>' . "\n";
@@ -392,13 +363,12 @@ const MONITOR_TITLE = <?= json_encode(
 ) ?>;
 </script>
 <script>
-// Format a Date as the value expected by an <input type="datetime-local">:
-// "YYYY-MM-DDTHH:MM" in *local* time. The input ignores the trailing
-// seconds and treats its value as local time; we keep things consistent
-// by sending the user's local clock to the input, then letting the form
-// submit (or the API URL build) re-encode the range. The chart adapter
-// below parses the same string back into a Date in the same local zone.
-function toLocalDatetimeInputValue(d) {
+// Format a Date as the value expected by <input type="datetime-local">:
+// "YYYY-MM-DDTHH:MM" in *local* time. The input ignores trailing
+// seconds and treats the value as local; the chart adapter parses the
+// same string back into a Date in the same zone, so we keep them in sync
+// by sending the user's local clock to the input.
+function formatLocalDatetime(date) {
     const pad = n => String(n).padStart(2, '0');
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
          + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
@@ -424,13 +394,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const dataUrl = `/cgi-bin/api/rrd?id=${monitorId}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
 
-    // Legacy-graph preference persistence. We mirror the dark-mode
-    // pattern from footer.php: read the user's choice from
-    // localStorage, apply it on init, and write it back on change.
-    // The toggle's default is "modern graph" (the persisted value
-    // is missing or unrecognized). Persisting the modern-graph case
-    // too is intentional — if the user explicitly switches back, we
-    // remember that across navigations.
+    // Legacy-graph preference: mirror the dark-mode pattern in
+    // footer.php (read from localStorage, apply on init, write
+    // back on change). Default is "modern graph".
     const LEGACY_GRAPH_KEY = 'wanportal-legacy-graph';
     let useLegacyGraph = false;
     try {
@@ -494,8 +460,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!isFinite(hours) || hours <= 0) return;
             const endDate = new Date();
             const startDate = new Date(endDate.getTime() - hours * 60 * 60 * 1000);
-            const startStr = toLocalDatetimeInputValue(startDate);
-            const endStr = toLocalDatetimeInputValue(endDate);
+            const startStr = formatLocalDatetime(startDate);
+            const endStr = formatLocalDatetime(endDate);
             document.getElementById('startTime').value = startStr;
             document.getElementById('endTime').value = endStr;
             // Reflect the new range in the URL so a hard refresh

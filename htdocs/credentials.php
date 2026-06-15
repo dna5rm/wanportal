@@ -1,8 +1,7 @@
 <?php
-// Helper function for badge colors (PHP version) -- defined
-// here rather than in lib/page.php because it's only used by
-// the credentials page and its two associated pages
-// (credential_edit.php, credential_view.php).
+// Helper functions for credential/sensitivity badge colors. Lives
+// here (not in lib/page.php) because only the credentials pages
+// use them.
 function getBadgeColor($type) {
     $colors = [
         'ACCOUNT' => 'primary',
@@ -57,12 +56,7 @@ if ($status === 200) {
     }
 }
 
-// Standard page chrome + header row. DataTables is used here so
-// we pass 'datatables' => true in the head options. The "New
-// Credential" action matches the listing-page convention
-// documented in the wanportal skill: a primary button on the
-// right of the header row, gated on auth.
-wanportal_render_head('Credentials Management', ['datatables' => true]);
+wanportal_render_head('Credentials', ['datatables' => true]);
 wanportal_render_header_row('Credentials Management', [
     [
         'url'     => '/credential_edit.php',

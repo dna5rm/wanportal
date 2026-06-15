@@ -40,10 +40,7 @@ if ($status === 200) {
     }
 }
 
-// Render the standard page chrome (head, opening body, navbar,
-// container). No CDN features are needed on this page beyond the
-// defaults, so the options array is empty.
-wanportal_render_head('Users');
+wanportal_render_head('Users', ['datatables' => true]);
 wanportal_render_header_row('Users', [
     [
         'url'     => '/user_edit.php',

@@ -67,11 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Login-specific CSS. The login card sits on top of the navbar
-// with the same background color as the body (--bs-body-bg) so
-// it blends in both light and dark themes without a visible
-// separator line. Moved into head_extras so it lives in <head>
-// alongside the rest of the page chrome.
+// Login-specific CSS inlined via head_extras.
 $head_extras  = '    <style>' . "\n";
 $head_extras .= '        .login-container { min-height: calc(100vh - 72px); background-color: var(--bs-body-bg); }' . "\n";
 $head_extras .= '        .login-card { min-width: 320px; max-width: 340px; }' . "\n";

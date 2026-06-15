@@ -5,13 +5,9 @@ wanportal_session_start();
 $id = $_GET['id'] ?? '';
 if (!$id) die("No target ID specified");
 
-// Read+write the per-user show_inactive preference. The
-// show_inactive_toggle option in the header row below reads the
-// session value to decide whether the toggle is checked.
 $show_inactive = wanportal_get_show_inactive();
 
 try {
-    // Fetch target info with prepared statement
     $stmt = $mysqli->prepare("
         SELECT id, address, description, is_active
         FROM targets
@@ -34,7 +30,6 @@ try {
     $target = $result->fetch_assoc();
     $stmt->close();
 
-    // Fetch monitors with all related info using JOIN
     $stmt = $mysqli->prepare("
         SELECT
             m.*,
@@ -58,7 +53,6 @@ try {
     $result = $stmt->get_result();
     $monitors = [];
 
-    // Calculate monitor statistics while fetching
     $monitor_stats = [
         'total' => 0,
         'active' => 0,
@@ -67,13 +61,9 @@ try {
     ];
 
     while ($row = $result->fetch_assoc()) {
-        // Compute the color classes used by the table (current vs
-        // average comparisons, and range-based comparisons for the
-        // lifetime averages). See lib/monitor_metrics.php for the
-        // threshold definitions.
+        // Color classes for the row. Thresholds in lib/monitor_metrics.php.
         monitor_color_classes($row);
 
-        // Update statistics
         $monitor_stats['total']++;
         if ($row['is_active'] && $row['agent_is_active'] && $target['is_active']) {
             $monitor_stats['active']++;
@@ -92,7 +82,7 @@ try {
     die("Error: " . $e->getMessage());
 }
 
-// Build the action list. Only the "Edit" button, gated on auth.
+// Actions. Only "Edit" for non-LOCAL targets, gated on auth.
 $actions = [];
 if (isset($_SESSION['user'])) {
     $actions[] = [
@@ -178,10 +168,7 @@ wanportal_render_header_row(
                         <?php if (!empty($monitors)): ?>
                             <?php foreach ($monitors as $m): ?>
                                 <?php
-                                // Calculate effective status
                                 $effectively_active = $target['is_active'] && $m['agent_is_active'] && $m['is_active'];
-
-                                // Skip if inactive and not showing inactive
                                 if (!$effectively_active && !$show_inactive) {
                                     continue;
                                 }

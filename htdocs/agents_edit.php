@@ -12,7 +12,7 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
-// Initialize variables
+// Edit existing agent (if id) or create a blank one.
 $id = $_GET['id'] ?? null;
 $error = '';
 $success = '';
@@ -24,7 +24,6 @@ $agent = [
     'is_active' => true
 ];
 
-// If editing, fetch existing agent
 if ($id) {
     $ch = curl_init("http://localhost/cgi-bin/api/agent/$id");
     curl_setopt_array($ch, [
@@ -46,19 +45,11 @@ if ($id) {
     }
 }
 
-// Handle form submission
+// Form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // CSRF check (closes the cross-site form-submission
-    // gap). The token is rendered as a hidden input by the
-    // template below; this verifies the posted value
-    // matches the session token.
     if (!wanportal_csrf_valid()) {
         $error = 'Invalid CSRF token. Please reload the page and try again.';
     } else {
-        // Debug output to console
-        print("Form submitted: " . print_r($_POST, true) . "\n");
-
-        // Collect form data
         $agentData = [
             'name' => $_POST['name'] ?? '',
             'address' => $_POST['address'] ?? '',
@@ -66,15 +57,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'is_active' => isset($_POST['is_active'])
         ];
 
-        // Add password if provided
         if (!empty($_POST['password'])) {
             $agentData['password'] = $_POST['password'];
         }
 
-        // Debug output
-        print("Agent data to send: " . json_encode($agentData) . "\n");
-
-        // Make API request
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
@@ -85,22 +71,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
 
         if ($id) {
-            // Update existing agent
             curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/agent/$id");
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
         } else {
-            // Create new agent
             curl_setopt($ch, CURLOPT_URL, "http://localhost/cgi-bin/api/agent");
             curl_setopt($ch, CURLOPT_POST, true);
         }
 
         $postData = json_encode($agentData);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
-    
+
         $response = curl_exec($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-        // Debug output
 
         curl_close($ch);
 
@@ -116,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Failed to save agent (Status: $status, Response: $response)";
         }
 
-        // If there was an error, keep the submitted data
+        // On error, keep the submitted data so the form re-renders with what the user typed.
         if ($error) {
             $agent = $agentData;
         }
@@ -218,7 +200,6 @@ wanportal_render_header_row(($id ? 'Edit' : 'New') . ' Agent', [
 <?php wanportal_render_page_end(); ?>
 
 <script>
-// Password visibility toggle
 function togglePassword(fieldId) {
     const field = document.getElementById(fieldId);
     const button = field.nextElementSibling;
@@ -231,7 +212,7 @@ function togglePassword(fieldId) {
     }
 }
 
-// Form validation
+// Bootstrap needs-validation handler.
 (function () {
     'use strict'
     var forms = document.querySelectorAll('.needs-validation')
@@ -246,7 +227,8 @@ function togglePassword(fieldId) {
     })
 })()
 
-// IP address validation
+// IP address validation: IPv4 or IPv6 only (no hostnames -- the
+// agent needs a routable address, not a DNS name).
 document.getElementById('address').addEventListener('input', function() {
     const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
     const ipv6Regex = /^(?:(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,7}:|(?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|(?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|(?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|(?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|[0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|:(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)|fe80:(?::[0-9A-Fa-f]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(?:ffff(?::0{1,4}){0,1}:){0,1}(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])|(?:[0-9A-Fa-f]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;

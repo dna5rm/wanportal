@@ -7,13 +7,9 @@ wanportal_session_start();
 $id = $_GET['id'] ?? '';
 if (!$id) die("No agent ID specified");
 
-// Read+write the per-user show_inactive preference. The
-// show_inactive_toggle option in the header row below reads the
-// session value to decide whether the toggle is checked.
 $show_inactive = wanportal_get_show_inactive();
 
 try {
-    // Fetch agent info with prepared statement
     $stmt = $mysqli->prepare("
         SELECT id, name, address, description, last_seen, is_active
         FROM agents
@@ -36,7 +32,6 @@ try {
     $agent = $result->fetch_assoc();
     $stmt->close();
 
-    // Fetch monitors with all related info using JOIN
     $stmt = $mysqli->prepare("
         SELECT
             m.*,
@@ -60,7 +55,6 @@ try {
     $result = $stmt->get_result();
     $monitors = [];
 
-    // Calculate monitor statistics while fetching
     $monitor_stats = [
         'total' => 0,
         'active' => 0,
@@ -69,13 +63,10 @@ try {
     ];
 
     while ($row = $result->fetch_assoc()) {
-        // Compute the color classes used by the table (current vs
-        // average comparisons, and range-based comparisons for the
-        // lifetime averages). See lib/monitor_metrics.php for the
-        // threshold definitions.
+        // Color classes for the row (current vs lifetime avg).
+        // Thresholds live in lib/monitor_metrics.php.
         monitor_color_classes($row);
 
-        // Update statistics
         $monitor_stats['total']++;
         if ($row['is_active'] && $row['target_is_active'] && $agent['is_active']) {
             $monitor_stats['active']++;
@@ -94,9 +85,8 @@ try {
     die("Error: " . $e->getMessage());
 }
 
-// Build the action list. The "Agent" action is conditional on
-// the agent's name (LOCAL agents don't have a netping script to
-// show), and both actions are gated on auth.
+// Action buttons. "Agent" is hidden for LOCAL agents (no netping
+// script); Edit is always available for authenticated users.
 $actions = [];
 if (isset($_SESSION['user']) && $agent['name'] != "LOCAL") {
     $actions[] = [
@@ -124,9 +114,7 @@ wanportal_render_header_row(
 ?>
 
     <div class="row">
-        <!-- Agent Info Column -->
         <div class="col-md-3">
-            <!-- Agent Details Card -->
             <div class="card mb-3">
                 <div class="card-body">
                     <h5 class="card-title">Details</h5>
@@ -159,10 +147,6 @@ wanportal_render_header_row(
                 </div>
             </div>
 
-            <!-- Monitor Statistics Card (now rendered by the
-                 shared partial; the layout, color tokens, and
-                 list-group structure match the previous hand-rolled
-                 version exactly). -->
             <?php wanportal_render_stats_card('Statistics', [
                 ['Active Monitors',         $monitor_stats['active'],              'success'],
                 ['Inactive Monitors',       $monitor_stats['inactive'],            'warning'],
@@ -171,9 +155,7 @@ wanportal_render_header_row(
             ]); ?>
         </div>
 
-        <!-- Monitors Column -->
         <div class="col-md-9">
-            <!-- Monitors Table -->
             <div class="table-responsive">
                 <table id="tablePager" class="table table-bordered table-striped table-hover" data-empty-message="No monitors found">
                     <thead>
@@ -183,28 +165,18 @@ wanportal_render_header_row(
                             <th>Protocol</th>
                             <th class="text-center bg-primary-subtle">Median</th>
                             <th class="text-center bg-primary-subtle">Loss</th>
-                            <!--
-                            <th class="text-center bg-secondary-subtle">Median</th>
-                            <th class="text-center bg-secondary-subtle">Min</th>
-                            <th class="text-center bg-secondary-subtle">Max</th>
-                            <th class="text-center bg-secondary-subtle">Std Dev</th>
-                            <th class="text-center bg-secondary-subtle">Loss</th>
-                            -->
                             <th class="text-center">Last Update</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (!empty($monitors)): ?>
-                            <?php foreach ($monitors as $m): ?>
-                                <?php
-                                // Calculate effective status
-                                $effectively_active = $agent['is_active'] && $m['target_is_active'] && $m['is_active'];
-                                
-                                // Skip if inactive and not showing inactive
-                                if (!$effectively_active && !$show_inactive) {
-                                    continue;
-                                }
-                                ?>
+                        <?php foreach ($monitors as $m): ?>
+                            <?php
+                            $effectively_active = $agent['is_active'] && $m['target_is_active'] && $m['is_active'];
+                            if (!$effectively_active && !$show_inactive) {
+                                continue;
+                            }
+                            ?>
                                 <tr class="<?= $effectively_active ? '' : 'bg-secondary-subtle' ?>">
                                     <td>
                                         <?php if (!$effectively_active): ?>
@@ -258,33 +230,6 @@ wanportal_render_header_row(
                                             <?= htmlspecialchars($m['current_loss']) ?>%
                                         </span>
                                     </td>
-                                    <!--
-                                    <td class="text-center bg-secondary-subtle">
-                                        <span class="badge <?= $effectively_active ? $m['avg_median_color'] : 'bg-secondary' ?>">
-                                            <?= htmlspecialchars($m['avg_median']) ?>
-                                        </span>
-                                    </td>
-                                    <td class="text-center bg-secondary-subtle">
-                                        <span class="badge <?= $effectively_active ? $m['avg_minimum_color'] : 'bg-secondary' ?>">
-                                            <?= htmlspecialchars($m['avg_min']) ?>
-                                        </span>
-                                    </td>
-                                    <td class="text-center bg-secondary-subtle">
-                                        <span class="badge <?= $effectively_active ? $m['avg_maximum_color'] : 'bg-secondary' ?>">
-                                            <?= htmlspecialchars($m['avg_max']) ?>
-                                        </span>
-                                    </td>
-                                    <td class="text-center bg-secondary-subtle">
-                                        <span class="badge <?= $effectively_active ? $m['avg_stddev_color'] : 'bg-secondary' ?>">
-                                            <?= htmlspecialchars($m['avg_stddev']) ?>
-                                        </span>
-                                    </td>
-                                    <td class="text-center bg-secondary-subtle">
-                                        <span class="badge <?= $effectively_active ? $m['avg_loss_color'] : 'bg-secondary' ?>">
-                                            <?= htmlspecialchars($m['avg_loss']) ?>%
-                                        </span>
-                                    </td>
-                                    -->
                                     <td class="text-center">
                                         <span class="<?= $effectively_active ? '' : 'text-muted' ?>"
                                               title="Last Down: <?= htmlspecialchars($m['last_down']) ?>" 
