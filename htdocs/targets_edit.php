@@ -1,9 +1,9 @@
 <?php
 // targets_edit.php
-session_start();
-require_once 'check_session.php';
 require_once 'config.php';
 require_once __DIR__ . '/lib/page.php';
+wanportal_session_start();
+require_once 'check_session.php';
 
 
 // Check authentication
@@ -49,16 +49,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!wanportal_csrf_valid()) {
         $error = 'Invalid CSRF token. Please reload the page and try again.';
     } else {
-        print("Form submitted: " . print_r($_POST, true) . "\n");
-
         // Collect form data
         $targetData = [
             'address' => $_POST['address'] ?? '',
             'description' => $_POST['description'] ?? '',
             'is_active' => isset($_POST['is_active'])
         ];
-
-        print("Target data to send: " . json_encode($targetData) . "\n");
 
         // Make API request
         $ch = curl_init();
@@ -178,20 +174,7 @@ wanportal_render_header_row(($id ? 'Edit' : 'New') . ' Target', [
 <?php wanportal_render_page_end(); ?>
 
 <script>
-// Form validation
-(function () {
-    'use strict'
-    var forms = document.querySelectorAll('.needs-validation')
-    Array.prototype.slice.call(forms).forEach(function (form) {
-        form.addEventListener('submit', function (event) {
-            if (!form.checkValidity()) {
-                event.preventDefault()
-                event.stopPropagation()
-            }
-            form.classList.add('was-validated')
-        }, false)
-    })
-})()
+// needs-validation is now in footer.php.
 
 // Address validation
 document.getElementById('address').addEventListener('input', function() {

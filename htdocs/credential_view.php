@@ -30,10 +30,10 @@ function getSensitivityColor($sensitivity) {
 }
 
 // credential_view.php
-session_start();
-require_once 'check_session.php';
 require_once 'config.php';
 require_once __DIR__ . '/lib/page.php';
+wanportal_session_start();
+require_once 'check_session.php';
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
@@ -246,7 +246,10 @@ function togglePassword(button) {
 
 function copyToClipboard(element) {
     element.select();
-    document.execCommand('copy');
+    navigator.clipboard.writeText(element.value).catch(function() {
+        // Fallback for older browsers without Clipboard API
+        document.execCommand('copy');
+    });
 
     // Brief "copied" feedback (1s) on the button.
     const button = element.parentElement.querySelector('.bi-clipboard').parentElement;

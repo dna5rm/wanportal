@@ -1,9 +1,9 @@
 <?php
 // credential_edit.php
-session_start();
-require_once 'check_session.php';
 require_once 'config.php';
 require_once __DIR__ . '/lib/page.php';
+wanportal_session_start();
+require_once 'check_session.php';
 
 
 // Check authentication
@@ -283,18 +283,7 @@ wanportal_render_header_row(($id ? 'Edit' : 'New') . ' Credential', [
 <?php wanportal_render_page_end(); ?>
 
 <script>
-// Toggle password visibility
-function togglePassword(fieldId) {
-    const field = document.getElementById(fieldId);
-    const button = field.nextElementSibling;
-    if (field.type === 'password') {
-        field.type = 'text';
-        button.innerHTML = '<i class="bi bi-eye-slash"></i>';
-    } else {
-        field.type = 'password';
-        button.innerHTML = '<i class="bi bi-eye"></i>';
-    }
-}
+// togglePassword is now in footer.php.
 
 // Format JSON in metadata field
 document.getElementById('metadata').addEventListener('blur', function() {
@@ -315,7 +304,7 @@ document.querySelector('form').addEventListener('submit', function(e) {
     if (metadata.value.trim() !== '') {
         try {
             JSON.parse(metadata.value);
-        } catch (e) {
+        } catch (err) {
             e.preventDefault();
             alert('Invalid JSON in metadata field');
             metadata.focus();

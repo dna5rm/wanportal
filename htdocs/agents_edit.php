@@ -1,9 +1,9 @@
 <?php
 // agents_edit.php
-session_start();
-require_once 'check_session.php';
 require_once 'config.php';
 require_once __DIR__ . '/lib/page.php';
+wanportal_session_start();
+require_once 'check_session.php';
 
 
 // Check authentication
@@ -195,37 +195,11 @@ wanportal_render_header_row(($id ? 'Edit' : 'New') . ' Agent', [
             </div>
         </div>
     </div>
-</div>
 
 <?php wanportal_render_page_end(); ?>
 
 <script>
-function togglePassword(fieldId) {
-    const field = document.getElementById(fieldId);
-    const button = field.nextElementSibling;
-    if (field.type === 'password') {
-        field.type = 'text';
-        button.innerHTML = '<i class="bi bi-eye-slash"></i>';
-    } else {
-        field.type = 'password';
-        button.innerHTML = '<i class="bi bi-eye"></i>';
-    }
-}
-
-// Bootstrap needs-validation handler.
-(function () {
-    'use strict'
-    var forms = document.querySelectorAll('.needs-validation')
-    Array.prototype.slice.call(forms).forEach(function (form) {
-        form.addEventListener('submit', function (event) {
-            if (!form.checkValidity()) {
-                event.preventDefault()
-                event.stopPropagation()
-            }
-            form.classList.add('was-validated')
-        }, false)
-    })
-})()
+// togglePassword and needs-validation are now in footer.php.
 
 // IP address validation: IPv4 or IPv6 only (no hostnames -- the
 // agent needs a routable address, not a DNS name).
@@ -240,5 +214,3 @@ document.getElementById('address').addEventListener('input', function() {
     }
 });
 </script>
-</body>
-</html>

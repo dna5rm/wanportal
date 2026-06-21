@@ -140,35 +140,11 @@
             });
         }
 
-        // Hook the "show inactive" toggle if the page has one. The
-        // toggle is a checkbox with id="showInactive" that, when
-        // toggled, hides rows whose first cell text equals the
-        // "Inactive" badge (or whose class is table-secondary).
-        var toggle = document.getElementById('showInactive');
-        if (toggle) {
-            toggle.addEventListener('change', function () {
-                var showAll = this.checked;
-                // We use DataTables' column search API to filter
-                // to either "all" or "active only" by hiding the
-                // table-secondary rows. Simpler: redraw the table
-                // with a regex search.
-                if (showAll) {
-                    $t.DataTable().column(0).search('').draw();
-                } else {
-                    // Match rows whose status cell text is "Active".
-                    // The status column is the one with the
-                    // "Active"/"Inactive" badge.
-                    $t.DataTable().column(0).search('', false, false).draw();
-                    // Crude: iterate rendered rows and hide the
-                    // table-secondary ones.
-                    $t.find('tbody tr.table-secondary').hide();
-                }
-            });
-            // Initialize in the right state on page load.
-            if (!toggle.checked) {
-                $t.find('tbody tr.table-secondary').hide();
-            }
-        }
+        // The showInactive toggle is handled by the URL-based hook
+        // in lib/page.php's render_page_end(), which navigates to
+        // the same URL with ?show_inactive=true|false on change.
+        // The server then filters the rows. No client-side handler
+        // is needed here — it would race with the page.php hook.
     }
 
     // data-order attribute parser. Format: '[[3, "desc"], [0, "asc"]]'

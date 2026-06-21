@@ -1,9 +1,9 @@
 <?php
 // users.php
-session_start();
-require_once 'check_session.php';
 require_once 'config.php';
 require_once __DIR__ . '/lib/page.php';
+wanportal_session_start();
+require_once 'check_session.php';
 
 // Check authentication and admin status
 if (!isset($_SESSION['user'])) {
@@ -142,7 +142,7 @@ wanportal_render_header_row('Users', [
                                 <?php if ($user['username'] !== 'admin'): ?>
                                     <button type="button" 
                                             class="btn btn-sm btn-outline-danger"
-                                            onclick="deleteUser('<?= htmlspecialchars($user['id']) ?>', '<?= htmlspecialchars($user['username']) ?>')"
+                                            onclick="deleteUser('<?= htmlspecialchars($user['id'], ENT_QUOTES, 'UTF-8') ?>', '<?= htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8') ?>')"
                                             title="Delete">
                                         <i class="bi bi-trash"></i>
                                     </button>
@@ -153,8 +153,6 @@ wanportal_render_header_row('Users', [
                 <?php endforeach; ?>
             </tbody>
         </table>
-    </div>
-</div>
 
 <script>
 // Filter functionality
@@ -193,23 +191,17 @@ function filterUsers() {
 // Delete confirmation
 function deleteUser(id, username) {
     if (confirm(`Are you sure you want to delete user "${username}"?`)) {
-        fetch(`/cgi-bin/api/users/${id}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': 'Bearer <?= $_SESSION['token'] ?>'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                location.reload();
-            } else {
-                alert('Error deleting user: ' + data.message);
-            }
-        })
-        .catch(error => {
-            alert('Error: ' + error);
-        });
+        proxyRequest('DELETE', '/users/' + id)
+            .then(function(data) {
+                if (data.status === 'success') {
+                    location.reload();
+                } else {
+                    alert('Error deleting user: ' + data.message);
+                }
+            })
+            .catch(function(error) {
+                alert('Error: ' + error.message);
+            });
     }
 }
 </script>

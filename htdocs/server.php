@@ -2,60 +2,11 @@
 require_once 'config.php';
 require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
-/**
- * Make API calls to the backend
- * @param string $endpoint API endpoint to call
- * @return array|null Returns decoded JSON response or null on failure
- */
-function callAPI($endpoint) {
-    // Ensure endpoint starts with /
-    if (substr($endpoint, 0, 1) !== '/') {
-        $endpoint = '/' . $endpoint;
-    }
-
-    // For debugging
-    if (DEBUG_MODE) {
-        error_log("Calling API: " . API_BASE_URL . $endpoint);
-    }
-
-    $ch = curl_init(API_BASE_URL . $endpoint);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FAILONERROR => true,
-        CURLOPT_TIMEOUT => 30
-    ]);
-
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    
-    if (curl_errno($ch)) {
-        error_log("API Error for " . $endpoint . ": " . curl_error($ch));
-        curl_close($ch);
-        return null;
-    }
-    
-    curl_close($ch);
-    
-    if ($httpCode === 200) {
-        $decoded = json_decode($response, true);
-        if (json_last_error() === JSON_ERROR_NONE) {
-            return $decoded;
-        }
-        error_log("JSON decode error for " . $endpoint . ": " . json_last_error_msg());
-    } else {
-        error_log("API returned status code " . $httpCode . " for " . $endpoint);
-        if (DEBUG_MODE) {
-            error_log("API Response: " . $response);
-        }
-    }
-    
-    return null;
-}
 
 // Fetch data from APIs
-$agentsResponse = callAPI('/agents');
-$targetsResponse = callAPI('/targets');
-$monitorsResponse = callAPI('/monitors');
+$agentsResponse = api_get('/agents');
+$targetsResponse = api_get('/targets');
+$monitorsResponse = api_get('/monitors');
 
 // Count entries helper function
 function count_entries_from_api($items) {
@@ -119,10 +70,6 @@ $stats = [
     'total_monitors' => $monitorsCount['total']
 ];
 
-// Get server name safely
-$server_name = isset($_SERVER['SERVER_NAME']) ? 
-    strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0]) : 
-    'NETPING';
 // Local Server auto-refreshes every 5 minutes (uptime / agent
 // counts change slowly). Pass the meta tag through head_extras
 // so it lives inside <head> (required for browsers to honor it).
@@ -193,6 +140,5 @@ wanportal_render_header_row('Local Server');
             <br />
         </div>
     </div>
-</div>
 
 <?php wanportal_render_page_end(); ?>

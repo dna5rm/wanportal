@@ -5,6 +5,5 @@
 !api-docs/
 !cgi-bin/
 !htdocs/
-!.env
 !run-*.sh
 !*.pl

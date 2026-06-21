@@ -3,8 +3,12 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.11/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.11/js/dataTables.bootstrap5.min.js"></script>
+<?php if (defined('WANPORTAL_NEEDS_SELECT2')): ?>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<?php endif; ?>
+<?php if (defined('WANPORTAL_NEEDS_LEAFLET')): ?>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<?php endif; ?>
 
 <!-- Local helpers: CSRF-protected API calls + DataTables init
      for listing pages. Listings auto-initialize on DOMContentLoaded
@@ -20,7 +24,10 @@
 
 <script>
     // Select2 init for the searchable <select> elements used on
-    // monitor/credential edit pages.
+    // monitor/credential edit pages. Only runs when the Select2
+    // JS was loaded (i.e. the page passed 'select2' => true to
+    // render_head, which defines WANPORTAL_NEEDS_SELECT2).
+<?php if (defined('WANPORTAL_NEEDS_SELECT2')): ?>
     $(document).ready(function() {
         $('.searchable-select').each(function() {
             $(this).select2({
@@ -32,6 +39,7 @@
             });
         });
     });
+<?php endif; ?>
 
     // Toast notification helper. Pages call showToast(message, type)
     // where type is one of 'success', 'danger', 'warning', 'info'.
@@ -52,12 +60,17 @@
             + '<div id="' + id + '" class="toast align-items-center text-bg-' + type
             + ' border-0" role="alert" aria-live="assertive" aria-atomic="true">'
             + '  <div class="d-flex">'
-            + '    <div class="toast-body">' + message + '</div>'
+            + '    <div class="toast-body"></div>'
             + '    <button type="button" class="btn-close btn-close-white me-2 m-auto"'
             + '            data-bs-dismiss="toast" aria-label="Close"></button>'
             + '  </div>'
             + '</div>';
         container.insertAdjacentHTML('beforeend', html);
+        // Set the message via textContent to prevent HTML injection.
+        // The toast structure is built via insertAdjacentHTML above
+        // (safe — no user data in the template), but the message
+        // itself is user-provided and must not be interpreted as HTML.
+        document.querySelector('#' + id + ' .toast-body').textContent = message;
         var el = document.getElementById(id);
         var t = new bootstrap.Toast(el, { delay: 4000 });
         t.show();
@@ -127,6 +140,37 @@
     // That gives the listing page a chance to fire showToast()
     // after the redirect target finishes loading.
     window.wanportalPageOnLoad = window.wanportalPageOnLoad || function () {};
+
+    // Shared password visibility toggle. Pages call
+    // togglePassword('fieldId') from an onclick button.
+    window.togglePassword = function (fieldId) {
+        var field = document.getElementById(fieldId);
+        var button = field.nextElementSibling;
+        if (field.type === 'password') {
+            field.type = 'text';
+            button.innerHTML = '<i class="bi bi-eye-slash"></i>';
+        } else {
+            field.type = 'password';
+            button.innerHTML = '<i class="bi bi-eye"></i>';
+        }
+    };
+
+    // Shared Bootstrap needs-validation handler. Any page with a
+    // <form class="needs-validation"> gets client-side validation
+    // without needing to copy-paste this IIFE.
+    (function () {
+        'use strict';
+        var forms = document.querySelectorAll('.needs-validation');
+        Array.prototype.slice.call(forms).forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+    })();
 
     // Wait for the document to be fully loaded
     document.addEventListener('DOMContentLoaded', function() {

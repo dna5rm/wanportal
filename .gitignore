@@ -30,8 +30,7 @@ htdocs/assets/logo.png
 # Test / scratch data with nested repos
 tmp/
 
-# Path-prefixed patterns for files that might appear in tracked
-# directories but should never be committed. (These are the
-# equivalents of what the old `**` was denying.)
-htdocs/.htaccess
-htdocs/.user.ini
+# Note: .htaccess and .user.ini were previously gitignored but are
+# now tracked — they contain security configuration (CSP headers,
+# session hardening) that should be version-controlled. No secrets
+# live in these files.

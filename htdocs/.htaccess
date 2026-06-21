@@ -1,0 +1,46 @@
+# .htaccess for /var/www/localhost/htdocs
+#
+# Adds a baseline of security response headers. The Dockerfile
+# already has AllowOverride All on the document root and loads
+# mod_headers, so this file takes effect immediately.
+#
+# Reference: https://owasp.org/www-project-secure-headers/
+
+# Prevent MIME-sniffing. Without this, old browsers (and some
+# misconfigured proxies) can be tricked into interpreting a text
+# response as HTML/JS, enabling stored-XSS via uploaded "innocent"
+# text files.
+Header always set X-Content-Type-Options "nosniff"
+
+# Prevent clickjacking. DENY = no embedding at all (use SAMEORIGIN
+# if you need to embed your own pages in iframes). The wanportal
+# doesn't use frames, so DENY is the right choice.
+Header always set X-Frame-Options "DENY"
+
+# Limit Referer leakage. "strict-origin-when-cross-origin" sends
+# the full URL for same-origin requests, just the origin for
+# cross-origin HTTPS->HTTPS, and nothing for HTTPS->HTTP. This
+# is the modern default and is what Chrome/Firefox ship with.
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+# Permissions-Policy: turn off features the wanportal doesn't use.
+# (Camera, microphone, geolocation, etc. — the wanportal is a
+# status dashboard, it has no business requesting any of these.)
+Header always set Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+
+# Content-Security-Policy. The wanportal loads scripts and styles
+# from a few CDNs and uses inline <script> blocks throughout its
+# pages. 'unsafe-inline' is required for both script-src and
+# style-src until the inline scripts are extracted or hashed.
+# That's a separate refactor; for now this CSP closes every other
+# script-injection vector and forces browsers to refuse anything
+# from a non-allowlisted origin.
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.datatables.net https://code.jquery.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.datatables.net https://cdnjs.cloudflare.com; img-src 'self' data: https:; font-src 'self' https://cdn.jsdelivr.net; connect-src 'self'"
+
+# Disable the Apache server signature (stops Apache from adding
+# its version line to 404s and the like). ServerTokens must be
+# set in the main config (not .htaccess), so this only handles
+# the "On..." / "Apache/2.4..." footer that appears on error pages.
+# If you want the Server: header to say just "Apache" instead of
+# "Apache/2.4.67 (Unix)", set ServerTokens Prod in httpd.conf.
+ServerSignature Off

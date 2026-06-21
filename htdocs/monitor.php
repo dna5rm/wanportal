@@ -329,7 +329,7 @@ wanportal_render_header_row($title, $actions, ['extra_buttons' => $extra_buttons
                         <button type="button" class="btn btn-outline-secondary btn-sm" data-range-hours="72">Last 3d</button>
                     </div>
 
-                    <form action="monitor_graph.php" method="GET" id="dateTimeForm" class="time-range-form">
+                    <form action="#" method="GET" id="dateTimeForm" class="time-range-form">
                         <div class="card time-range-card shadow-sm">
                             <div class="card-body">
                                 <div class="d-flex align-items-center mb-2">
@@ -686,6 +686,4 @@ function showError(message) {
     console.error(`Error: ${message}`);
 }
 </script>
-</body>
-</html>
 <?php $mysqli->close(); ?>

@@ -86,6 +86,7 @@ $head_extras .= '    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1
 wanportal_render_head(basename(htmlspecialchars($filename)), ['head_extras' => $head_extras]);
 wanportal_render_header_row('Script: ' . basename(htmlspecialchars($filename, ENT_QUOTES, 'UTF-8')));
 ?>
+        <div class="row">
         <div class="col-md-3">
             <!-- Script Info Column -->
             <div class="card mb-3">
@@ -183,6 +184,5 @@ wanportal_render_header_row('Script: ' . basename(htmlspecialchars($filename, EN
             </div>
         </div>
     </div>
-</div>
 
 <?php wanportal_render_page_end(); ?>

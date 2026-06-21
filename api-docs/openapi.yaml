@@ -1,22 +1,60 @@
----
+openapi: 3.0.0
+
+info:
+  title: NetOPS Monitoring API
+  description: API for managing network monitoring agents, targets, monitors, credentials, and users.
+  version: 1.1.0
+
+servers:
+  - url: /
+    description: Relative to current host
+
+tags:
+  - name: Public API
+    description: Public endpoints that provide read-only access to monitoring data and statistics.
+  - name: Authentication
+    description: Endpoints for user authentication and token validation.
+  - name: System
+    description: System and health-check endpoints.
+  - name: Users
+    description: User account management endpoints. Most operations require admin privileges.
+  - name: Agents
+    description: Monitoring agent management endpoints for creating, updating, and managing monitoring agents.
+  - name: Agent Monitors
+    description: Endpoints used by monitoring agents to retrieve assignments and submit results.
+  - name: Targets
+    description: Target management endpoints for creating and managing monitoring targets.
+  - name: Monitors
+    description: Monitor configuration endpoints for setting up and managing monitoring assignments.
+  - name: Credentials
+    description: Secure credential management endpoints for storing and retrieving various types of credentials.
+
 components:
+  securitySchemes:
+    bearerAuth:
+      bearerFormat: JWT
+      scheme: bearer
+      type: http
+
   schemas:
     Error:
+      type: object
       properties:
-        message:
-          type: string
         status:
+          type: string
           example: error
-          type: string
-      type: object
-    Success:
-      properties:
         message:
           type: string
-        status:
-          example: success
-          type: string
+
+    Success:
       type: object
+      properties:
+        status:
+          type: string
+          example: success
+        message:
+          type: string
+
     Agent:
       type: object
       properties:
@@ -36,6 +74,8 @@ components:
           type: boolean
         password:
           type: string
+          description: Agent password (only returned on auth-protected /agent/{id}, never on public /agents)
+
     Target:
       type: object
       properties:
@@ -48,6 +88,7 @@ components:
           type: string
         is_active:
           type: boolean
+
     Monitor:
       type: object
       properties:
@@ -82,6 +123,50 @@ components:
           maximum: 3600
         is_active:
           type: boolean
+        sample:
+          type: integer
+        current_loss:
+          type: number
+        current_median:
+          type: number
+        current_min:
+          type: number
+        current_max:
+          type: number
+        current_stddev:
+          type: number
+        avg_loss:
+          type: number
+        avg_median:
+          type: number
+        avg_min:
+          type: number
+        avg_max:
+          type: number
+        avg_stddev:
+          type: number
+        prev_loss:
+          type: number
+        last_clear:
+          type: string
+          format: date-time
+        last_down:
+          type: string
+          format: date-time
+        last_update:
+          type: string
+          format: date-time
+        total_down:
+          type: integer
+        agent_name:
+          type: string
+        agent_is_active:
+          type: boolean
+        target_address:
+          type: string
+        target_is_active:
+          type: boolean
+
     User:
       type: object
       properties:
@@ -99,6 +184,25 @@ components:
           type: boolean
         is_active:
           type: boolean
+        last_login:
+          type: string
+          format: date-time
+        failed_attempts:
+          type: integer
+        locked_until:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        updated_by:
+          type: string
+
     Credential:
       type: object
       properties:
@@ -116,32 +220,78 @@ components:
           type: string
         password:
           type: string
+          description: Only included when include_password=true is passed
         url:
           type: string
+        owner:
+          type: string
+        comment:
+          type: string
+        expiry_date:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
         sensitivity:
           type: string
           enum: [LOW, MEDIUM, HIGH, CRITICAL]
-
-  securitySchemes:
-    bearerAuth:
-      bearerFormat: JWT
-      scheme: bearer
-      type: http
-
-info:
-  description: API for managing network monitoring agents, targets, and monitors.
-  title: NetOPS Monitoring API
-  version: 1.0.0
-
-openapi: 3.0.0
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        last_accessed_at:
+          type: string
+          format: date-time
+        last_accessed_by:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        updated_by:
+          type: string
 
 paths:
+  /cgi-bin/api/health:
+    get:
+      tags:
+        - System
+      summary: Health check
+      description: Public endpoint to verify the API is running.
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /cgi-bin/api/openapi.yaml:
+    get:
+      tags:
+        - System
+      summary: OpenAPI specification
+      description: Returns the OpenAPI YAML specification file.
+      responses:
+        '200':
+          description: OpenAPI YAML
+          content:
+            application/yaml:
+              schema:
+                type: string
+
   /cgi-bin/api/login:
     post:
       tags:
         - Authentication
       summary: User authentication
-      description: Authenticates a user and returns a JWT token for API access.
+      description: Authenticates a user via local database or LDAP (if enabled). Returns a JWT token for API access.
       requestBody:
         required: true
         content:
@@ -169,6 +319,38 @@ paths:
                     example: success
                   token:
                     type: string
+                    description: JWT token
+        '401':
+          description: Invalid credentials or account locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /cgi-bin/api/test:
+    post:
+      tags:
+        - Authentication
+      summary: Verify authentication
+      description: Test endpoint to verify if a JWT token is valid. Returns the decoded payload.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    description: Decoded JWT payload
 
   /cgi-bin/api/agent:
     post:
@@ -217,7 +399,7 @@ paths:
                     type: string
                     format: uuid
         '400':
-          description: Invalid input
+          description: Invalid input or duplicate name
           content:
             application/json:
               schema:
@@ -227,8 +409,8 @@ paths:
     get:
       tags:
         - Agents
-      summary: List all agents
-      description: Returns a list of all monitoring agents in the system, including their status and last seen time.
+      summary: Get agent details
+      description: Retrieves detailed information about a specific monitoring agent. Includes the agent password when authenticated.
       security:
         - bearerAuth: []
       parameters:
@@ -536,12 +718,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '500':
-          description: Database error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
 
   /cgi-bin/api/target/{id}:
     get:
@@ -574,12 +750,6 @@ paths:
                     $ref: '#/components/schemas/Target'
         '404':
           description: Target not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Database error
           content:
             application/json:
               schema:
@@ -643,12 +813,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '500':
-          description: Database error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
     delete:
       tags:
         - Targets
@@ -688,12 +852,6 @@ paths:
                     description: List of monitor IDs that were deleted
         '404':
           description: Target not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Database error
           content:
             application/json:
               schema:
@@ -779,12 +937,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '500':
-          description: Database error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
 
   /cgi-bin/api/monitor/{id}:
     get:
@@ -814,55 +966,9 @@ paths:
                     type: string
                     example: success
                   monitor:
-                    allOf:
-                      - $ref: '#/components/schemas/Monitor'
-                      - type: object
-                        properties:
-                          agent_name:
-                            type: string
-                          target_address:
-                            type: string
-                          sample:
-                            type: integer
-                          current_loss:
-                            type: integer
-                          current_median:
-                            type: number
-                          current_min:
-                            type: number
-                          current_max:
-                            type: number
-                          current_stddev:
-                            type: number
-                          avg_loss:
-                            type: integer
-                          avg_median:
-                            type: number
-                          avg_min:
-                            type: number
-                          avg_max:
-                            type: number
-                          avg_stddev:
-                            type: number
-                          last_clear:
-                            type: string
-                            format: date-time
-                          last_down:
-                            type: string
-                            format: date-time
-                          last_update:
-                            type: string
-                            format: date-time
-                          total_down:
-                            type: integer
+                    $ref: '#/components/schemas/Monitor'
         '404':
           description: Monitor not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Database error
           content:
             application/json:
               schema:
@@ -937,12 +1043,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '500':
-          description: Database error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
     delete:
       tags:
         - Monitors
@@ -976,12 +1076,6 @@ paths:
                     format: uuid
         '404':
           description: Monitor not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Database error
           content:
             application/json:
               schema:
@@ -1021,12 +1115,6 @@ paths:
                     format: uuid
         '404':
           description: Monitor not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Database error
           content:
             application/json:
               schema:
@@ -1124,72 +1212,7 @@ paths:
                   monitors:
                     type: array
                     items:
-                      type: object
-                      properties:
-                        id:
-                          type: string
-                          format: uuid
-                        description:
-                          type: string
-                        agent_id:
-                          type: string
-                          format: uuid
-                        target_id:
-                          type: string
-                          format: uuid
-                        protocol:
-                          type: string
-                        port:
-                          type: integer
-                        dscp:
-                          type: string
-                        pollcount:
-                          type: integer
-                        pollinterval:
-                          type: integer
-                        is_active:
-                          type: boolean
-                        sample:
-                          type: integer
-                        current_loss:
-                          type: integer
-                        current_median:
-                          type: number
-                        current_min:
-                          type: number
-                        current_max:
-                          type: number
-                        current_stddev:
-                          type: number
-                        avg_loss:
-                          type: integer
-                        avg_median:
-                          type: number
-                        avg_min:
-                          type: number
-                        avg_max:
-                          type: number
-                        avg_stddev:
-                          type: number
-                        last_clear:
-                          type: string
-                          format: date-time
-                        last_down:
-                          type: string
-                          format: date-time
-                        last_update:
-                          type: string
-                          format: date-time
-                        total_down:
-                          type: integer
-                        agent_name:
-                          type: string
-                        agent_is_active:
-                          type: boolean
-                        target_address:
-                          type: string
-                        target_is_active:
-                          type: boolean
+                      $ref: '#/components/schemas/Monitor'
 
   /cgi-bin/api/rrd:
     get:
@@ -1455,7 +1478,7 @@ paths:
       tags:
         - Credentials
       summary: Update credential
-      description: Updates an existing credential's information.
+      description: Updates an existing credential's information. Tracks update history with timestamp and user.
       security:
         - bearerAuth: []
       parameters:
@@ -1583,30 +1606,7 @@ paths:
                   users:
                     type: array
                     items:
-                      type: object
-                      properties:
-                        id:
-                          type: string
-                          format: uuid
-                        username:
-                          type: string
-                        full_name:
-                          type: string
-                        email:
-                          type: string
-                        is_admin:
-                          type: boolean
-                        is_active:
-                          type: boolean
-                        last_login:
-                          type: string
-                          format: date-time
-                        created_at:
-                          type: string
-                          format: date-time
-                        updated_at:
-                          type: string
-                          format: date-time
+                      $ref: '#/components/schemas/User'
         '403':
           description: Unauthorized - Requires admin privileges
           content:
@@ -1708,39 +1708,7 @@ paths:
                     type: string
                     example: success
                   user:
-                    type: object
-                    properties:
-                      id:
-                        type: string
-                        format: uuid
-                      username:
-                        type: string
-                      full_name:
-                        type: string
-                      email:
-                        type: string
-                      is_admin:
-                        type: boolean
-                      is_active:
-                        type: boolean
-                      last_login:
-                        type: string
-                        format: date-time
-                      created_at:
-                        type: string
-                        format: date-time
-                      created_by:
-                        type: string
-                      updated_at:
-                        type: string
-                        format: date-time
-                      updated_by:
-                        type: string
-                      failed_attempts:
-                        type: integer
-                      locked_until:
-                        type: string
-                        format: date-time
+                    $ref: '#/components/schemas/User'
         '403':
           description: Unauthorized - Requires admin privileges
           content:
@@ -1864,29 +1832,3 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-
-tags:
-  - name: Public API
-    description: Public endpoints that provide read-only access to monitoring data and statistics.
-
-  - name: Authentication
-    description: Endpoints for user authentication and token validation.
-
-  - name: Users
-    description: User account management endpoints. Most operations require admin privileges.
-
-  - name: Agents
-    description: Monitoring agent management endpoints for creating, updating, and managing monitoring agents.
-
-  - name: Agent Monitors
-    description: Endpoints used by monitoring agents to retrieve assignments and submit results.
-
-  - name: Targets
-    description: Target management endpoints for creating and managing monitoring targets.
-
-  - name: Monitors
-    description: Monitor configuration endpoints for setting up and managing monitoring assignments.
-
-  - name: Credentials
-    description: Secure credential management endpoints for storing and retrieving various types of credentials.
-

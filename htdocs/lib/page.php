@@ -117,6 +117,12 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
 
         $server_name = strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING');
 
+        // Expose the server name as a constant so page bodies can
+        // use it without recomputing the same explode/strtoupper
+        // pattern (index.php, server.php, latency.php previously
+        // each had their own copy of this line).
+        define('WANPORTAL_SERVER_NAME', $server_name);
+
         // Escape the title once; the same value goes into <title> and
         // is available to render_header_row via the WANPORTAL_TITLE
         // constant if the page didn't pass a different title there.
@@ -142,11 +148,13 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
 
         // Select2 CSS — only on edit pages with searchable selects.
         if (!empty($options['select2'])) {
+            define('WANPORTAL_NEEDS_SELECT2', true);
             echo '    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">' . "\n";
         }
 
         // Leaflet CSS — only on pages with maps.
         if (!empty($options['leaflet'])) {
+            define('WANPORTAL_NEEDS_LEAFLET', true);
             echo '    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />' . "\n";
         }
 

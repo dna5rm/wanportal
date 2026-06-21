@@ -32,11 +32,6 @@ if ($status === 200) {
     }
 }
 
-// Get server name safely
-$server_name = isset($_SERVER['SERVER_NAME']) ?
-    strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0]) :
-    'NETPING';
-
 // Latency Report auto-refreshes every 5 minutes. Pass the meta
 // tag through head_extras so it lives inside <head> (required
 // for browsers to honor it).

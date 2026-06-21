@@ -49,6 +49,12 @@ function wanportal_session_start(): void
 // unconditionally.
 require_once __DIR__ . '/lib/monitor_metrics.php';
 
+// lib/api_proxy.php provides api_get() (decoded-JSON GET helper)
+// and api_request() (raw response forwarding for proxy.php).
+// Auto-loaded so all pages can call api_get() without an extra
+// require, matching the monitor_metrics.php pattern.
+require_once __DIR__ . '/lib/api_proxy.php';
+
 /**
  * Verify the CSRF token from a form POST.
  *

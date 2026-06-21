@@ -1,8 +1,8 @@
 <?php
-session_start();
-require_once 'check_session.php';
 require_once 'config.php';
 require_once __DIR__ . '/lib/page.php';
+wanportal_session_start();
+require_once 'check_session.php';
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
@@ -15,21 +15,10 @@ if (!isset($_SESSION['user'])) {
 // with the detail pages (agent.php, target.php) that do.
 $show_inactive = wanportal_get_show_inactive();
 
-$ch = curl_init("http://localhost/cgi-bin/api/monitors");
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true
-]);
-
-$response = curl_exec($ch);
-$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
 $monitors = [];
-if ($status === 200) {
-    $data = json_decode($response, true);
-    if ($data['status'] === 'success') {
-        $monitors = $data['monitors'];
-    }
+$response = api_get('/monitors');
+if ($response && ($response['status'] ?? '') === 'success') {
+    $monitors = $response['monitors'];
 }
 
 wanportal_render_head('Monitors', ['datatables' => true]);
@@ -120,7 +109,7 @@ wanportal_render_header_row('Monitors', [
                                     </a>
                                     <button type="button" 
                                             class="btn btn-sm btn-outline-danger"
-                                            onclick="deleteMonitor('<?= htmlspecialchars($monitor['id']) ?>', '<?= htmlspecialchars($monitor['description']) ?>')"
+                                            onclick="deleteMonitor('<?= htmlspecialchars($monitor['id'], ENT_QUOTES, 'UTF-8') ?>', '<?= htmlspecialchars($monitor['description'], ENT_QUOTES, 'UTF-8') ?>')"
                                             title="Delete">
                                         <i class="bi bi-trash"></i>
                                     </button>
@@ -130,9 +119,6 @@ wanportal_render_header_row('Monitors', [
                     <?php endforeach; ?>
             </tbody>
         </table>
-    </div>
-</div>
-</div>
 
 <script>
 // Toast on redirect from monitors_edit.php?saved=1.

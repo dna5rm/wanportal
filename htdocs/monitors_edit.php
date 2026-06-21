@@ -1,9 +1,9 @@
 <?php
 // monitors_edit.php
-session_start();
-require_once 'check_session.php';
 require_once 'config.php';
 require_once __DIR__ . '/lib/page.php';
+wanportal_session_start();
+require_once 'check_session.php';
 
 
 // Check authentication
@@ -94,8 +94,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!wanportal_csrf_valid()) {
         $error = 'Invalid CSRF token. Please reload the page and try again.';
     } else {
-        print("Form submitted: " . print_r($_POST, true) . "\n");
-
         // Collect form data
         $monitorData = [
             'description' => $_POST['description'] ?? '',
@@ -116,8 +114,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $monitorData['pollcount'] = intval($_POST['pollcount'] ?? 5);
             $monitorData['pollinterval'] = intval($_POST['pollinterval'] ?? 60);
         }
-
-        print("Monitor data to send: " . json_encode($monitorData) . "\n");
 
         // Make API request
         $ch = curl_init();
@@ -167,12 +163,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     }
 }
-// select2 CSS is loaded for the agent/target/protocol
-// dropdowns (vestigial: the JS isn't loaded so the standard
-// <select> styling applies, but the CSS link stays for safety).
-$head_extras  = '    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />' . "\n";
-
-wanportal_render_head(($id ? 'Edit' : 'New') . ' Monitor');
+// Select2 CSS/JS is loaded via the 'select2' option in render_head
+// for the agent/target/protocol searchable dropdowns.
+wanportal_render_head(($id ? 'Edit' : 'New') . ' Monitor', ['select2' => true]);
 wanportal_render_header_row(($id ? 'Edit' : 'New') . ' Monitor', [
     [
         'url'     => '/monitors.php',
@@ -340,19 +333,4 @@ document.getElementById('protocol').addEventListener('change', function() {
 
 // Trigger initial protocol check
 document.getElementById('protocol').dispatchEvent(new Event('change'));
-
-// Form validation
-(function () {
-    'use strict'
-    var forms = document.querySelectorAll('.needs-validation')
-    Array.prototype.slice.call(forms).forEach(function (form) {
-        form.addEventListener('submit', function (event) {
-            if (!form.checkValidity()) {
-                event.preventDefault()
-                event.stopPropagation()
-            }
-            form.classList.add('was-validated')
-        }, false)
-    })
-})()
 </script>

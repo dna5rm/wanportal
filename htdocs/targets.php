@@ -1,8 +1,8 @@
 <?php
-session_start();
-require_once 'check_session.php';
 require_once 'config.php';
 require_once __DIR__ . '/lib/page.php';
+wanportal_session_start();
+require_once 'check_session.php';
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
@@ -15,21 +15,10 @@ if (!isset($_SESSION['user'])) {
 // with the detail pages (agent.php, target.php) that do.
 $show_inactive = wanportal_get_show_inactive();
 
-$ch = curl_init("http://localhost/cgi-bin/api/targets");
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true
-]);
-
-$response = curl_exec($ch);
-$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
 $targets = [];
-if ($status === 200) {
-    $data = json_decode($response, true);
-    if ($data['status'] === 'success') {
-        $targets = $data['targets'];
-    }
+$response = api_get('/targets');
+if ($response && ($response['status'] ?? '') === 'success') {
+    $targets = $response['targets'];
 }
 
 wanportal_render_head('Targets', ['datatables' => true]);
@@ -75,7 +64,7 @@ wanportal_render_header_row('Targets', [
                                     </a>
                                     <button type="button" 
                                             class="btn btn-sm btn-outline-danger"
-                                            onclick="deleteTarget('<?= htmlspecialchars($target['id']) ?>', '<?= htmlspecialchars($target['address']) ?>')"
+                                            onclick="deleteTarget('<?= htmlspecialchars($target['id'], ENT_QUOTES, 'UTF-8') ?>', '<?= htmlspecialchars($target['address'], ENT_QUOTES, 'UTF-8') ?>')"
                                             title="Delete">
                                         <i class="bi bi-trash"></i>
                                     </button>
@@ -85,9 +74,6 @@ wanportal_render_header_row('Targets', [
                     <?php endforeach; ?>
             </tbody>
         </table>
-    </div>
-</div>
-</div>
 
 <script>
 // Toast on redirect from targets_edit.php?saved=1.

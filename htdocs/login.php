@@ -15,7 +15,7 @@ $username = '';
 // Handle login POST with CSRF protection
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Verify CSRF token
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+    if (!wanportal_csrf_valid()) {
         $error = "Invalid session, please try again";
     } else {
         $username = trim($_POST['username'] ?? '');
@@ -44,18 +44,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($status === 200) {
                 $data = json_decode($response, true);
                 if ($data['status'] === 'success' && isset($data['token'])) {
-                    // Decode the JWT token to get the claims
+                    // Decode the JWT token to get the claims.
+                    // JWT uses base64url encoding (- and _ instead of +
+                    // and /), so we must translate before base64_decode.
                     $tokenParts = explode('.', $data['token']);
-                    $payload = json_decode(base64_decode($tokenParts[1]), true);
-                    
-                    error_log("Login payload: " . print_r($payload, true));  // Debug output
-                    
+                    $payload = json_decode(base64_decode(strtr($tokenParts[1], '-_', '+/')), true);
+
                     $_SESSION['user'] = $username;
                     $_SESSION['token'] = $data['token'];
                     $_SESSION['is_admin'] = $payload['is_admin'] ?? false;
                     $_SESSION['last_activity'] = time();
-                    
-                    error_log("Session after login: " . print_r($_SESSION, true));  // Debug output
                     
                     header('Location: /index.php');
                     exit;

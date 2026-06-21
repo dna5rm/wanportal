@@ -103,3 +103,65 @@ function api_request(string $method, string $path, ?array $body = null): array
         'error'  => null,
     ];
 }
+
+/**
+ * Simplified GET helper for PHP pages that need to fetch data
+ * from the API and get decoded JSON back. Attaches the session
+ * JWT if available so the call works for both public endpoints
+ * (agents, targets, monitors) and auth-protected ones.
+ *
+ * @param string $path    API path beginning with "/", may include query string
+ * @return array|null     Decoded JSON body, or null on transport/HTTP error
+ */
+function api_get(string $path): ?array
+{
+    if ($path === '' || $path[0] !== '/') {
+        $path = '/' . $path;
+    }
+
+    $url = API_PROXY_BASE_URL . $path;
+
+    $headers = [
+        'Accept: application/json',
+    ];
+    if (!empty($_SESSION['token']) && is_string($_SESSION['token'])) {
+        $headers[] = 'Authorization: Bearer ' . $_SESSION['token'];
+    }
+
+    $ch = curl_init($url);
+    if ($ch === false) {
+        error_log('api_get: curl_init failed for ' . $path);
+        return null;
+    }
+
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => $headers,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_CONNECTTIMEOUT => 5,
+    ]);
+
+    $response = curl_exec($ch);
+    $status   = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $errno    = curl_errno($ch);
+    $errstr   = curl_error($ch);
+    curl_close($ch);
+
+    if ($errno !== 0 || $response === false) {
+        error_log('api_get: curl error for ' . $path . ': ' . $errstr);
+        return null;
+    }
+
+    if ($status !== 200) {
+        error_log('api_get: HTTP ' . $status . ' for ' . $path);
+        return null;
+    }
+
+    $decoded = json_decode((string) $response, true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        error_log('api_get: JSON decode error for ' . $path . ': ' . json_last_error_msg());
+        return null;
+    }
+
+    return $decoded;
+}

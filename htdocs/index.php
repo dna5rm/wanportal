@@ -2,71 +2,22 @@
 require_once 'config.php';
 require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
-/**
- * Make API calls to the backend
- * @param string $endpoint API endpoint to call
- * @return array|null Returns decoded JSON response or null on failure
- */
-function callAPI($endpoint) {
-    // Ensure endpoint starts with /
-    if (substr($endpoint, 0, 1) !== '/') {
-        $endpoint = '/' . $endpoint;
-    }
-
-    // For debugging
-    if (DEBUG_MODE) {
-        error_log("Calling API: " . API_BASE_URL . $endpoint);
-    }
-
-    $ch = curl_init(API_BASE_URL . $endpoint);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FAILONERROR => true,
-        CURLOPT_TIMEOUT => 30
-    ]);
-
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    
-    if (curl_errno($ch)) {
-        error_log("API Error for " . $endpoint . ": " . curl_error($ch));
-        curl_close($ch);
-        return null;
-    }
-    
-    curl_close($ch);
-    
-    if ($httpCode === 200) {
-        $decoded = json_decode($response, true);
-        if (json_last_error() === JSON_ERROR_NONE) {
-            return $decoded;
-        }
-        error_log("JSON decode error for " . $endpoint . ": " . json_last_error_msg());
-    } else {
-        error_log("API returned status code " . $httpCode . " for " . $endpoint);
-        if (DEBUG_MODE) {
-            error_log("API Response: " . $response);
-        }
-    }
-    
-    return null;
-}
 
 // Fetch active agents for sidebar
-$agentsResponse = callAPI('/agents');
+$agentsResponse = api_get('/agents');
 $activeAgents = array_filter($agentsResponse['agents'] ?? [], function($agent) {
     return $agent['is_active'] == 1;
 });
 
 // Fetch down monitors
-$monitorsResponse = callAPI('/monitors?current_loss=100&is_active=1');
+$monitorsResponse = api_get('/monitors?current_loss=100&is_active=1');
 $downHosts = $monitorsResponse['monitors'] ?? [];
 
 // Fetch all monitors (active+inactive) for the summary cards and
 // "top 5 slowest" widget. We compute the dashboard stats here
 // rather than hitting a specialized API endpoint so the layout
 // can be tweaked without a Perl-side change.
-$allMonitorsResponse = callAPI('/monitors?is_active=1');
+$allMonitorsResponse = api_get('/monitors?is_active=1');
 $allMonitors = $allMonitorsResponse['monitors'] ?? [];
 
 $monitor_stats = [
@@ -105,11 +56,6 @@ usort($topSlow, function ($a, $b) {
     return (float)($b['current_median'] ?? 0) <=> (float)($a['current_median'] ?? 0);
 });
 $topSlow = array_slice($topSlow, 0, 5);
-
-// Get server name safely
-$server_name = isset($_SERVER['SERVER_NAME']) ? 
-    strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0]) : 
-    'NETPING';
 
 // Initialize error message
 $error_message = null;
