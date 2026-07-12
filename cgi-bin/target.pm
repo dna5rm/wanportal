@@ -109,6 +109,15 @@ sub register_target {
     # @security bearerAuth
     main::post '/target' => sub {
         my $c = shift;
+        
+        my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
+        if (!$is_admin) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Admin required'
+            }, status => 403);
+        }
+
         my $data = $c->req->json;
         my $dbh;
         
@@ -175,6 +184,15 @@ sub register_target {
     # @security bearerAuth
     main::put '/target/:id' => sub {
         my $c = shift;
+        
+        my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
+        if (!$is_admin) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Admin required'
+            }, status => 403);
+        }
+
         my $id = $c->param('id');
         my $data = $c->req->json;
         my $dbh;
@@ -252,6 +270,15 @@ sub register_target {
     # @security bearerAuth
     main::del '/target/:id' => sub {
         my $c = shift;
+        
+        my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
+        if (!$is_admin) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Admin required'
+            }, status => 403);
+        }
+
         my $id = $c->param('id');
         my $dbh;
         

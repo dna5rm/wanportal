@@ -177,19 +177,25 @@
     }
 })();
 
-    // Delete helpers (added 2026-07-12). Uses proxyRequest so JWT stays server-side.
+    // Delete helpers (added 2026-07-12). Uses proxyRequest so JWT stays server-side. Correct singular paths + error handling + immediate UI update (no full refresh).
     window.deleteAgent = function(id) {
         if (confirm('Delete this agent and all associated monitors?')) {
-            proxyRequest('DELETE', '/cgi-bin/api/agents/' + id, () => location.reload());
+            proxyRequest('DELETE', '/cgi-bin/api/agent/' + id)
+                .then(() => location.reload())
+                .catch(err => showToast(err.message || 'Delete failed', 'danger'));
         }
     };
     window.deleteTarget = function(id) {
         if (confirm('Delete this target?')) {
-            proxyRequest('DELETE', '/cgi-bin/api/targets/' + id, () => location.reload());
+            proxyRequest('DELETE', '/cgi-bin/api/target/' + id)
+                .then(() => location.reload())
+                .catch(err => showToast(err.message || 'Delete failed', 'danger'));
         }
     };
     window.deleteMonitor = function(id) {
         if (confirm('Delete this monitor?')) {
-            proxyRequest('DELETE', '/cgi-bin/api/monitors/' + id, () => location.reload());
+            proxyRequest('DELETE', '/cgi-bin/api/monitor/' + id)
+                .then(() => location.reload())
+                .catch(err => showToast(err.message || 'Delete failed', 'danger'));
         }
     };

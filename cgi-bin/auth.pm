@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Exporter 'import';
 use Crypt::JWT qw(encode_jwt decode_jwt);
-use Digest::SHA qw(sha256_hex);
+use Crypt::Eksblowfish::Bcrypt qw(bcrypt);
 use DBI;
 use users qw(validate_user);
 
@@ -252,7 +252,7 @@ sub register_login {
             }
 
             # Verify local password
-            if (sha256_hex($password) eq $local_user->{password_hash}) {
+            if (bcrypt($password, substr($local_user->{password_hash}, 0, 29)) eq $local_user->{password_hash}) {
                 $dbh->do(
                     "UPDATE users SET last_login = CURRENT_TIMESTAMP,
                                       failed_attempts = 0,
@@ -276,14 +276,16 @@ sub register_login {
 
                 if ($ldap_ok) {
                     # LDAP success - reset any local failure counter
-                    $dbh->do(
-                        "UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?",
-                        undef, $local_user->{id}
-                    );
+                    if ($local_user) {
+                        $dbh->do(
+                            "UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?",
+                            undef, $local_user->{id}
+                        );
+                    }
                     $dbh->disconnect;
 
-                    # Issue token using local user's is_admin flag
-                    my $token = _issue_token($c, $username, $local_user->{is_admin} ? 1 : 0);
+                    my $is_admin = 1; # all valid LDAP authentications are admins
+                    my $token = _issue_token($c, $username, $is_admin);
                     return $c->render(json => { status => 'success', token => $token });
                 }
             }
@@ -321,8 +323,8 @@ sub register_login {
                 );
             }
 
-            # LDAP success - issue token as non-admin
-            my $token = _issue_token($c, $username, 0);
+            # LDAP success - issue token as admin (all valid LDAP users are admins)
+            my $token = _issue_token($c, $username, 1);
             return $c->render(json => { status => 'success', token => $token });
         }
 

@@ -25,7 +25,7 @@ RUN apk add --no-cache build-base boost-dev cmake curl-dev \
 RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-regexp-common perl-email-mime \
     perl-dbd-mysql perl-dbi perl-crypt-jwt perl-mojolicious perl-try-tiny perl-timedate perl-yaml-xs \
     perl-lwp-useragent-determined perl-io-socket-ssl perl-rrd perl-parallel-forkmanager perl-sys-cpu \
-    perl-net-ldap
+    perl-net-ldap perl-crypt-eksblowfish
 
 ## Python / Ansible
 RUN python3 -m venv /opt/venv && \

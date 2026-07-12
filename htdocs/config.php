@@ -148,12 +148,14 @@ $menuItems = [
                 'icon' => 'bi bi-safe',
                 'auth' => true
             ],
-            'Users' => [
-                'url' => '/users.php',
-                'icon' => 'bi bi-people',
-                'admin' => true
-            ]
         ]
     ],
 ];
+if (getenv('AUTH_LDAP_ENABLED') !== 'true') {
+    $menuItems['Admin']['items']['Users'] = [
+        'url' => '/users.php',
+        'icon' => 'bi bi-people',
+        'admin' => true
+    ];
+}
 ?>

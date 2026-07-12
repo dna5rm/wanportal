@@ -162,6 +162,15 @@ sub register_monitor {
     # @security bearerAuth
     main::post '/monitor' => sub {
         my $c = shift;
+        
+        my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
+        if (!$is_admin) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Admin required'
+            }, status => 403);
+        }
+
         my $data = $c->req->json;
         my $dbh;
         
@@ -247,6 +256,15 @@ sub register_monitor {
     # @security bearerAuth
     main::put '/monitor/:id' => sub {
         my $c = shift;
+        
+        my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
+        if (!$is_admin) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Admin required'
+            }, status => 403);
+        }
+
         my $id = $c->param('id');
         my $data = $c->req->json;
         my $dbh;
@@ -362,6 +380,15 @@ sub register_monitor {
     # @security bearerAuth
     main::del '/monitor/:id' => sub {
         my $c = shift;
+        
+        my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
+        if (!$is_admin) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Admin required'
+            }, status => 403);
+        }
+
         my $id = $c->param('id');
         my $dbh;
         
@@ -406,6 +433,15 @@ sub register_monitor {
     # @security bearerAuth
     main::post '/monitor/:id/reset' => sub {
         my $c = shift;
+        
+        my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
+        if (!$is_admin) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Admin required'
+            }, status => 403);
+        }
+
         my $id = $c->param('id');
         my $dbh;
         

@@ -35,6 +35,8 @@ services:
       - MYSQL_USER=${MYSQL_USER:-root}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:-netops}
       - MYSQL_DB=${MYSQL_DB:-netops}
+      - JWT_SECRET=${JWT_SECRET:-INxjJVIf81EpsbxFzGNr5BBR8rqxgEniWE6nXYLZrH8=}
+      - APP_SECRET=${APP_SECRET:-INxjJVIf81EpsbxFzGNr5BBR8rqxgEniWE6nXYLZrH8=}
       - TZ=${TZ:-UTC}
     networks:
       - netops

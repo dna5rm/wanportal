@@ -200,6 +200,15 @@ sub register_credentials {
     # @security bearerAuth
     main::post '/credentials' => sub {
         my $c = shift;
+        
+        my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
+        if (!$is_admin) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Admin required'
+            }, status => 403);
+        }
+
         my $data = $c->req->json;
         
         # Validate required fields
@@ -297,6 +306,15 @@ sub register_credentials {
     # @security bearerAuth
     main::put '/credentials/:id' => sub {
         my $c = shift;
+        
+        my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
+        if (!$is_admin) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Admin required'
+            }, status => 403);
+        }
+
         my $id = $c->param('id');
         my $data = $c->req->json;
         
@@ -389,6 +407,15 @@ sub register_credentials {
     # @security bearerAuth
     main::del '/credentials/:id' => sub {
         my $c = shift;
+        
+        my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
+        if (!$is_admin) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Admin required'
+            }, status => 403);
+        }
+
         my $id = $c->param('id');
         
         my $username = $c->stash('jwt_payload')->{username};

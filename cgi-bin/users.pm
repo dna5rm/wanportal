@@ -2,7 +2,7 @@ package users;
 use strict;
 use warnings;
 use Exporter 'import';
-use Digest::SHA qw(sha256_hex);
+use Crypt::Eksblowfish::Bcrypt qw(bcrypt);
 use DBI;
 use JSON qw(encode_json);
 use Try::Tiny;
@@ -49,7 +49,8 @@ sub ensure_users_table {
     );
     if (!$exists) {
         my $uuid = Data::UUID->new->create_str;
-        my $hash = sha256_hex($admin_pwd);
+        my $salt = Crypt::Eksblowfish::Bcrypt::en_base64(Crypt::Eksblowfish::Bcrypt::random_salt(16));
+        my $hash = bcrypt($admin_pwd, '$2a$12$' . $salt);
         $dbh->do(
             "INSERT INTO users (id, username, password_hash, is_admin, full_name, created_by) 
              VALUES (?, 'admin', ?, 1, 'System Administrator', 'system')",
@@ -77,8 +78,7 @@ sub validate_user {
         return (0, 0);
     }
 
-    my $hash = sha256_hex($password);
-    if ($hash eq $user->{password_hash}) {
+    if (bcrypt($password, substr($user->{password_hash}, 0, 29)) eq $user->{password_hash}) {
         # Reset failed attempts on successful login
         $dbh->do(
             "UPDATE users SET 
@@ -205,7 +205,8 @@ sub register_users {
         my $uuid;
         try {
             $uuid = Data::UUID->new->create_str;
-            my $hash = sha256_hex($data->{password});
+            my $salt = Crypt::Eksblowfish::Bcrypt::en_base64(Crypt::Eksblowfish::Bcrypt::random_salt(16));
+            my $hash = bcrypt($data->{password}, '$2a$12$' . $salt);
             my $creator = $c->stash('jwt_payload')->{username};
             
             $dbh->do(q{
@@ -343,7 +344,8 @@ sub register_users {
                 }, status => 400);
             }
             push @updates, "password_hash = ?, password_changed = CURRENT_TIMESTAMP";
-            push @params, sha256_hex($data->{password});
+            my $salt = Crypt::Eksblowfish::Bcrypt::en_base64(Crypt::Eksblowfish::Bcrypt::random_salt(16));
+            push @params, bcrypt($data->{password}, '$2a$12$' . $salt);
         }
         
         foreach my $field (qw(full_name email is_admin is_active)) {
