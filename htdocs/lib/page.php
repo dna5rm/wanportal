@@ -115,7 +115,7 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
         }
         define('WANPORTAL_HEAD_RENDERED', true);
 
-        $server_name = strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING');
+        $server_name = strtoupper(explode('.', $_SERVER['SERVER_NAME'] ?? getenv('SERVER_NAME') ?? 'localhost')[0] ?? 'LOCALHOST');
 
         // Expose the server name as a constant so page bodies can
         // use it without recomputing the same explode/strtoupper

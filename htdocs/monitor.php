@@ -364,14 +364,14 @@ const MONITOR_TITLE = <?= json_encode(
 </script>
 <script>
 // Format a Date as the value expected by <input type="datetime-local">:
-// "YYYY-MM-DDTHH:MM" in *local* time. The input ignores trailing
+// "YYYY-MM-DDTHH:MM" in UTC time (page model). The input ignores trailing
 // seconds and treats the value as local; the chart adapter parses the
 // same string back into a Date in the same zone, so we keep them in sync
 // by sending the user's local clock to the input.
 function formatLocalDatetime(date) {
     const pad = n => String(n).padStart(2, '0');
-    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
-         + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+    return date.getUTCFullYear() + '-' + pad(date.getUTCMonth() + 1) + '-' + pad(date.getUTCDate())
+         + 'T' + pad(date.getUTCHours()) + ':' + pad(date.getUTCMinutes());
 }
 let chart;
 

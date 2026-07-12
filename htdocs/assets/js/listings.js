@@ -176,3 +176,20 @@
         initAll();
     }
 })();
+
+    // Delete helpers (added 2026-07-12). Uses proxyRequest so JWT stays server-side.
+    window.deleteAgent = function(id) {
+        if (confirm('Delete this agent and all associated monitors?')) {
+            proxyRequest('DELETE', '/cgi-bin/api/agents/' + id, () => location.reload());
+        }
+    };
+    window.deleteTarget = function(id) {
+        if (confirm('Delete this target?')) {
+            proxyRequest('DELETE', '/cgi-bin/api/targets/' + id, () => location.reload());
+        }
+    };
+    window.deleteMonitor = function(id) {
+        if (confirm('Delete this monitor?')) {
+            proxyRequest('DELETE', '/cgi-bin/api/monitors/' + id, () => location.reload());
+        }
+    };
