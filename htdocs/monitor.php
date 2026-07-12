@@ -670,6 +670,15 @@ function createChart(data) {
     });
 }
 
+function confirmReset() {
+    if (!confirm('Reset all statistics for this monitor? This clears averages, counters, and last-clear timestamp.')) return;
+    const mid = new URLSearchParams(window.location.search).get('id');
+    if (!mid) { showToast('No monitor ID', 'danger'); return; }
+    proxyRequest('POST', '/cgi-bin/api/monitor/' + mid + '/reset')
+        .then(() => { showToast('Statistics reset successfully', 'success'); setTimeout(() => location.reload(), 800); })
+        .catch(err => showToast(err.message || 'Reset failed', 'danger'));
+}
+
 function showLoading(isLoading) {
     const loadingElement = document.getElementById('loading');
     if (loadingElement) {
