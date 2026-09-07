@@ -17,7 +17,8 @@ RUN apk -q update && apk -q upgrade
 ## Core Packages
 RUN apk add --no-cache bash cronie font-freefont mariadb-client nano py3-pip rrdtool rrdtool-dev curl jq tzdata
 
-## Build Dependencies
+## Build deps for CryFS (work plugins). Keep even when the clone/cmake
+## block below is commented — that site uncomments it. Do not strip.
 RUN apk add --no-cache build-base boost-dev cmake curl-dev \
     fuse fuse-dev git libc-dev range-v3-dev spdlog-dev
 
@@ -27,7 +28,8 @@ RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-rege
     perl-lwp-useragent-determined perl-io-socket-ssl perl-rrd perl-parallel-forkmanager perl-sys-cpu \
     perl-net-ldap perl-crypt-eksblowfish
 
-## Python / Ansible
+## Python / Ansible — required for work plugins (vault, netcommon, etc.).
+## Do not remove this venv to "slim" the image.
 RUN python3 -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /opt/venv/bin/pip install --no-cache-dir ansible ansible-vault dnspython fqdn && \
@@ -124,7 +126,8 @@ RUN cat <<EOF >>/etc/crontabs/root
 * * */1 * * su -s /bin/sh apache -c 'find /tmp -name "sess_*" -type f -mmin +180 -delete'
 EOF
 
-# # Build: CryFS
+# CryFS: leave commented in this lab image. Work builds uncomment the
+# RUN so plugins that need cryfs get the binary. Toolchain stays above.
 # RUN git clone --depth 1 https://github.com/cryfs/cryfs.git /usr/local/src/cryfs && \
 #     mkdir -p /usr/local/src/cryfs/build && \
 #     cd /usr/local/src/cryfs/build && \
