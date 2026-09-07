@@ -6,7 +6,7 @@ api - wanportal REST API dispatcher
 
 =head1 SYNOPSIS
 
-    # syntax gate used by scripts/validate.sh
+    # syntax gate used by tests/validate.sh
     docker exec wanportal perl -c /srv/cgi-bin/api
 
 =head1 DESCRIPTION

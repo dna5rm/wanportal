@@ -95,11 +95,11 @@ TLS certs are not verified by default (self-signed / lab).
 Two entry points, both from the repo root:
 
 ```sh
-bash scripts/validate.sh   # syntax, live smoke, audit gates, unit tests
+bash tests/validate.sh   # syntax, live smoke, audit gates, unit tests
 bash tests/run.sh          # unit tests only
 ```
 
-`scripts/validate.sh` is the gate to run before any commit: it compiles the Perl API and every PHP page inside the container, hits the live health endpoint, replays the fixed audit regressions, and finishes with `tests/run.sh`. Both need the `wanportal` container up. See [TESTING.md](TESTING.md) for what the suites cover and how to add tests.
+`tests/validate.sh` is the gate to run before any commit: it compiles the Perl API and every PHP page inside the container, hits the live health endpoint, replays the fixed audit regressions, and finishes with `tests/run.sh`. Both need the `wanportal` container up. See [TESTING.md](TESTING.md) for what the suites cover and how to add tests.
 
 ## Security notes (by design)
 
