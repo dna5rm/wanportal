@@ -219,19 +219,22 @@ sub register_agent_monitors {
                 $r->{id}, $db_id
             );
 
-            # Only update averages if the host is not down
+            # Every sample counts - a down sample is still a real
+            # availability sample, so it always folds into avg_loss and
+            # increments the sample count. Its zero RTT is "no data", not
+            # latency - folding it in would drag the lifetime latency
+            # averages toward 0 - so the latency averages only move when
+            # the host actually answered.
             my ($sample, $avg_loss, $avg_median, $avg_min, $avg_max, $avg_stddev);
+            $sample = ($curr->{sample} // 0) + 1;  # Increment sample count
+            $avg_loss = defined $curr->{avg_loss} ? ((($curr->{avg_loss} * ($sample-1)) + $r->{loss}) / $sample) : $r->{loss};
             if (!$is_down) {
-                $sample = ($curr->{sample} // 0) + 1;  # Increment sample count
-                $avg_loss   = defined $curr->{avg_loss}   ? ((($curr->{avg_loss}   * ($sample-1)) + $r->{loss})   / $sample) : $r->{loss};
                 $avg_median = defined $curr->{avg_median} ? ((($curr->{avg_median} * ($sample-1)) + $r->{median}) / $sample) : $r->{median};
                 $avg_min    = defined $curr->{avg_min}    ? ((($curr->{avg_min}    * ($sample-1)) + $r->{min})    / $sample) : $r->{min};
                 $avg_max    = defined $curr->{avg_max}    ? ((($curr->{avg_max}    * ($sample-1)) + $r->{max})    / $sample) : $r->{max};
                 $avg_stddev = defined $curr->{avg_stddev} ? ((($curr->{avg_stddev} * ($sample-1)) + $r->{stddev}) / $sample) : $r->{stddev};
             } else {
-                $sample = $curr->{sample} // 0;  # Keep existing sample count
-                # If host is down, keep existing averages
-                $avg_loss   = $curr->{avg_loss};
+                # Host is down: keep the existing latency averages
                 $avg_median = $curr->{avg_median};
                 $avg_min    = $curr->{avg_min};
                 $avg_max    = $curr->{avg_max};
