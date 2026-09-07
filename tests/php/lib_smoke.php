@@ -108,7 +108,7 @@ $docTargets = [
         'wanportal_render_page_end',
     ],
     $HTDOCS . '/lib/api_proxy.php'       => ['api_request', 'api_get'],
-    $HTDOCS . '/lib/monitor_metrics.php' => ['monitor_color_classes', 'wanportal_is_latency_issue'],
+    $HTDOCS . '/lib/monitor_metrics.php' => ['monitor_color_classes', 'wanportal_is_latency_issue', 'wanportal_latency_threshold'],
     $HTDOCS . '/config.php'              => ['wanportal_session_start', 'wanportal_csrf_valid'],
 ];
 foreach ($docTargets as $file => $funcs) {
@@ -319,21 +319,38 @@ foreach ($keys as $k) {
 }
 check($allOk, 'metrics: empty row -> all 7 color fields set, all from the subtle palette');
 
+$nowTs = time();
 $baseLat = [
     'is_active' => 1, 'agent_is_active' => 1, 'target_is_active' => 1,
-    'sample' => 10, 'avg_max' => 20.0, 'avg_stddev' => 2.0,
+    'sample' => 10, 'avg_median' => 12.0, 'avg_stddev' => 2.0,
     'current_median' => 40.0, 'current_loss' => 0,
+    'last_update' => date('Y-m-d H:i:s', $nowTs), 'pollinterval' => 60,
 ];
-check(wanportal_is_latency_issue($baseLat), 'latency: spike above avg_max+5sigma is an issue');
+check(wanportal_is_latency_issue($baseLat), 'latency: spike above avg_median+2sigma is an issue');
 $down = $baseLat; $down['current_loss'] = 100; $down['current_median'] = 0;
 check(!wanportal_is_latency_issue($down), 'latency: 100% loss is not a latency issue');
-$fresh = $baseLat; $fresh['sample'] = 1; $fresh['avg_max'] = 0; $fresh['avg_stddev'] = 0; $fresh['current_median'] = 5;
+$fresh = $baseLat; $fresh['sample'] = 1; $fresh['avg_median'] = 0; $fresh['avg_stddev'] = 0; $fresh['current_median'] = 5;
 check(!wanportal_is_latency_issue($fresh), 'latency: no baseline (threshold 0) is not an issue');
-$ok = $baseLat; $ok['current_median'] = 21;
-check(!wanportal_is_latency_issue($ok), 'latency: current near avg_max is not an issue');
+$ok = $baseLat; $ok['current_median'] = 15;
+check(!wanportal_is_latency_issue($ok), 'latency: current within avg_median+2sigma is not an issue');
+$edge = $baseLat; $edge['current_median'] = 16.0;
+check(!wanportal_is_latency_issue($edge), 'latency: current exactly at threshold is not an issue');
+$stale = $baseLat; $stale['last_update'] = date('Y-m-d H:i:s', $nowTs - 300);
+check(!wanportal_is_latency_issue($stale), 'latency: last_update older than 3*pollinterval is not an issue');
+$inWindow = $baseLat; $inWindow['last_update'] = date('Y-m-d H:i:s', $nowTs - 170);
+check(wanportal_is_latency_issue($inWindow), 'latency: last_update inside the 180s window still flags');
+$noTs = $baseLat; unset($noTs['last_update']);
+check(!wanportal_is_latency_issue($noTs), 'latency: missing last_update is not an issue');
+$defPoll = $baseLat; unset($defPoll['pollinterval']); $defPoll['last_update'] = date('Y-m-d H:i:s', $nowTs - 181);
+check(!wanportal_is_latency_issue($defPoll), 'latency: default pollinterval 60 gives a 180s freshness window');
+check(wanportal_latency_threshold($baseLat) === 16.0, 'latency: threshold is avg_median + 2*avg_stddev');
 $latSrc = (string) file_get_contents($HTDOCS . '/latency.php');
 check(strpos($latSrc, "array_filter(\$data['monitors'], 'wanportal_is_latency_issue')") !== false,
     'latency.php: filter uses wanportal_is_latency_issue');
+check(strpos($latSrc, 'wanportal_latency_threshold(') !== false,
+    'latency.php: Threshold column uses wanportal_latency_threshold()');
+check(strpos($latSrc, 'avg_max') === false,
+    'latency.php: no leftover avg_max-based threshold');
 
 /* ------------------------------------------------------------------ */
 section('lib/api_proxy.php');

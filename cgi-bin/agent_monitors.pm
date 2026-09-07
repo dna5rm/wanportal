@@ -40,8 +40,12 @@ use Mojo::Util qw(secure_compare);
 our @EXPORT_OK = qw(register_agent_monitors);
 
 # Fold one poll into lifetime averages. Down samples (100% loss, 0 RTT)
-# always update avg_loss; RTT averages stay frozen so zeros do not
-# poison latency history. Extracted so tests/perl/avg_fold.t can load it.
+# always update avg_loss and count toward sample; RTT averages stay
+# frozen so zeros do not poison latency history. RTT averages are mixed
+# over up samples only: the denominator is the count of up samples so
+# far (sample minus total down after this poll), so downtime never
+# dilutes the weight of the RTT history when the target comes back.
+# Extracted so tests/perl/avg_fold.t can load it.
 sub _fold_monitor_averages {
     my ($curr, $r) = @_;
     $curr ||= {};
@@ -53,12 +57,17 @@ sub _fold_monitor_averages {
     my $avg_loss = defined $curr->{avg_loss}
         ? ((($curr->{avg_loss} * ($sample - 1)) + $loss) / $sample)
         : $loss;
+    # Denominator for the RTT averages: up samples only. total_down is
+    # the stored down count before this poll; a down poll adds one to it.
+    my $total_down = ($curr->{total_down} // 0) + ($is_down ? 1 : 0);
+    my $up_count = $sample - $total_down;
+    $up_count = 1 if $up_count < 1;
     my ($avg_median, $avg_min, $avg_max, $avg_stddev);
     if (!$is_down) {
-        $avg_median = defined $curr->{avg_median} ? ((($curr->{avg_median} * ($sample-1)) + ($r->{median} // 0)) / $sample) : ($r->{median} // 0);
-        $avg_min    = defined $curr->{avg_min}    ? ((($curr->{avg_min}    * ($sample-1)) + ($r->{min}    // 0)) / $sample) : ($r->{min}    // 0);
-        $avg_max    = defined $curr->{avg_max}    ? ((($curr->{avg_max}    * ($sample-1)) + ($r->{max}    // 0)) / $sample) : ($r->{max}    // 0);
-        $avg_stddev = defined $curr->{avg_stddev} ? ((($curr->{avg_stddev} * ($sample-1)) + ($r->{stddev} // 0)) / $sample) : ($r->{stddev} // 0);
+        $avg_median = defined $curr->{avg_median} ? ((($curr->{avg_median} * ($up_count-1)) + ($r->{median} // 0)) / $up_count) : ($r->{median} // 0);
+        $avg_min    = defined $curr->{avg_min}    ? ((($curr->{avg_min}    * ($up_count-1)) + ($r->{min}    // 0)) / $up_count) : ($r->{min}    // 0);
+        $avg_max    = defined $curr->{avg_max}    ? ((($curr->{avg_max}    * ($up_count-1)) + ($r->{max}    // 0)) / $up_count) : ($r->{max}    // 0);
+        $avg_stddev = defined $curr->{avg_stddev} ? ((($curr->{avg_stddev} * ($up_count-1)) + ($r->{stddev} // 0)) / $up_count) : ($r->{stddev} // 0);
     } else {
         $avg_median = $curr->{avg_median};
         $avg_min    = $curr->{avg_min};

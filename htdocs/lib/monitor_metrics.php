@@ -1,8 +1,9 @@
 <?php
 // lib/monitor_metrics.php
 //
-// Helper for computing Bootstrap color classes for monitor metrics.
-// Used by agent.php, target.php, monitor.php, and search.php.
+// Helper for computing Bootstrap color classes for monitor metrics,
+// plus the shared latency-spike threshold/flag used by latency.php.
+// Used by agent.php, target.php, monitor.php, search.php, and latency.php.
 //
 // This dedupes ~200 lines of color-threshold logic that was
 // previously copy-pasted across four files (with subtle drift
@@ -145,10 +146,44 @@ function monitor_color_classes(array &$row): void
 }
 
 /**
- * True when the latency report should list this monitor: current RTT
- * is above avg_max + 5*stddev, the path is up, and there is a real
- * baseline. Down (100% loss) is not latency. Threshold <= 0 is not
- * a spike (new monitor / empty stats).
+ * Latency spike threshold for a monitor, in ms: avg_median +
+ * 2*avg_stddev. This is the same bar monitor_color_classes() uses
+ * for the red current_median badge, so the latency report and the
+ * monitor badges can never disagree about what counts as a spike.
+ *
+ * Returns 0.0 when avg_median and avg_stddev are both 0 (new
+ * monitor / empty stats); callers treat a <= 0 threshold as
+ * "no baseline, not a spike".
+ *
+ * @param array $monitor Monitor row with avg_median / avg_stddev
+ * @return float Threshold in ms (0.0 means no baseline)
+ */
+function wanportal_latency_threshold(array $monitor): float
+{
+    return (float) ($monitor['avg_median'] ?? 0)
+        + 2 * (float) ($monitor['avg_stddev'] ?? 0);
+}
+
+/**
+ * True when the latency report should list this monitor. The report
+ * only wants live, real latency spikes, so the monitor must pass
+ * four gates:
+ *
+ *   - Fresh: last_update exists, parses, and is newer than
+ *     3 * pollinterval seconds ago (pollinterval falls back to the
+ *     DB default of 60s, so the window defaults to 180s). Missing
+ *     or unparseable last_update counts as stale. Stale data is
+ *     not a current latency problem.
+ *   - Up: current_loss < 100%. Down is not latency.
+ *   - Meaningful: at least 2 samples, so the median is real.
+ *   - Baseline: threshold (avg_median + 2*avg_stddev, the same bar
+ *     as the monitor badge colors) > 0. A 0/negative threshold
+ *     means new monitor / empty stats, not a spike.
+ *
+ * The flag itself is current_median > threshold.
+ *
+ * @param array $monitor Monitor row from the /monitors API
+ * @return bool
  */
 function wanportal_is_latency_issue(array $monitor): bool
 {
@@ -157,13 +192,30 @@ function wanportal_is_latency_issue(array $monitor): bool
         || ($monitor['target_is_active'] ?? 0) != 1) {
         return false;
     }
+
+    // Freshness gate: skip monitors whose last_update is missing,
+    // unparseable (strtotime() false, e.g. '0000-00-00 00:00:00'),
+    // or older than 3 * pollinterval. Same strtotime() convention
+    // as index.php / monitors.php for DB datetime columns.
+    $last_update = strtotime((string) ($monitor['last_update'] ?? ''));
+    if ($last_update === false) {
+        return false;
+    }
+    $pollinterval = (int) ($monitor['pollinterval'] ?? 0);
+    if ($pollinterval <= 0) {
+        $pollinterval = 60; // monitors.pollinterval DB default
+    }
+    if ($last_update < time() - 3 * $pollinterval) {
+        return false;
+    }
+
     if ((float) ($monitor['current_loss'] ?? 0) >= 100) {
         return false;
     }
     if ((int) ($monitor['sample'] ?? 0) < 2) {
         return false;
     }
-    $threshold = (float) ($monitor['avg_max'] ?? 0) + 5 * (float) ($monitor['avg_stddev'] ?? 0);
+    $threshold = wanportal_latency_threshold($monitor);
     if ($threshold <= 0) {
         return false;
     }

@@ -44,8 +44,15 @@ wanportal_render_header_row('Latency Report');
             <tbody>
             <?php if (!empty($latencyIssues)):
                 foreach ($latencyIssues as $monitor):
-                    // Calculate threshold
-                    $threshold = $monitor['avg_max'] + (5 * $monitor['avg_stddev']);
+                    // Threshold from lib/monitor_metrics.php so this
+                    // display matches wanportal_is_latency_issue()
+                    // exactly (avg_median + 2*avg_stddev, the same
+                    // bar as the monitor badge colors).
+                    $threshold = wanportal_latency_threshold($monitor);
+
+                    // Guard percentOver: a <= 0 threshold (no
+                    // baseline) never reaches this loop, but the
+                    // division must stay divide-by-zero safe.
                     $percentOver = ($threshold > 0)
                         ? (($monitor['current_median'] - $threshold) / $threshold) * 100
                         : 0;
