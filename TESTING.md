@@ -16,7 +16,7 @@ What each layer does:
 
 What belongs here: tests for behavior that broke before (LDAP filter escaping, /rrd id allowlist, credential password stripping, DELETE path prefix, title escaping, spec-versus-routes drift), and pure functions and CGI helpers. `tests/perl/openapi_paths.t` compares every route in `cgi-bin` against `api-docs/openapi.yaml`; when you add a route, update the spec in the same commit.
 
-Other standing suites: `tests/perl/agent_image_pkgs.t` ties every non-pragma `use` line in `netping-agent.pl` to an apk package in `Dockerfile.agent` (add a `use Module` there and it fails until mapped and shipped); `tests/perl/agent_stats.t` extracts and runs the loss/median/min/max/stddev math from `netping-agent.pl` verbatim; `tests/php/proxy_gate.php` drives `htdocs/proxy.php`'s auth/CSRF/method/path gates through a hermetic harness (config.php require stripped, api_request stubbed) — no secrets, no network.
+Other standing suites: `tests/perl/agent_image_pkgs.t` ties every non-pragma `use` line in `netping-agent.pl` to an apk package in `Dockerfile.agent` (add a `use Module` there and it fails until mapped and shipped); `tests/perl/agent_stats.t` extracts and runs the loss/median/min/max/stddev math from `netping-agent.pl` verbatim; `tests/php/proxy_gate.php` drives `htdocs/proxy.php`'s auth/CSRF/method/path gates through a hermetic harness (config.php require stripped, api_request stubbed) — no secrets, no network; `tests/php/no_direct_db.php` keeps the web tier free of direct database handles by scanning the htdocs sources.
 
 What does not: secrets, personal account names, or tests that need a browser session unless they go through the public health/login path using MYSQL_PASSWORD from the container env (never committed).
 

@@ -100,30 +100,12 @@ function wanportal_csrf_valid(): bool
     return hash_equals($session, $posted);
 }
 
-// Database credentials.
-// Host/user/db get sensible local-dev defaults; the password does
-// NOT — falling back to a known string ('netops') when MYSQL_PASSWORD
-// is unset silently accepts that password in production, which is
-// the worst kind of credential leak (the operator never notices
-// because the connection still works). Fail-closed instead.
-$db_host = getenv('MYSQL_HOST') ?: 'localhost';
-$db_user = getenv('MYSQL_USER') ?: 'root';
-$db_pass = getenv('MYSQL_PASSWORD');
-if (!isset($db_pass) || $db_pass === '') {
-    die("MYSQL_PASSWORD environment variable is required and must not be empty");
-}
-// 'netops' is the default in docker-compose.yml (MYSQL_DB=${MYSQL_DB:-netops}).
-// Keeping the PHP default aligned with the compose default avoids the
-// case where someone deploys the image without setting MYSQL_DB and
-// the app silently tries to connect to a non-existent database named
-// 'netping'.
-$db_name = getenv('MYSQL_DB') ?: 'netops';
-
-// Create mysqli connection
-$mysqli = new mysqli($db_host, $db_user, $db_pass, $db_name);
-if ($mysqli->connect_errno) {
-    die("DB connection failed: " . $mysqli->connect_error);
-}
+// The web tier holds no database handle of its own. Pages read and
+// write through the CGI API (lib/api_proxy.php, auto-loaded above),
+// which is the only component that talks to the data store. When a
+// page needs data the API does not expose, extend the API rather than
+// opening a connection here; tests/php/no_direct_db.php keeps it
+// that way.
 
 // Menu Structure
 $menuItems = [

@@ -129,5 +129,4 @@ wanportal_render_head('Login', ['head_extras' => $head_extras]);
 <?php
 // Clear sensitive data
 $password = null;
-$mysqli->close();
 ?>

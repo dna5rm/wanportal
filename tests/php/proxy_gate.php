@@ -9,9 +9,9 @@
  *
  * Exit 0 when every check passes; prints FAIL lines and exits 1 otherwise.
  *
- * Why a harness instead of require: proxy.php's first line requires
- * config.php, which opens a mysqli connection and dies without
- * MYSQL_PASSWORD. So this test strips the two require lines, compiles the
+ * Why a harness instead of require: proxy.php's first lines pull in
+ * config.php and lib/api_proxy.php, whose include-time wiring would
+ * collide with the stubs. So this test strips the two require lines, compiles the
  * remaining statements inside a dedicated namespace that shadows
  * header()/http_response_code()/file_get_contents('php://input')/
  * wanportal_session_start()/api_request() with recording stubs, and turns
@@ -169,8 +169,8 @@ if ($closeCount !== 0) {
     fatal('proxy.php contains a closing tag the harness cannot embed');
 }
 
-// 1. Strip the two requires. config.php opens mysqli and dies without
-//    MYSQL_PASSWORD; api_proxy.php is replaced by the recording stub.
+// 1. Strip the two requires. The harness stubs stand in for both
+//    config.php and lib/api_proxy.php.
 $requiresStripped = 0;
 $src = (string) preg_replace(
     "/^require_once __DIR__ \. '\/(config\.php|lib\/api_proxy\.php)';[^\n]*$/m",
