@@ -5,10 +5,10 @@ info:
   description: |
     API for managing network monitoring agents, targets, monitors,
     credentials, and users. The read-only listing endpoints (agents,
-    targets, monitors, RRD data), the health check and the spec itself
-    are public; the agent polling endpoints authenticate with the
-    agent's own password, every other endpoint requires a bearer token
-    issued by /login, and writes are admin-only.
+    targets, monitors, RRD data) and the health check are public. The
+    OpenAPI file is served at /api-docs/openapi.yaml, not under /cgi-bin/api.
+    Agent polling uses the agent's password; everything else needs a
+    bearer token from /login, and writes are admin-only.
   version: 1.1.0
 
 servers:
@@ -302,20 +302,6 @@ paths:
                   status:
                     type: string
                     example: ok
-
-  /cgi-bin/api/openapi.yaml:
-    get:
-      tags:
-        - System
-      summary: OpenAPI specification
-      description: Returns the OpenAPI YAML specification file.
-      responses:
-        '200':
-          description: OpenAPI YAML
-          content:
-            application/yaml:
-              schema:
-                type: string
 
   /cgi-bin/api/login:
     post:

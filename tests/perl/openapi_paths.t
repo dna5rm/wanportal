@@ -20,7 +20,7 @@
 #   so the prefix is stripped before comparison.
 #
 # Auth design is intentionally out of scope: /agents /targets /monitors /rrd
-# (plus /health and /openapi.yaml) are public-by-design; mutation routes are
+# and /health are public-by-design; mutation routes are
 # gated inside the route handlers. This test checks documentation parity only.
 #
 # Runs under tests/run.sh (prove -l -r /srv/tests/perl in the wanportal
