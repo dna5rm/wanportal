@@ -143,3 +143,29 @@ function monitor_color_classes(array &$row): void
         $row['avg_loss_color'] = 'bg-danger-subtle text-danger-emphasis border border-danger-subtle';
     }
 }
+
+/**
+ * True when the latency report should list this monitor: current RTT
+ * is above avg_max + 5*stddev, the path is up, and there is a real
+ * baseline. Down (100% loss) is not latency. Threshold <= 0 is not
+ * a spike (new monitor / empty stats).
+ */
+function wanportal_is_latency_issue(array $monitor): bool
+{
+    if (($monitor['is_active'] ?? 0) != 1
+        || ($monitor['agent_is_active'] ?? 0) != 1
+        || ($monitor['target_is_active'] ?? 0) != 1) {
+        return false;
+    }
+    if ((float) ($monitor['current_loss'] ?? 0) >= 100) {
+        return false;
+    }
+    if ((int) ($monitor['sample'] ?? 0) < 2) {
+        return false;
+    }
+    $threshold = (float) ($monitor['avg_max'] ?? 0) + 5 * (float) ($monitor['avg_stddev'] ?? 0);
+    if ($threshold <= 0) {
+        return false;
+    }
+    return (float) ($monitor['current_median'] ?? 0) > $threshold;
+}

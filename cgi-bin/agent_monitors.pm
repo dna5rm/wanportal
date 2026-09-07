@@ -39,6 +39,43 @@ use Mojo::Util qw(secure_compare);
 
 our @EXPORT_OK = qw(register_agent_monitors);
 
+# Fold one poll into lifetime averages. Down samples (100% loss, 0 RTT)
+# always update avg_loss; RTT averages stay frozen so zeros do not
+# poison latency history. Extracted so tests/perl/avg_fold.t can load it.
+sub _fold_monitor_averages {
+    my ($curr, $r) = @_;
+    $curr ||= {};
+    $r    ||= {};
+    my $loss   = $r->{loss}   // 0;
+    my $median = $r->{median} // 0;
+    my $is_down = ($loss == 100 && $median == 0);
+    my $sample = ($curr->{sample} // 0) + 1;
+    my $avg_loss = defined $curr->{avg_loss}
+        ? ((($curr->{avg_loss} * ($sample - 1)) + $loss) / $sample)
+        : $loss;
+    my ($avg_median, $avg_min, $avg_max, $avg_stddev);
+    if (!$is_down) {
+        $avg_median = defined $curr->{avg_median} ? ((($curr->{avg_median} * ($sample-1)) + ($r->{median} // 0)) / $sample) : ($r->{median} // 0);
+        $avg_min    = defined $curr->{avg_min}    ? ((($curr->{avg_min}    * ($sample-1)) + ($r->{min}    // 0)) / $sample) : ($r->{min}    // 0);
+        $avg_max    = defined $curr->{avg_max}    ? ((($curr->{avg_max}    * ($sample-1)) + ($r->{max}    // 0)) / $sample) : ($r->{max}    // 0);
+        $avg_stddev = defined $curr->{avg_stddev} ? ((($curr->{avg_stddev} * ($sample-1)) + ($r->{stddev} // 0)) / $sample) : ($r->{stddev} // 0);
+    } else {
+        $avg_median = $curr->{avg_median};
+        $avg_min    = $curr->{avg_min};
+        $avg_max    = $curr->{avg_max};
+        $avg_stddev = $curr->{avg_stddev};
+    }
+    return {
+        is_down     => $is_down,
+        sample      => $sample,
+        avg_loss    => $avg_loss,
+        avg_median  => $avg_median,
+        avg_min     => $avg_min,
+        avg_max     => $avg_max,
+        avg_stddev  => $avg_stddev,
+    };
+}
+
 sub register_agent_monitors {
     my ($db_config) = @_;
 
@@ -209,37 +246,19 @@ sub register_agent_monitors {
 
             my $step = $monitor_config->{pollinterval} // 60;
 
-            # Check if host is down (100% loss and 0 RTT)
-            my $is_down = ($r->{loss} == 100 && $r->{median} == 0);
-
-            # Get current stats for running averages
             my $curr = $dbh->selectrow_hashref(
                 "SELECT sample, avg_loss, avg_median, avg_min, avg_max, avg_stddev, prev_loss, total_down FROM monitors WHERE id=? AND agent_id=?",
                 undef,
                 $r->{id}, $db_id
             );
-
-            # Every sample counts - a down sample is still a real
-            # availability sample, so it always folds into avg_loss and
-            # increments the sample count. Its zero RTT is "no data", not
-            # latency - folding it in would drag the lifetime latency
-            # averages toward 0 - so the latency averages only move when
-            # the host actually answered.
-            my ($sample, $avg_loss, $avg_median, $avg_min, $avg_max, $avg_stddev);
-            $sample = ($curr->{sample} // 0) + 1;  # Increment sample count
-            $avg_loss = defined $curr->{avg_loss} ? ((($curr->{avg_loss} * ($sample-1)) + $r->{loss}) / $sample) : $r->{loss};
-            if (!$is_down) {
-                $avg_median = defined $curr->{avg_median} ? ((($curr->{avg_median} * ($sample-1)) + $r->{median}) / $sample) : $r->{median};
-                $avg_min    = defined $curr->{avg_min}    ? ((($curr->{avg_min}    * ($sample-1)) + $r->{min})    / $sample) : $r->{min};
-                $avg_max    = defined $curr->{avg_max}    ? ((($curr->{avg_max}    * ($sample-1)) + $r->{max})    / $sample) : $r->{max};
-                $avg_stddev = defined $curr->{avg_stddev} ? ((($curr->{avg_stddev} * ($sample-1)) + $r->{stddev}) / $sample) : $r->{stddev};
-            } else {
-                # Host is down: keep the existing latency averages
-                $avg_median = $curr->{avg_median};
-                $avg_min    = $curr->{avg_min};
-                $avg_max    = $curr->{avg_max};
-                $avg_stddev = $curr->{avg_stddev};
-            }
+            my $fold = _fold_monitor_averages($curr, $r);
+            my $is_down    = $fold->{is_down};
+            my $sample     = $fold->{sample};
+            my $avg_loss   = $fold->{avg_loss};
+            my $avg_median = $fold->{avg_median};
+            my $avg_min    = $fold->{avg_min};
+            my $avg_max    = $fold->{avg_max};
+            my $avg_stddev = $fold->{avg_stddev};
 
             # Downtime tracking
             my $total_down = $curr->{total_down} || 0;

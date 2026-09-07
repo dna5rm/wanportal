@@ -108,7 +108,7 @@ $docTargets = [
         'wanportal_render_page_end',
     ],
     $HTDOCS . '/lib/api_proxy.php'       => ['api_request', 'api_get'],
-    $HTDOCS . '/lib/monitor_metrics.php' => ['monitor_color_classes'],
+    $HTDOCS . '/lib/monitor_metrics.php' => ['monitor_color_classes', 'wanportal_is_latency_issue'],
     $HTDOCS . '/config.php'              => ['wanportal_session_start', 'wanportal_csrf_valid'],
 ];
 foreach ($docTargets as $file => $funcs) {
@@ -318,6 +318,22 @@ foreach ($keys as $k) {
     }
 }
 check($allOk, 'metrics: empty row -> all 7 color fields set, all from the subtle palette');
+
+$baseLat = [
+    'is_active' => 1, 'agent_is_active' => 1, 'target_is_active' => 1,
+    'sample' => 10, 'avg_max' => 20.0, 'avg_stddev' => 2.0,
+    'current_median' => 40.0, 'current_loss' => 0,
+];
+check(wanportal_is_latency_issue($baseLat), 'latency: spike above avg_max+5sigma is an issue');
+$down = $baseLat; $down['current_loss'] = 100; $down['current_median'] = 0;
+check(!wanportal_is_latency_issue($down), 'latency: 100% loss is not a latency issue');
+$fresh = $baseLat; $fresh['sample'] = 1; $fresh['avg_max'] = 0; $fresh['avg_stddev'] = 0; $fresh['current_median'] = 5;
+check(!wanportal_is_latency_issue($fresh), 'latency: no baseline (threshold 0) is not an issue');
+$ok = $baseLat; $ok['current_median'] = 21;
+check(!wanportal_is_latency_issue($ok), 'latency: current near avg_max is not an issue');
+$latSrc = (string) file_get_contents($HTDOCS . '/latency.php');
+check(strpos($latSrc, "array_filter(\$data['monitors'], 'wanportal_is_latency_issue')") !== false,
+    'latency.php: filter uses wanportal_is_latency_issue');
 
 /* ------------------------------------------------------------------ */
 section('lib/api_proxy.php');
