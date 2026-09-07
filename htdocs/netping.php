@@ -14,33 +14,19 @@ $imagename = '/srv/htdocs/assets/netping_latest.tar.gz';
 $server_name = $_SERVER['SERVER_NAME'];
 
 // Initialize agent details
-$agent_details = null;
+$agent = null;
 
-// Check if ID parameter exists and fetch agent details
+// Check if ID parameter exists and fetch agent details. Use the
+// loopback API helper api_get() (lib/api_proxy.php): the request goes
+// to http://localhost/cgi-bin/api with the session JWT attached
+// server-side, so the URL never depends on the Host header and the
+// JWT is never sent to $SERVER_NAME over TLS-verify-disabled HTTPS
+// (audit fix: Host/JWT SSRF).
 if (isset($_GET['id']) && isset($_SESSION['user'])) {
     $agent_id = $_GET['id'];
-    $api_url = "https://{$server_name}/cgi-bin/api/agent/{$agent_id}";
-
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => $api_url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_HTTPHEADER => [
-            'Accept: application/json',
-            'Authorization: Bearer ' . $_SESSION['token']  // Add the session token
-        ]
-    ]);
-
-    $response = curl_exec($ch);
-    $curl_error = curl_error($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    // Decode the JSON response
-    $agent_data = json_decode($response, true);
-    if ($agent_data && $agent_data['status'] === 'success') {
-        $agent = $agent_data['agent'];
+    $agent_data = api_get('/agent/' . rawurlencode($agent_id));
+    if ($agent_data && ($agent_data['status'] ?? '') === 'success') {
+        $agent = $agent_data['agent'] ?? null;
     }
 }
 
@@ -54,8 +40,16 @@ try {
     
     $content = file_get_contents($filename);
     
-    // If it's a curl request, output raw content and exit
+    // If it's a curl request, output raw content and exit.
+    // The raw agent-script dump is for authenticated users only
+    // (previously any anonymous curl UA could fetch the source).
     if ($is_curl) {
+        if (!isset($_SESSION['user'])) {
+            http_response_code(401);
+            header('Content-Type: text/plain');
+            echo "401 Unauthorized: authentication required\n";
+            exit;
+        }
         header('Content-Type: text/plain');
         echo $content;
         exit;

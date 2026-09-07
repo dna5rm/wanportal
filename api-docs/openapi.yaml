@@ -74,7 +74,7 @@ components:
           type: boolean
         password:
           type: string
-          description: Agent password (only returned on auth-protected /agent/{id}, never on public /agents)
+          description: Agent password (only returned on auth-protected /agent/{id} for admin users, never on public /agents)
 
     Target:
       type: object
@@ -220,7 +220,7 @@ components:
           type: string
         password:
           type: string
-          description: Only included when include_password=true is passed
+          description: Only included in the detail response for admin users; never included in list responses
         url:
           type: string
         owner:
@@ -410,7 +410,7 @@ paths:
       tags:
         - Agents
       summary: Get agent details
-      description: Retrieves detailed information about a specific monitoring agent. Includes the agent password when authenticated.
+      description: Retrieves detailed information about a specific monitoring agent. Includes the agent password only when the authenticated user is an admin.
       security:
         - bearerAuth: []
       parameters:
@@ -1343,12 +1343,6 @@ paths:
             type: string
             enum: [LOW, MEDIUM, HIGH, CRITICAL]
           description: Filter by sensitivity level
-        - in: query
-          name: include_password
-          schema:
-            type: boolean
-            default: false
-          description: Include password fields in response
       responses:
         '200':
           description: Successful operation

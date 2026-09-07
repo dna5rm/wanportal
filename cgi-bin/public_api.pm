@@ -158,6 +158,15 @@ sub register_public_endpoints {
             message => 'Monitor ID required'
         }, status => 400) unless $id;
 
+        # Monitor IDs are UUIDs (char(36) columns, Data::UUID create_str).
+        # Allowlist the format before the id is used in any DB lookup or
+        # RRD filename concat, so it can never introduce path separators
+        # or traversal segments. Non-matching ids get a 400.
+        return $c->render(json => {
+            status => 'error',
+            message => 'Invalid monitor ID format'
+        }, status => 400) unless $id =~ /\A[0-9a-fA-F-]{36}\z/;
+
         # Get monitor description from database
         my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
         my $sth = $dbh->prepare("SELECT description FROM monitors WHERE id = ?");
@@ -168,7 +177,9 @@ sub register_public_endpoints {
         my $metric_type = $ds eq 'rtt' ? 'Response Time: ' : 'Packet Loss: ';
         my $monitor_name = ($monitor && $monitor->{description}) ? $monitor->{description} : $id;
         my $title = $metric_type . $monitor_name;
-        my $rrdfile = "$datadir/$id.rrd";
+        # $id passed the UUID allowlist above, so this concat cannot
+        # escape $datadir.
+        my $rrdfile = $datadir . '/' . $id . '.rrd';
         
         # Check if RRD file exists
         return $c->render(json => {

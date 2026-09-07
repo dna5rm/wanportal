@@ -68,9 +68,11 @@ sub register_agent {
         my $id = $c->param('id');
         my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
         
-        # Include password only if authenticated
+        # Password is secret material (audit item 7): only admins may
+        # read it back. Non-admin tokens get the agent without it.
+        my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
         my $fields = 'id, name, address, description, last_seen, is_active';
-        $fields .= ', password' if $c->stash('jwt_payload');
+        $fields .= ', password' if $is_admin;
         
         my $sth = $dbh->prepare("SELECT $fields FROM agents WHERE id = ?");
         $sth->execute($id);

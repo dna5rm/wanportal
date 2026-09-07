@@ -37,6 +37,23 @@ sub _ldap_config {
 }
 
 # ---------------------------------------------------------------------------
+# Escape a value for interpolation into an RFC 4515 LDAP search filter.
+# RFC 4515 section 3 requires five characters to be escaped in filter
+# strings: backslash, asterisk, open paren, close paren, and NUL.
+# Backslash is handled first so the escapes we add are not re-escaped.
+# ---------------------------------------------------------------------------
+sub _ldap_filter_escape {
+    my ($value) = @_;
+    return '' unless defined $value;
+    $value =~ s/\\/\\5c/g;
+    $value =~ s/\*/\\2a/g;
+    $value =~ s/\(/\\28/g;
+    $value =~ s/\)/\\29/g;
+    $value =~ s/\x00/\\00/g;
+    return $value;
+}
+
+# ---------------------------------------------------------------------------
 # Attempt LDAP authentication
 # Returns: (1, $full_name) on success, (0, $error_message) on failure
 # ---------------------------------------------------------------------------
@@ -76,11 +93,14 @@ sub _ldap_authenticate {
         return (0, 'LDAP service bind failed: ' . $mesg->error);
     }
 
-    # Step 2: Search for the user by their uid/search attribute
+    # Step 2: Search for the user by their uid/search attribute.
+    # The username is escaped per RFC 4515 so a submitted value containing
+    # filter metacharacters (* ( ) \ NUL) cannot alter the search filter.
+    my $filter = '(' . $cfg->{search_attr} . '=' . _ldap_filter_escape($username) . ')';
     my $search = $ldap->search(
         base   => $cfg->{base_dn},
         scope  => 'sub',
-        filter => "($cfg->{search_attr}=$username)",
+        filter => $filter,
         attrs  => ['dn', 'cn', 'givenName', 'sn'],
     );
     if ($search->code || $search->count == 0) {
@@ -231,8 +251,12 @@ sub register_login {
             { RaiseError => 1, AutoCommit => 1 }
         );
 
+        # is_locked is computed in SQL against NOW() so the DATETIME stored
+        # by DATE_ADD(NOW(), ...) is compared inside the database's own
+        # timezone instead of being string-compared against localtime.
         my $local_user = $dbh->selectrow_hashref(
-            "SELECT id, password_hash, is_admin, is_active, locked_until, failed_attempts
+            "SELECT id, password_hash, is_admin, is_active, locked_until, failed_attempts,
+                    (locked_until IS NOT NULL AND locked_until > NOW()) AS is_locked
              FROM users WHERE username = ?",
             undef, $username
         );
@@ -242,8 +266,8 @@ sub register_login {
         # ----------------------------------------------------------------
         if ($local_user && $local_user->{is_active}) {
 
-            # Check account lock
-            if ($local_user->{locked_until} && $local_user->{locked_until} gt scalar localtime) {
+            # Check account lock (precomputed in SQL; see the SELECT above)
+            if ($local_user->{is_locked}) {
                 $dbh->disconnect;
                 return $c->render(
                     json   => { status => 'error', message => 'Account is locked. Please try again later.' },

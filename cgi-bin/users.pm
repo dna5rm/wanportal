@@ -64,8 +64,12 @@ sub validate_user {
     my ($dbh, $username, $password) = @_;
     
     # Check if account exists and is active
+    # is_locked is computed in SQL against NOW() so the DATETIME stored by
+    # DATE_ADD(NOW(), ...) is compared inside the database's own timezone
+    # instead of comparing the stored string against Perl's clock string.
     my $user = $dbh->selectrow_hashref(
-        "SELECT id, password_hash, failed_attempts, locked_until, is_active, is_admin 
+        "SELECT id, password_hash, failed_attempts, locked_until, is_active, is_admin,
+                (locked_until IS NOT NULL AND locked_until > NOW()) AS is_locked
          FROM users WHERE username = ?",
         undef, $username
     );
@@ -73,8 +77,8 @@ sub validate_user {
     return (0, 0) unless $user;
     return (0, 0) unless $user->{is_active};
 
-    # Check if account is locked
-    if ($user->{locked_until} && $user->{locked_until} gt scalar localtime) {
+    # Check if account is locked (computed in SQL; see the SELECT above)
+    if ($user->{is_locked}) {
         return (0, 0);
     }
 

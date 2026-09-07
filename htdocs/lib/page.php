@@ -115,7 +115,15 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
         }
         define('WANPORTAL_HEAD_RENDERED', true);
 
-        $server_name = strtoupper(explode('.', $_SERVER['SERVER_NAME'] ?? getenv('SERVER_NAME') ?? 'localhost')[0] ?? 'LOCALHOST');
+        // Restrict to hostname-label characters [A-Za-z0-9-] so the
+        // value (also exposed as WANPORTAL_SERVER_NAME and echoed into
+        // <title>) can never carry HTML/JS metacharacters from a
+        // attacker-controlled SERVER_NAME (Host header). Fall back to
+        // LOCALHOST if stripping empties the label.
+        $server_name = strtoupper(preg_replace('/[^A-Za-z0-9-]/', '', explode('.', $_SERVER['SERVER_NAME'] ?? getenv('SERVER_NAME') ?? 'localhost')[0] ?? 'LOCALHOST'));
+        if ($server_name === '' || $server_name === false) {
+            $server_name = 'LOCALHOST';
+        }
 
         // Expose the server name as a constant so page bodies can
         // use it without recomputing the same explode/strtoupper
@@ -135,7 +143,7 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
         echo '    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />' . "\n";
         echo '    <meta http-equiv="Pragma" content="no-cache" />' . "\n";
         echo '    <meta http-equiv="Expires" content="0" />' . "\n";
-        echo '    <title>' . $server_name . ' :: ' . WANPORTAL_TITLE . '</title>' . "\n";
+        echo '    <title>' . htmlspecialchars($server_name, ENT_QUOTES, 'UTF-8') . ' :: ' . WANPORTAL_TITLE . '</title>' . "\n";
 
         // Bootstrap 5.3.8 + Bootstrap Icons on every page.
         echo '    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" />' . "\n";

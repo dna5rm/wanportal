@@ -106,13 +106,9 @@ curl -s -X GET http://localhost/cgi-bin/api/credentials \
   }' | jq '.'
 ```
 
-## List with passwords included (for backup/export)
+## Password visibility policy
 
-```bash
-curl -s -X GET http://localhost/cgi-bin/api/credentials \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "include_password": true
-  }' | jq '.'
-```
+Passwords are never included in `GET /credentials` list responses. The stored
+password is returned by `GET /credentials/{id}` only to admin users; other
+authenticated users receive the credential without the password field.
+

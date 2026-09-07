@@ -60,7 +60,7 @@ sub register_credentials {
 
     # @summary List credentials
     # @description Returns a list of all stored credentials with optional filtering.
-    # Passwords are not included in the response unless specifically requested.
+    # Passwords are never included in list responses.
     # @tags Credentials
     # @security bearerAuth
     main::get '/credentials' => sub {
@@ -145,9 +145,9 @@ sub register_credentials {
         
         my $credentials = $sth->fetchall_arrayref({});
         
-        # Don't send passwords unless specifically requested
+        # Passwords are never included in list responses
         for my $cred (@$credentials) {
-            delete $cred->{password} unless $c->param('include_password');
+            delete $cred->{password};
         }
         
         $dbh->disconnect;
@@ -180,6 +180,12 @@ sub register_credentials {
             }, status => 404);
         }
         
+        # Only admins may see the stored password
+        my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
+        unless ($is_admin) {
+            delete $credential->{password};
+        }
+
         # Update last accessed
         my $username = $c->stash('jwt_payload')->{username};
         $dbh->do(
