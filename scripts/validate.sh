@@ -163,6 +163,12 @@ else
   bad "GET /rrd traversal id http $rrd_code (want 400/404)"
 fi
 
+if grep -q cron-run-agent "$ROOT/Dockerfile" && grep -q 'su -s /bin/sh apache' "$ROOT/Dockerfile"; then
+  ok "Dockerfile cron drops to apache via image wrappers"
+else
+  bad "Dockerfile cron still runs bind-mount scripts as root"
+fi
+
 echo
 echo "passed=$pass failed=$fail"
 exit $(( fail > 0 ? 1 : 0 ))

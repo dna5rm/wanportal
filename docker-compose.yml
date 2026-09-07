@@ -11,7 +11,9 @@ services:
         condition: service_healthy
     volumes:
       - rrd:/var/rrd:rw
-      - .:/srv:rw # DEV
+      # Live PHP/Perl tree. rw is intentional on this host; cron wrappers
+      # in the image drop to apache so bind-mount scripts are not root.
+      - .:/srv:rw
     ports:
       - "127.0.0.1:${HTTP_PORT:-3385}:80"
       - "172.31.3.20:${HTTP_PORT:-3385}:80"

@@ -93,12 +93,35 @@ RUN cat <<EOF >>/etc/apache2/conf.d/api-docs.conf
 Alias /api-docs /var/www/localhost/api-docs
 EOF
 
-## Configure Contabs
+## Cron wrappers live in the image, not the bind mount. They drop to
+## apache so a rewritten /srv/run-*.sh cannot run as root.
+RUN mkdir -p /usr/local/sbin
+RUN cat >/usr/local/sbin/cron-run-agent <<'EOF'
+#!/bin/sh
+# Root reads secrets, then the bind-mount script runs as apache.
+if [ -r /srv/.env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . /srv/.env
+  set +a
+fi
+exec su -p -s /bin/sh apache -c 'exec /srv/run-agent.sh'
+EOF
+RUN cat >/usr/local/sbin/cron-run-notify <<'EOF'
+#!/bin/sh
+if [ -r /srv/.env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . /srv/.env
+  set +a
+fi
+exec su -p -s /bin/sh apache -c 'exec /srv/run-notify.sh'
+EOF
+RUN chmod 755 /usr/local/sbin/cron-run-agent /usr/local/sbin/cron-run-notify
 RUN cat <<EOF >>/etc/crontabs/root
-*/1 * * * * /srv/run-agent.sh  > /proc/1/fd/1 2>/proc/1/fd/2
-*/5 * * * * /srv/run-notify.sh > /proc/1/fd/1 2>/proc/1/fd/2
-# php session cleanup
-* * */1 * * find /tmp -name "sess_*" -type f -mmin +180 -delete
+*/1 * * * * /usr/local/sbin/cron-run-agent  > /proc/1/fd/1 2>/proc/1/fd/2
+*/5 * * * * /usr/local/sbin/cron-run-notify > /proc/1/fd/1 2>/proc/1/fd/2
+* * */1 * * su -s /bin/sh apache -c 'find /tmp -name "sess_*" -type f -mmin +180 -delete'
 EOF
 
 # # Build: CryFS
