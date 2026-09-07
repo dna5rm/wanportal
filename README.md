@@ -1,229 +1,104 @@
-# NetPing Modern Perl Network Monitor Suite
+# wanportal (NetPing)
 
-NetPing is a modular, Docker-ready network monitoring and agent reporting API/server written in Perl [Mojolicious::Lite]. It features:
+A small Docker Compose stack for ICMP (and related) monitoring: Perl Mojolicious CGI API, PHP dashboard, MariaDB, and RRD files per monitor.
 
-- Agent/target/monitor/user CRUD APIs
-- Time-series retention (RRD+MySQL)
-- Extensible REST endpoints
-- Agent authentication using per-agent passwords
-- Self-initializing schema and self-cleaning disk/database
-- JWT-protected admin HTTP APIs
+Agents pull their assignment list, ping the targets, and post loss/latency back. The UI is Bootstrap 5.3 with a dark-mode toggle. Public topology endpoints (`/agents`, `/targets`, `/monitors`, `/rrd`) are unauthenticated on purpose; mutating and credential routes need a JWT.
 
-## Project Structure
+Default HTTP port on the host is 3385 (`HTTP_PORT`). Inside the container Apache still listens on 80.
+
+## Layout
 
 ```
-.
-├── Dockerfile
-├── README.md
-├── cgi-bin/
-│   ├── agent.pm            # Agent CRUD
-│   ├── agent_monitors.pm   # NetPing server endpoints
-│   ├── api                 # Main Perl CGI entry (single file)
-│   ├── auth.pm             # Auentication endpoints
-│   ├── monitor.pm          # Monitor CRUD
-│   ├── target.pm           # Target CRUD
-│   ├── test.pm
-│   └── users.pm            # User CRUD
-├── docker-compose.yml
-├── entrypoint.sh
-├── htdocs/                # Web dashboard/static files
-│   └── ... (UI/HTML/JS)
-└── netping-agent.pl       # Agent probe client
+cgi-bin/          Perl API (api dispatcher + *.pm modules)
+htdocs/           PHP dashboard (lib/page.php is the shared chrome)
+api-docs/         OpenAPI + Swagger UI
+Dockerfile        Alpine image (Apache + PHP 8.4 + Perl)
+Dockerfile.agent  Optional agent image
+docker-compose.yml
+netping-agent.pl  Probe client (cron/systemd)
 ```
 
-## Quick Start (Docker Compose)
+There is no `entrypoint.sh`. Schema tables are created by the Perl modules on first use.
 
-1. **Clone this repo and adjust `.env` if desired.**
-2. **Build & start containers:**
+## Run it
+
+Copy `.env` from your secrets store (never commit it). Compose falls back to `MYSQL_PASSWORD=netops` and a built-in JWT/APP secret if you omit those keys. Change them before anything faces a network.
 
 ```sh
-docker compose up --build
+docker compose up --build -d
 ```
 
-3. Access the API at: http://localhost/cgi-bin/api
+Health check:
 
-## Configuration
+```sh
+curl -sS http://127.0.0.1:3385/cgi-bin/api/health
+```
 
-All configuration is via environment variables (.env file recommended):
+Dashboard: `http://127.0.0.1:3385/`
 
-```ini
-# .env defaults
+The `netops` compose network is dual-stack (IPv4 plus ULA `fd42:172:22::/64`) so IPv6 monitors can leave the container. Recreate the network after changing IPAM (`docker compose down && up -d`). Restart is not enough.
+
+First login: user `admin`, password = `MYSQL_PASSWORD`. LDAP is optional (`AUTH_LDAP_ENABLED`). Valid LDAP logins are treated as admins.
+
+## Config
+
+Environment only. Typical keys:
+
+```
 MYSQL_HOST=wandb
 MYSQL_PORT=3306
 MYSQL_USER=root
 MYSQL_PASSWORD=netops
 MYSQL_DB=netops
-JWT_SECRET=Wr9deCWWV&AV58DyH8Wz9Mz%6N6r5@sb
-APP_SECRET=HKCr2g+Nn6MUm3H3/hG+2zLhpZgwI+oLrf35vf1+a/M=
+HTTP_PORT=3385
+JWT_SECRET=   # set this
+APP_SECRET=   # set this
+AUTH_LDAP_ENABLED=false
 ```
 
-## Database Self-Initialization
+`.env` is gitignored.
 
-- All required tables (`agents`, `targets`, `monitors`, `users`) are auto-created by the app on launch if needed.
-- Admin user is always created with username `admin` and initial password = `${MYSQL_PASSWORD}`.
-- **Changing the admin password**: Use the API to update as described below.
+## API sketch
 
-## Endpoints & Functionality
+Agent (password in JSON body, not JWT):
 
-### Agent monitor polling/reporting
+- `GET /cgi-bin/api/agent/:id/monitors`
+- `POST /cgi-bin/api/agent/:id/monitors`
 
-- `GET /agent/:id/monitors`
-Agent fetches assignments (password in JSON body)
-- `POST /agent/:id/monitors`
-Agent submits ping/loss results (password + results in JSON body)
+CRUD (JWT on the mutating ones): `/monitor`, `/target`, `/agent`, `/users`, `/credentials`
 
-### Monitor management
+Login:
 
-- `POST /monitor` (defaults to ICMP/BE as needed)
-- `GET /monitor` (list/search)
-- `PUT /monitor` (edit parameters)
-- `DELETE /monitor` (row + rrd file deleted)
+```sh
+curl -sS -X POST http://127.0.0.1:3385/cgi-bin/api/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"YOUR_MYSQL_PASSWORD"}'
+```
 
-### Target management
+Use the returned token as `Authorization: Bearer ...`. Browser pages should call `window.proxyRequest(...)` so the JWT stays on the server (`htdocs/proxy.php`).
 
-- `POST /target`, etc.
-On delete, all associated monitors (and RRDs) are removed
+RRD files live at `/var/rrd/<monitor_id>.rrd` in the container (named volume `rrd`). Deleting a monitor/target/agent through the API removes the matching RRDs.
 
-### Agent management
-
-- `POST /agent`, etc.
-On delete, all associated monitors (and RRDs) are removed
-
-## User/JWT-protected routes
-
-Any other `/api/*` route (admin CRUD) requires a valid JWT token.
-
-## RRD Support
-
-- All probe results update `/var/rrd/<monitor_id>.rrd` (created on first update).
-- Deleting a monitor/target/agent via the API deletes all associated RRD files automatically.
-- Direct file access is possible via host filesystem or Docker bind-mount.
-
-## Agent Client (netping-agent.pl)
-
-The agent script, suitable for cron or systemd, does:
-
-- `GET` monitor assignments from server (`AGENT_ID`, `PASSWORD`, and `SERVER` in env)
-- Pings/monitors as configured
-- `POST` results back to API
-
-Usage:
+## Agent
 
 ```sh
 export AGENT_ID=...
 export PASSWORD=...
-export SERVER=http://localhost/cgi-bin/api
+export SERVER=http://127.0.0.1:3385/cgi-bin/api
 ./netping-agent.pl
 ```
 
-Works with HTTP or HTTPS (SSL is ignored by default for self-signed/dev certs).
+TLS certs are not verified by default (self-signed / lab).
 
-## User Authentication
+## Security notes (by design)
 
-1. Login for a user:
+- Session cookies: HttpOnly, SameSite=Lax, strict mode; Secure when the request is HTTPS (including `X-Forwarded-Proto`).
+- PHP forms: CSRF via `wanportal_csrf_valid()`.
+- `htdocs/.htaccess`: nosniff, DENY framing, CSP limited to the CDNs this UI actually uses.
+- Apache `ServerTokens Prod`.
 
-```sh
-curl -X POST http://localhost/cgi-bin/api/login \
-  -H 'Content-Type: application/json' -d '{"username":"admin","password":"yourpassword"}'
-```
+Do not put personal account names in this repo.
 
-- Returns a JWT token. Use this for all other protected endpoints.
+## Docs
 
-### Example: Update admin password
-
-```sh
-# First, get admin's id:
-curl -s -X GET http://localhost/cgi-bin/api/users -H "Authorization: Bearer $TOKEN" | jq .
-
-# Then, update password:
-curl -X PUT http://localhost/cgi-bin/api/users \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"id":1,"password":"yournewpassword"}'
-```
-
-### Example: Add a Target & Monitor
-
-```sh
-export TOKEN="$(jq -r '.token' <(curl -s -X POST http://localhost/cgi-bin/api/login -H "Content-Type: application/json" -d '{"username":"admin","password":"netops"}'))"
-
-curl -s -X POST http://localhost/cgi-bin/api/target -H "Authorization: Bearer $TOKEN" -d '{ "address": "192.0.2.1" }' | jq .
-
-export AGENT_ID="$(jq -r '.data[0].id' <(curl -s -X GET http://localhost/cgi-bin/api/agent -H "Authorization: Bearer $TOKEN"))"
-export TARGET_ID="$(jq -r '.data[0].id' <(curl -s -X GET http://localhost/cgi-bin/api/target -H "Authorization: Bearer $TOKEN"))"
-export PASSWORD="$(jq -r '.data.password' <(curl -s -X GET http://localhost/cgi-bin/api/agent/$AGENT_ID -H "Authorization: Bearer $TOKEN"))"
-export SERVER="http://localhost/cgi-bin/api"
-
-echo "[${TOKEN:0:5}] ${AGENT_ID} > ${TARGET_ID} (${PASSWORD})"
-
-curl -s -X POST http://localhost/cgi-bin/api/monitor -H "Authorization: Bearer $TOKEN" -d "{ \"agent_id\": \"$AGENT_ID\", \"target_id\": \"$TARGET_ID\" }" | jq .
-
-netping-agent.pl
-```
-
-## Security Model
-
-The PHP frontend and Perl CGI backend share a layered defense.
-Every layer below can fail without compromising the others.
-
-### Session hardening (PHP)
-
-`htdocs/.user.ini` and `htdocs/config.php::wanportal_session_start()`
-together set:
-
-- `session.cookie_httponly = 1` — JS cannot read the session cookie
-- `session.cookie_samesite = Lax` — CSRF on cross-site requests is blocked
-- `session.use_strict_mode = 1` — session fixation is prevented
-- `session.cookie_secure = 1` — cookie only sent over HTTPS (set
-  dynamically when the request is HTTPS, including via
-  `X-Forwarded-Proto` if a reverse proxy is in front)
-
-### CSRF protection (PHP forms)
-
-Every state-changing form (`*_edit.php`) includes a hidden
-`csrf_token` input rendered from `$_SESSION['csrf_token']` and
-verified on POST via `wanportal_csrf_valid()` (constant-time
-`hash_equals` compare). The token is generated once per session
-by `navbar.php`.
-
-### Same-origin proxy for state-changing API calls (PHP)
-
-`htdocs/proxy.php` is a same-origin endpoint that accepts JSON
-envelopes from the browser and forwards them to the internal
-`cgi-bin/api/*` with the session JWT attached server-side. The
-browser never sees the JWT, so an XSS or a malicious browser
-extension cannot exfiltrate it. The proxy also enforces CSRF on
-the DELETE/PUT methods that previously had no protection.
-
-Use `window.proxyRequest('DELETE', '/credentials/42')` from
-page JavaScript (loaded via `htdocs/assets/js/proxy.js`).
-
-### HTTP response headers (Apache)
-
-`htdocs/.htaccess` sets:
-
-- `X-Content-Type-Options: nosniff` — anti-MIME-sniffing
-- `X-Frame-Options: DENY` — anti-clickjacking
-- `Referrer-Policy: strict-origin-when-cross-origin`
-- `Permissions-Policy` — disables camera/mic/geolocation/etc.
-- `Content-Security-Policy` — restricts script/style sources to
-  the actual CDNs the wanportal uses
-
-The Dockerfile also enables `ServerTokens Prod` so the
-`Server:` header reads just `Server: Apache` (not the version).
-
-### LDAP login error logging (Perl)
-
-`cgi-bin/auth.pm::_ldap_authenticate` opens a fresh `Net::LDAP`
-connection for the user-bind step and wraps the bind in
-`eval { ... }`. Failed binds log the actual LDAP error code
-(`invalidCredentials`, `insufficientAccessRights`, etc.) to the
-Apache error log, distinguishing them from generic connection
-failures or upstream `die()` exceptions.
-
-## Development/Customization
-
-- **Modules**: each endpoint is a modular `.pm` file (`agent.pm`, `monitor.pm`, etc.)
-- **Auto-table**: Each module ensures its own database table(s) on registration.
-- **OAuth extension, logging, rate-limits, etc.** are easy to add (see Mojolicious documentation).
-
-Testing DSCP/TOS: `tcpdump -i any -v 'dst port 3000'`
+OpenAPI: `api-docs/openapi.yaml`. Swagger UI: `/api-docs/` on the same host.

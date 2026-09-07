@@ -13,7 +13,9 @@ services:
       - rrd:/var/rrd:rw
       - .:/srv:rw # DEV
     ports:
-      - "${HTTP_LISTEN:-0.0.0.0}:${HTTP_PORT:-8080}:80"
+      - "127.0.0.1:${HTTP_PORT:-3385}:80"
+      - "172.31.3.20:${HTTP_PORT:-3385}:80"
+      - "100.127.31.20:${HTTP_PORT:-3385}:80"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/cgi-bin/api/health"]
@@ -69,9 +71,9 @@ networks:
     driver: bridge
     name: netops
     ipam:
-      driver: default
       config:
-        - subnet: 100.172.42.0/24
+        - subnet: 172.22.0.0/16
+        - subnet: fd42:172:22::/64
 
 volumes:
   rrd:

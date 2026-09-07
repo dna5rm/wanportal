@@ -1,36 +1,28 @@
-# Explicit untracked items. Anything not matched by a pattern
-# below is tracked. (The previous .gitignore used a catch-all
-# `**` to deny by default and `!` patterns to re-include, but
-# git's gitignore has a quirk: "It is not possible to re-include
-# a file if a parent directory of that file is excluded." With
-# `**` in effect, `htdocs/assets/js/` was excluded and the
-# `!htdocs/assets/js/` re-include was silently ignored, so
-# assets/js/*.js never made it into the repo. This file uses
-# explicit allow-by-default with targeted deny rules for the
-# handful of things we deliberately keep untracked.)
-
-# Local secrets / config
+# Secrets and local overrides
 .env
+.env.*
+!.env.example
 *.local
+docker-compose.override.yml
 
-# Editor / OS noise
+# Editor / OS
 .DS_Store
 *.swp
 *.swo
 *~
 *.bak
+.idea/
+.vscode/
+*.code-workspace
 
-# Docker build artifacts and the docker image tarball
+# Logs, caches, Python
+*.log
+__pycache__/
+*.pyc
+.venv/
+
+# Build / scratch
 htdocs/assets/netping_latest.tar.gz
-
-# The wanportal logo (intentionally untracked; lives next to the
-# kinetic.* assets that ARE tracked)
 htdocs/assets/logo.png
-
-# Test / scratch data with nested repos
 tmp/
-
-# Note: .htaccess and .user.ini were previously gitignored but are
-# now tracked — they contain security configuration (CSP headers,
-# session hardening) that should be version-controlled. No secrets
-# live in these files.
+*.rrd
