@@ -1,0 +1,78 @@
+# Default values for the wanportal chart.
+
+replicaCount: 1
+
+image:
+  repository: wanportal
+  # Empty tag falls back to Chart.appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 80
+  # Used only when type is NodePort; empty lets the cluster allocate one.
+  nodePort: ""
+  dualStack:
+    enabled: false
+    ipFamilyPolicy: PreferDualStack
+    ipFamilies:
+      - IPv4
+      - IPv6
+
+persistence:
+  # local-path is the k3s default provisioner (node-bound ReadWriteOnce).
+  storageClass: local-path
+  mysql:
+    # Set to an existing claim name to skip creating the PVC.
+    existingClaim: ""
+    size: 1Gi
+  rrd:
+    existingClaim: ""
+    size: 1Gi
+
+timezone: UTC
+
+mariadb:
+  image: mariadb:11.4
+  database: netops
+  resources: {}
+
+# Secret material for the app and the MariaDB sidecar. The chart Secret is
+# rendered with empty values; the webapp refuses to open its DB connection
+# until a real database password is set (the API still boots). To manage the
+# credentials yourself, set existingSecret to a Secret carrying these keys:
+#   MYSQL_PASSWORD, JWT_SECRET, APP_SECRET
+#   AUTH_LDAP_BIND_PASSWORD (only when auth.ldap.enabled is true)
+secrets:
+  existingSecret: ""
+  mysqlPassword: ""
+  jwtSecret: ""
+  appSecret: ""
+  authLdapBindPassword: ""
+
+# Optional Secret mounted read-only at /srv/.env for the in-image cron
+# wrappers (cron-run-agent and cron-run-notify source it on every run).
+# The Secret must carry a key named ".env".
+dotenv:
+  existingSecret: ""
+
+auth:
+  ldap:
+    enabled: false
+    serverUri: ""
+    bindDn: ""
+    userSearchBaseDn: ""
+    userSearchAttr: uid
+    ignoreCertErrors: "true"
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

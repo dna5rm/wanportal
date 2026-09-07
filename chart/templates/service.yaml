@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wanportal.fullname" . }}
+  labels:
+    {{- include "wanportal.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- if .Values.service.dualStack.enabled }}
+  ipFamilyPolicy: {{ .Values.service.dualStack.ipFamilyPolicy }}
+  ipFamilies:
+    {{- range .Values.service.dualStack.ipFamilies }}
+    - {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "wanportal.selectorLabels" . | nindent 4 }}

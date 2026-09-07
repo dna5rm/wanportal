@@ -1,0 +1,6 @@
+apiVersion: v2
+name: wanportal
+description: WAN monitoring portal (Apache + PHP/Perl CGI API) with an in-pod MariaDB sidecar
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

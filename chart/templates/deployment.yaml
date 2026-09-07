@@ -1,0 +1,169 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wanportal.fullname" . }}
+  labels:
+    {{- include "wanportal.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # Recreate: both containers share ReadWriteOnce volumes, so a rolling
+  # update would deadlock waiting for the old pod to release them.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "wanportal.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "wanportal.selectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.service.dualStack.enabled }}
+      ipFamilyPolicy: {{ .Values.service.dualStack.ipFamilyPolicy }}
+      ipFamilies:
+        {{- range .Values.service.dualStack.ipFamilies }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: wanportal
+          image: {{ include "wanportal.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # The image runs crond as root and ICMP monitors need raw sockets;
+          # do not add a securityContext that drops to a non-root user.
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "wanportal.fullname" . }}
+          env:
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wanportal.secretName" . }}
+                  key: MYSQL_PASSWORD
+                  optional: true
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wanportal.secretName" . }}
+                  key: JWT_SECRET
+                  optional: true
+            - name: APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wanportal.secretName" . }}
+                  key: APP_SECRET
+                  optional: true
+            {{- if .Values.auth.ldap.enabled }}
+            - name: AUTH_LDAP_BIND_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wanportal.secretName" . }}
+                  key: AUTH_LDAP_BIND_PASSWORD
+                  optional: true
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /cgi-bin/api/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /cgi-bin/api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /cgi-bin/api/health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: rrd
+              mountPath: /var/rrd
+            {{- if .Values.dotenv.existingSecret }}
+            - name: dotenv
+              mountPath: /srv/.env
+              subPath: .env
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        - name: mariadb
+          image: {{ .Values.mariadb.image }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wanportal.secretName" . }}
+                  key: MYSQL_PASSWORD
+                  optional: true
+            - name: MARIADB_DATABASE
+              value: {{ .Values.mariadb.database | quote }}
+            {{- if and (empty .Values.secrets.mysqlPassword) (empty .Values.secrets.existingSecret) }}
+            - name: MARIADB_ALLOW_EMPTY_PASSWORD
+              value: "1"
+            {{- end }}
+          ports:
+            - name: mysql
+              containerPort: 3306
+              protocol: TCP
+          volumeMounts:
+            - name: mysql
+              mountPath: /var/lib/mysql
+          startupProbe:
+            exec:
+              command:
+                - healthcheck.sh
+                - --connect
+                - --innodb_initialized
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            exec:
+              command:
+                - healthcheck.sh
+                - --connect
+                - --innodb_initialized
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.mariadb.resources | nindent 12 }}
+      volumes:
+        - name: mysql
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-mysql" (include "wanportal.fullname" .)) .Values.persistence.mysql.existingClaim }}
+        - name: rrd
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-rrd" (include "wanportal.fullname" .)) .Values.persistence.rrd.existingClaim }}
+        {{- if .Values.dotenv.existingSecret }}
+        - name: dotenv
+          secret:
+            secretName: {{ .Values.dotenv.existingSecret }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

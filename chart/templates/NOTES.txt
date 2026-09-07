@@ -1,0 +1,45 @@
+wanportal {{ .Chart.Version }} has been deployed as {{ include "wanportal.fullname" . }} in namespace {{ .Release.Namespace }}.
+
+1. Access
+{{- if eq .Values.service.type "ClusterIP" }}
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "wanportal.fullname" . }} 8080:{{ .Values.service.port }}
+   then open http://localhost:8080/
+{{- else if eq .Values.service.type "NodePort" }}
+{{- if .Values.service.nodePort }}
+   open http://<node-ip>:{{ .Values.service.nodePort }}/
+{{- else }}
+   nodePort is auto-allocated:
+   kubectl -n {{ .Release.Namespace }} get svc {{ include "wanportal.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}'
+{{- end }}
+{{- else }}
+   open http://<address-of-the-{{ .Values.service.type }}-service>/
+{{- end }}
+
+2. Health
+   kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "wanportal.fullname" . }} -c wanportal -- curl -fsS http://localhost/cgi-bin/api/health
+
+3. ICMP monitors need root
+   ICMP ping uses Perl Net::Ping raw sockets, so the wanportal container must
+   run as root (the image crond already does). Do not add a Pod or container
+   securityContext that sets runAsNonRoot or drops CAP_NET_RAW: ICMP monitors
+   would freeze while TCP monitors keep updating.
+
+4. Cron jobs read /srv/.env
+   The in-image cron wrappers (cron-run-agent, cron-run-notify) source
+   /srv/.env on every run; plain container env is NOT visible to them.
+   Provide it with --set dotenv.existingSecret=<secret-name>. The Secret must
+   contain a key named ".env" holding the values the jobs need (MYSQL_*,
+   JWT_SECRET, APP_SECRET, AUTH_LDAP_*, TZ). Without it, cron jobs run with
+   no database or notification credentials.
+
+5. Secrets
+   Set secrets.mysqlPassword (plus jwtSecret/appSecret) or point
+   secrets.existingSecret at a Secret carrying MYSQL_PASSWORD, JWT_SECRET,
+   APP_SECRET (+ AUTH_LDAP_BIND_PASSWORD when LDAP auth is enabled). Empty
+   values boot MariaDB with an empty root password, but the webapp cannot
+   open its database connection until a real password is set.
+
+6. Storage
+   The mysql and rrd PVCs use storageClass "{{ .Values.persistence.storageClass }}".
+   local-path volumes are node-bound; with the Recreate strategy the pod is
+   always rescheduled onto the node that holds the data.

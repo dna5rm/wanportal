@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wanportal.fullname" . }}
+  labels:
+    {{- include "wanportal.labels" . | nindent 4 }}
+data:
+  TZ: {{ .Values.timezone | quote }}
+  MYSQL_HOST: "127.0.0.1"
+  MYSQL_PORT: "3306"
+  MYSQL_USER: "root"
+  MYSQL_DB: {{ .Values.mariadb.database | quote }}
+  AUTH_LDAP_ENABLED: {{ .Values.auth.ldap.enabled | quote }}
+  AUTH_LDAP_SERVER_URI: {{ .Values.auth.ldap.serverUri | quote }}
+  AUTH_LDAP_BIND_DN: {{ .Values.auth.ldap.bindDn | quote }}
+  AUTH_LDAP_USER_SEARCH_BASEDN: {{ .Values.auth.ldap.userSearchBaseDn | quote }}
+  AUTH_LDAP_USER_SEARCH_ATTR: {{ .Values.auth.ldap.userSearchAttr | quote }}
+  LDAP_IGNORE_CERT_ERRORS: {{ .Values.auth.ldap.ignoreCertErrors | quote }}
