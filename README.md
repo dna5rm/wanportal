@@ -97,8 +97,6 @@ TLS certs are not verified by default (self-signed / lab).
 - `htdocs/.htaccess`: nosniff, DENY framing, CSP limited to the CDNs this UI actually uses.
 - Apache `ServerTokens Prod`.
 
-Do not put personal account names in this repo.
-
 ## Docs
 
 OpenAPI: `api-docs/openapi.yaml`. Swagger UI: `/api-docs/` on the same host.
