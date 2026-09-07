@@ -5,7 +5,7 @@
 # The image ships only netping-agent.pl and its cron wrapper run-agent.sh.
 # netping-legacy.pl and socket-agent.pl are intentionally not packaged;
 # run those from a checkout instead.
-FROM alpine:3.21
+FROM alpine:3.21.3
 
 # Create and set working directory
 WORKDIR /srv
@@ -15,20 +15,24 @@ WORKDIR /srv
 COPY netping-agent.pl /srv/
 COPY run-agent.sh /srv/
 
-# Refresh base packages
-RUN apk -q update && apk -q upgrade
-
-# Runtime packages:
+# Runtime packages, installed in one layer with --no-cache (no apk upgrade:
+# the pinned base image is already current; a blanket upgrade would just
+# bloat the layer):
 #   cronie  - crond, the container's main process; runs the agent every minute
-#   curl/jq - not used by the agent itself; handy for poking the API from a
-#             shell via docker exec
 #   tzdata  - sane timestamps in logs
-#   perl + modules - the API client: LWP over HTTPS (IO::Socket::SSL) and JSON
-#             payloads. perl-sys-cpu and perl-parallel-forkmanager are only
-#             needed by socket-agent.pl, which is not part of this image.
-RUN apk add --no-cache cronie curl jq tzdata
-RUN apk add --no-cache perl perl-io-socket-ssl perl-json perl-sys-cpu \
-    perl-lwp-useragent-determined perl-lwp-protocol-https perl-parallel-forkmanager
+#   perl    - Net::Ping, Time::HiRes, POSIX and List::Util ship with core perl
+#   perl-libwww             - LWP::UserAgent, the API client
+#   perl-lwp-protocol-https - HTTPS support for LWP
+#   perl-io-socket-ssl      - SSL backend; netping-agent.pl sets
+#                             SSL_VERIFY_NONE on purpose (self-signed certs
+#                             are allowed), so keep that behavior as-is
+#   perl-json               - JSON request/response payloads
+# curl/jq, perl-sys-cpu, perl-lwp-useragent-determined and
+# perl-parallel-forkmanager are not shipped: netping-agent.pl does not use
+# them (sys-cpu/parallel-forkmanager belong to socket-agent.pl, which is not
+# part of this image).
+RUN apk add --no-cache cronie tzdata \
+    perl perl-libwww perl-lwp-protocol-https perl-io-socket-ssl perl-json
 
 # Cron schedule: one probe cycle per minute. Job output is redirected to
 # /proc/1/fd/1 and fd/2 - PID 1 is the shell wrapping crond, and its
@@ -40,9 +44,14 @@ RUN install -m 0644 /dev/stdin /etc/crontabs/root <<EOF
 */1 * * * * /srv/run-agent.sh > /proc/1/fd/1 2>/proc/1/fd/2
 EOF
 
-# Fix permissions, then drop the apk cache to keep the layer small
+# Agent scripts must stay executable for cron
 RUN chmod 755 /srv/*.pl /srv/*.sh
-RUN rm -rf /var/cache/apk/*
+
+# Healthcheck: there is no HTTP endpoint in the container to poke (and curl
+# is deliberately not shipped), so verify the container's actual job instead:
+# crond is alive and the agent script is executable.
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD pidof crond >/dev/null && test -x /srv/netping-agent.pl
 
 # Foreground crond; -s sends job output to syslog instead of trying to mail
 # it (the crontab redirect above already sends it to the container's stdout).

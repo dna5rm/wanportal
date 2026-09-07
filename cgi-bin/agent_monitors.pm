@@ -18,8 +18,11 @@ RRD file.
 These routes deliberately sit outside the JWT group. A running
 agent knows only its own id and its agent password - it never holds
 a user JWT. Every call is checked against the password stored in
-the agents table, and the agent's address and last-seen time are
-refreshed along the way.
+the agents table with a constant-time comparison, and the agent's
+address and last-seen time are refreshed along the way. Submitted
+results are only filed against monitors that belong to the
+authenticated agent, and a stored address is always the validated
+first X-Forwarded-For hop or the direct peer address.
 
 =cut
 
@@ -31,6 +34,8 @@ use DBI;
 use File::Path qw(make_path);
 use RRDs;
 use List::Util qw(min max sum);
+use Socket qw(AF_INET AF_INET6 inet_pton);
+use Mojo::Util qw(secure_compare);
 
 our @EXPORT_OK = qw(register_agent_monitors);
 
@@ -47,20 +52,44 @@ sub register_agent_monitors {
         my $agent = $dbh->selectrow_hashref("SELECT id, password FROM agents WHERE id=? OR name=?", undef, $agent_id, $agent_id);
         unless ($agent) {
             $dbh->disconnect;
-            $c->render(json => {status=>'error', message=>'Invalid agent id'}, status=>401);
+            $c->render(json => {status=>'error', message=>'Invalid agent credentials'}, status=>401);
             return;
         }
-        unless (defined $agent->{password} && $agent->{password} eq $password) {
+        # Constant-time comparison so response timing cannot be used to
+        # recover the stored agent password byte by byte.
+        unless (defined $agent->{password} && defined $password
+            && secure_compare($agent->{password}, $password)) {
             $dbh->disconnect;
-            $c->render(json => {status=>'error', message=>'Invalid password'}, status=>401);
+            $c->render(json => {status=>'error', message=>'Invalid agent credentials'}, status=>401);
             return;
         }
-        # Update agent address
-        my $ip = $c->req->headers->header('X-Forwarded-For');
-        $ip = $c->tx->remote_address unless defined $ip && $ip ne '';
-        $dbh->do("UPDATE agents SET address=?, last_seen=NOW() WHERE id=?", undef, $ip, $agent->{id});
+        # Update agent address: only the first X-Forwarded-For hop (or the
+        # direct peer address when the header is absent or invalid), and
+        # only if it validates as IPv4/IPv6 before it is stored. With no
+        # valid address, only last_seen is refreshed.
+        my $xff = $c->req->headers->header('X-Forwarded-For') // '';
+        my ($ip) = split /\s*,\s*/, $xff, 2;
+        $ip = '' unless defined $ip;
+        $ip =~ s/^\s+|\s+$//g;
+        $ip = $c->tx->remote_address // '' unless _is_valid_ip($ip);
+        $ip = ''                           unless _is_valid_ip($ip);
+        if ($ip eq '') {
+            $dbh->do("UPDATE agents SET last_seen=NOW() WHERE id=?", undef, $agent->{id});
+        }
+        else {
+            $dbh->do("UPDATE agents SET address=?, last_seen=NOW() WHERE id=?", undef, $ip, $agent->{id});
+        }
         $dbh->disconnect;
         return $agent->{id};
+    }
+
+    # Utility: strict IPv4/IPv6 validation for stored agent addresses
+    sub _is_valid_ip {
+        my ($ip) = @_;
+        return 0 unless defined $ip && length $ip;
+        return 1 if inet_pton(AF_INET, $ip);
+        return 1 if inet_pton(AF_INET6, $ip);
+        return 0;
     }
 
     # @summary Get agent's monitor assignments
@@ -161,11 +190,13 @@ sub register_agent_monitors {
                 }, status => 400);
             }
 
-            # Get monitor configuration for RRD step
+            # Get monitor configuration for RRD step, scoped to the
+            # authenticated agent so results can only be filed against
+            # monitors that belong to this agent
             my $monitor_config = $dbh->selectrow_hashref(
-                "SELECT pollinterval FROM monitors WHERE id=?", 
-                undef, 
-                $r->{id}
+                "SELECT pollinterval, id FROM monitors WHERE id=? AND agent_id=?",
+                undef,
+                $r->{id}, $db_id
             );
 
             unless ($monitor_config) {
@@ -183,9 +214,9 @@ sub register_agent_monitors {
 
             # Get current stats for running averages
             my $curr = $dbh->selectrow_hashref(
-                "SELECT sample, avg_loss, avg_median, avg_min, avg_max, avg_stddev, prev_loss, total_down FROM monitors WHERE id=?", 
-                undef, 
-                $r->{id}
+                "SELECT sample, avg_loss, avg_median, avg_min, avg_max, avg_stddev, prev_loss, total_down FROM monitors WHERE id=? AND agent_id=?",
+                undef,
+                $r->{id}, $db_id
             );
 
             # Only update averages if the host is not down
@@ -239,7 +270,7 @@ sub register_agent_monitors {
                     last_update    = NOW(),
                     $set_last_down
                     total_down     = ?
-                WHERE id = ?
+                WHERE id = ? AND agent_id = ?
             };
             $sql =~ s/,\s+,/,/g;
             $sql =~ s/,$//g;
@@ -248,11 +279,12 @@ sub register_agent_monitors {
                 $sample, 
                 $r->{loss}, $r->{median}, $r->{min}, $r->{max}, $r->{stddev},
                 $avg_loss, $avg_median, $avg_min, $avg_max, $avg_stddev,
-                $r->{loss}, $total_down, $r->{id}
+                $r->{loss}, $total_down, $r->{id}, $db_id
             );
 
-            # RRD handling
-            my $rrdfile = "$datadir/$r->{id}.rrd";
+            # RRD handling: the filename uses the monitor id as stored in
+            # the database (canonical form), never the raw posted value
+            my $rrdfile = "$datadir/$monitor_config->{id}.rrd";
             print STDERR "RRD: attempt create/update $rrdfile (loss=$r->{loss}, rtt=" . 
                 ($is_down ? "U" : $r->{median}) . ")\n";
             

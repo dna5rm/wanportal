@@ -19,10 +19,15 @@ dropped, and the agent exits normally.
 
 Each monitor is probed at most five times (pollcount can lower that)
 with ICMP by default, or TCP/UDP when the monitor calls for it. An
-address containing a colon is pinged with icmpv6. The monitor's DSCP
-name maps to a TOS byte for Net::Ping, and unrecognized names fall
-back to 0. Probing stops early after three misses in a row. Results
-carry loss percent, median, min, max and standard deviation.
+address containing a colon is pinged with icmpv6 for ICMP monitors;
+TCP and UDP monitors keep their own protocol on IPv6 addresses. The
+monitor's DSCP name maps to a TOS byte for Net::Ping, and unrecognized
+names fall back to 0, but Net::Ping's TOS support does not reliably
+mark packets: monitors requesting a DSCP other than Best Effort probe
+without dependable marking and log a warning pointing at
+socket-agent.pl, which implements DSCP/TOS with raw sockets. Probing
+stops early after three misses in a row. Results carry loss percent,
+median, min, max and standard deviation.
 
 SSL certificate verification is off on purpose: agents are allowed to
 talk to a server with a self-signed certificate.
@@ -31,14 +36,15 @@ talk to a server with a self-signed certificate.
 
 SERVER      Base URL of the wanportal API. Required.
 PASSWORD    Shared secret for this agent. Required.
-AGENT_ID    Identifier assigned by the server. Required.
+AGENT_ID    UUID assigned by the server (8-4-4-4-12 hex). Required.
 DEBUG       Enables debug output on stdout. Optional.
 
 =head1 EXIT STATUS
 
-Exits nonzero when SERVER, PASSWORD or AGENT_ID is missing, when the
-monitor fetch fails, or when a child cannot be forked. Failed result
-submissions are logged but do not change the exit status.
+Exits nonzero when SERVER, PASSWORD or AGENT_ID is missing, when
+AGENT_ID is not a UUID, when the monitor fetch fails, or when a child
+cannot be forked. Failed result submissions are logged but do not
+change the exit status.
 
 =cut
 
@@ -56,26 +62,31 @@ our $VERSION = '0.1.0';
 
 # Get environment variables
 my $AGENT_ID = $ENV{AGENT_ID} || die("ERROR: AGENT_ID env not set\n");
+# AGENT_ID is a server-assigned UUID that gets interpolated into API
+# URLs; refuse anything else up front.
+$AGENT_ID =~ /\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z/
+    or die("ERROR: AGENT_ID must be a UUID (8-4-4-4-12 hex)\n");
 my $PASSWORD = $ENV{PASSWORD} || die("ERROR: PASSWORD env not set\n");
 my $SERVER = $ENV{SERVER} || die("ERROR: SERVER env not set\n");
 my $debug = $ENV{DEBUG} || 0;
 
-# DSCP name to TOS byte (Net::Ping takes a TOS, not a DSCP code)
+# DSCP name to TOS byte (Net::Ping takes a TOS, not a DSCP code):
+# TOS byte = DSCP value << 2.
 my $DSCP_MAP = {
     'BE' => 0x00,    # Best Effort
     'EF' => 0xB8,    # Expedited Forwarding
-    'AF11' => 0x0A,  # Assured Forwarding 11
-    'AF12' => 0x0C,
-    'AF13' => 0x0E,
-    'AF21' => 0x12,
-    'AF22' => 0x14,
-    'AF23' => 0x16,
-    'AF31' => 0x1A,
-    'AF32' => 0x1C,
-    'AF33' => 0x1E,
-    'AF41' => 0x22,
-    'AF42' => 0x24,
-    'AF43' => 0x26,
+    'AF11' => 0x28,  # Assured Forwarding 11
+    'AF12' => 0x30,
+    'AF13' => 0x38,
+    'AF21' => 0x48,
+    'AF22' => 0x50,
+    'AF23' => 0x58,
+    'AF31' => 0x68,
+    'AF32' => 0x70,
+    'AF33' => 0x78,
+    'AF41' => 0x88,
+    'AF42' => 0x90,
+    'AF43' => 0x98,
     'CS1' => 0x20,   # Class Selector 1
     'CS2' => 0x40,
     'CS3' => 0x60,
@@ -133,46 +144,58 @@ die "No monitors array in API response\n" unless ref $data->{monitors} eq 'ARRAY
 my @hosts = @{$data->{monitors}};
 info_log("Processing " . scalar(@hosts) . " monitors");
 
-# One child per monitor, up to MAX_PROCESSES at a time.
+# One child per monitor, up to MAX_PROCESSES at a time. The count is
+# owned by the parent: children are only counted after a successful
+# fork in the parent, and the reaper only removes counted children.
+# Counting in both places races (a child can exit between fork() and
+# the parent counting it), so reaps that land before the count are
+# reconciled when the parent counts the spawn.
 my $MAX_PROCESSES = min(120, scalar(@hosts));
-my $current_processes = 0;
+my %spawned;        # pid => 1 for children the parent has counted
+my %reaped_early;   # pids reaped by the CHLD handler before being counted
 my @results;
 
 # Set up child reaper
 $SIG{CHLD} = sub {
     while ((my $pid = waitpid(-1, WNOHANG)) > 0) {
-        $current_processes--;
+        if (exists $spawned{$pid}) {
+            delete $spawned{$pid};
+        } else {
+            $reaped_early{$pid} = 1;
+        }
     }
 };
 
 foreach my $monitor (@hosts) {
     # Skip entries with no id or address.
     next unless $monitor->{id} && $monitor->{address};
-    
+
     # Wait if we've hit the process limit
-    while ($current_processes >= $MAX_PROCESSES) {
+    while (scalar(keys %spawned) >= $MAX_PROCESSES) {
         sleep(0.01);
     }
-    
+
     pipe(my $reader, my $writer) or die "Pipe failed: $!";
-    
+
     my $pid = fork();
     if (!defined $pid) {
         die "Fork failed: $!";
     } elsif ($pid == 0) { # Child
         close $reader;
         my ($loss, $median, $min, $max, $stddev) = ping($monitor);
-        printf $writer "%s %.1f %.1f %.1f %.1f %.1f\n", 
+        printf $writer "%s %.1f %.1f %.1f %.1f %.1f\n",
             $monitor->{id}, $loss, $median, $min, $max, $stddev;
         close $writer;
         exit 0;
     } else { # Parent
         close $writer;
+        $spawned{$pid} = 1;
+        # The child already exited and was reaped before it was counted.
+        delete $spawned{$pid} if delete $reaped_early{$pid};
         push @results, {
             pid => $pid,
             reader => $reader
         };
-        $current_processes++;
     }
 }
 
@@ -288,14 +311,22 @@ sub ping {
     my $dscp = $monitor->{dscp} || 'BE';
     my $tos = $DSCP_MAP->{$dscp} // 0x00;
     my $count = min(5, $monitor->{pollcount} || 5);
-    
-    my $p;
-    if ($monitor->{address} =~ /:/) {
-        $p = Net::Ping->new('icmpv6', 1, 56, undef, $tos);
-    } else {
-        $p = Net::Ping->new($protocol, 1, 56, 0, $tos);
+
+    # Net::Ping's TOS support is broken: it does not reliably mark
+    # packets, and a non-zero TOS on an icmpv6 socket croaks. Only
+    # Best Effort is dependable here; socket-agent.pl builds raw ICMP
+    # and can actually apply DSCP/TOS.
+    if ($monitor->{dscp} && uc($dscp) ne 'BE') {
+        warn "monitor $monitor->{id}: DSCP '$dscp' requested but Net::Ping TOS support is broken; probing without dependable DSCP marking - use socket-agent.pl when DSCP matters\n";
     }
-    
+
+    # IPv6 addresses use icmpv6 only for ICMP probes; TCP/UDP keep
+    # their own protocol so the port-based check still applies.
+    my $netproto = $protocol;
+    $netproto = 'icmpv6' if $protocol eq 'icmp' && $monitor->{address} =~ /:/;
+
+    my $p = Net::Ping->new($netproto, 1, 56, undef, $tos);
+
     if ($protocol eq "tcp" || $protocol eq "udp") {
         $p->{port_num} = $port;
     }

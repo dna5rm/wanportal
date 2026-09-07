@@ -19,7 +19,9 @@ The flow matches the shipped agent: fetch the monitor list for
 AGENT_ID, fork one child per monitor (up to 120 in flight), ping each
 target with Net::Ping, and post the results back in chunks of 100 with
 up to three attempts per chunk. Chunks that still fail are logged and
-dropped.
+dropped. Probes are ICMP by default, or TCP/UDP when the monitor calls
+for it; an address containing a colon is pinged with icmpv6 only when
+the transport is ICMP.
 
 DSCP is where it falls short. The monitor's DSCP name is mapped to a
 TOS byte, but nothing applies it: Net::Ping gets no TOS value here,
@@ -29,22 +31,24 @@ Real marking needs socket-agent.pl, which builds raw ICMP and stamps
 IP_TOS / IPV6_TCLASS on the socket itself.
 
 SSL certificate verification is off on purpose: agents are allowed to
-talk to a server with a self-signed certificate.
+talk to a server with a self-signed certificate. No SSL_version or
+cipher pin is set: the local OpenSSL negotiates whatever protocol it
+can, since forcing SSLv3 fails outright on modern stacks.
 
 =head1 ENVIRONMENT
 
 SERVER      Base URL of the wanportal API. Must include a path after
             the host (https://host/api). Required.
 PASSWORD    Shared secret for this agent. Required.
-AGENT_ID    Identifier assigned by the server. Required.
+AGENT_ID    36-character UUID assigned by the server. Required.
 DEBUG       Enables debug output on stdout. Optional.
 
 =head1 EXIT STATUS
 
-Exits nonzero when SERVER, PASSWORD or AGENT_ID is missing, when the
-SERVER URL cannot be parsed, or when the monitor fetch or a fork
-fails. Failed result submissions are logged but do not change the exit
-status.
+Exits nonzero when SERVER, PASSWORD or AGENT_ID is missing, when
+AGENT_ID is not a 36-character UUID, when the SERVER URL cannot be
+parsed, or when the monitor fetch or a fork fails. Failed result
+submissions are logged but do not change the exit status.
 
 =head1 SEE ALSO
 
@@ -69,6 +73,13 @@ my $AGENT_ID = $ENV{AGENT_ID} || die("ERROR: AGENT_ID env not set\n");
 my $PASSWORD = $ENV{PASSWORD} || die("ERROR: PASSWORD env not set\n");
 my $SERVER = $ENV{SERVER} || die("ERROR: SERVER env not set\n");
 my $debug = $ENV{DEBUG} || 0;
+
+# AGENT_ID is interpolated into API URL paths; the server issues
+# char(36) UUIDs (cgi-bin/agent.pm). Require that shape at startup so
+# a malformed value cannot bend the request path into a confusing
+# 401/404.
+$AGENT_ID =~ /^[0-9a-fA-F-]{36}$/
+    or die("ERROR: AGENT_ID must be a 36-character UUID (got '$AGENT_ID')\n");
 
 # DSCP name to TOS byte. Resolved for every monitor but never applied:
 # Net::Ping gets no TOS here, and its own TOS handling does not work
@@ -123,11 +134,13 @@ my ($host, $path) = ($1, $2);
 # talk to a server with a self-signed certificate.
 debug_log("Fetching monitors from API...");
 
+# No SSL_version or cipher pin: the local OpenSSL negotiates whatever
+# protocol it can. Old IO::Socket::SSL defaults to the SSLv23
+# handshake; modern builds exclude SSLv2/SSLv3 themselves. Forcing
+# SSLv3 fails outright on modern stacks.
 my $ssl = IO::Socket::SSL->new(
     PeerHost => $host,
     PeerPort => 443,
-    SSL_version => 'SSLv3',
-    SSL_cipher_list => 'AES256-SHA',
     SSL_verify_mode => 0,
 ) or die "Failed to create SSL connection: $!\n";
 
@@ -311,8 +324,16 @@ sub ping {
     my $tos = $DSCP_MAP->{$dscp} || 0x00;
     my $count = min(5, $monitor->{pollcount} || 5);
 
+    # Transport comes from the monitor protocol; icmpv6 is only for
+    # ICMP probes against IPv6 targets. A colon in the address must
+    # not override a tcp/udp monitor, or a closed port would report
+    # ICMPv6 latency as if the TCP port had answered. Net::Ping's
+    # tcp/udp transports are IPv4-only, so tcp/udp probes against
+    # IPv6 targets now fail visibly (loss) instead of being relabeled.
     my $p;
-    if ($monitor->{address} =~ /:/) {
+    if ($protocol eq "tcp" || $protocol eq "udp") {
+        $p = Net::Ping->new($protocol, 1, 56);
+    } elsif ($monitor->{address} =~ /:/) {
         $p = Net::Ping->new('icmpv6', 1, 56);
     } else {
         $p = Net::Ping->new($protocol, 1, 56);
@@ -393,11 +414,11 @@ sub submit_results {
     my ($chunk) = @_;
 
     # Same hand-rolled HTTPS as the monitor fetch, this time a POST.
+    # Same SSL setup too: no protocol or cipher pin, verification off
+    # on purpose.
     my $ssl = IO::Socket::SSL->new(
         PeerHost => $host,
         PeerPort => 443,
-        SSL_version => 'SSLv3',
-        SSL_cipher_list => 'AES256-SHA',
         SSL_verify_mode => 0,
     ) or die "Failed to create SSL connection: $!\n";
 

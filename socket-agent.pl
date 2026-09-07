@@ -23,9 +23,10 @@ timed with a non-blocking connect and select(). Names are resolved to
 numeric addresses first, and replies are checked against the numeric
 address and the ICMP id and sequence, so stray packets are ignored.
 
-One gap: ICMP reply matching is implemented for IPv4 only. ICMPv6
-replies are read but never matched, so IPv6 echo probes currently time
-out. TCP probes work for both families.
+ICMP reply matching works for both families. IPv4 raw reads carry the
+IP header, which is parsed for the source address; ICMPv6 reads are
+the bare echo packet, with echo replies at type 129 and the source
+address taken from recv(). TCP probes work for both families too.
 
 Raw sockets need root; the script refuses to run without it. Monitors
 are fanned out over Parallel::ForkManager, four workers per CPU core
@@ -48,8 +49,8 @@ SERVER        Base URL of the wanportal API. Required.
 PASSWORD      Shared secret for this agent. Required.
 AGENT_ID      Identifier assigned by the server. Required.
 PING_TIMEOUT  Per-probe timeout in seconds. Default 5.
-PING_SIZE     Accepted but unused; the echo payload is fixed at 56
-              bytes. Default 56.
+PING_SIZE     Echo payload size in bytes, clamped to 56..1400 so a
+              probe never needs fragmentation. Default 56.
 
 =head1 EXIT STATUS
 
@@ -126,7 +127,7 @@ use constant {
 # Options: -d/--debug, -h/--help. Workers default to four per core.
 my $debug = 0;
 my $help = 0;
-my $max_processes = Sys::CPU::cpu_count() * 4;
+my $max_processes = (Sys::CPU::cpu_count() // 1) * 4;
 
 GetOptions(
     "debug|d"     => \$debug,
@@ -150,6 +151,9 @@ my %CONFIG = (
     DEFAULT_SIZE    => $ENV{PING_SIZE}     || 56,
     ICMP_ID        => $$,                  # Use process ID for ICMP identifier
 );
+
+$CONFIG{AGENT_ID} =~ /\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z/
+    or die("ERROR: AGENT_ID must be a UUID (8-4-4-4-12 hex)\n");
 
 # Log lines. debug_log stays quiet without -d/--debug and writes to
 # stderr with explicit flushes so forked workers do not garble output.
@@ -211,28 +215,38 @@ sub checksum {
 }
 
 # Build one echo request: type 8 for IPv4 or 128 for IPv6, with a
-# "NetPing" marker plus zero padding for the payload. The checksum is
-# patched in after the first packing pass.
+# "NetPing" marker plus zero padding. The payload is PING_SIZE bytes,
+# clamped to 56..1400. The checksum is patched in after the first
+# packing pass.
 sub create_icmp_packet {
     my ($id, $seq, $is_ipv6) = @_;
     
     my $type = $is_ipv6 ? 128 : 8;  # echo request
     my $code = 0;
     my $checksum = 0;
-    my $data = "NetPing" . "0" x 48;  # marker + zeros, 56-byte payload
     
-    my $packet = pack("CCnnn a56", $type, $code, $checksum, $id, $seq, $data);
+    # PING_SIZE (DEFAULT_SIZE) now drives the payload: 56 bytes
+    # minimum, clamped at ~1400 so a probe never needs fragmentation.
+    my $size = $CONFIG{DEFAULT_SIZE};
+    $size = 56 if $size < 56;
+    $size = 1400 if $size > 1400;
+    my $data = "NetPing" . "\0" x ($size - 7);  # marker + zero padding
+    
+    my $packet = pack("CCnnn a$size", $type, $code, $checksum, $id, $seq, $data);
     $checksum = checksum($packet);
-    return pack("CCnnn a56", $type, $code, $checksum, $id, $seq, $data);
+    return pack("CCnnn a$size", $type, $code, $checksum, $id, $seq, $data);
 }
 
 # Pack (port, address, family) into the sockaddr form that send() and
-# connect() expect.
+# connect() expect. The address arrives as text (the numeric form
+# getnameinfo hands back), so the v6 branch runs it through inet_pton
+# to get the 16-byte binary pack_sockaddr_in6 requires; the v4 text
+# form feeds inet_aton directly.
 sub create_sockaddr {
     my ($port, $addr, $family) = @_;
-    
+
     if ($family == AF_INET6) {
-        return pack_sockaddr_in6($port, $addr);
+        return pack_sockaddr_in6($port, inet_pton(AF_INET6, $addr));
     } else {
         my $packed_ip = inet_aton($addr);
         return pack_sockaddr_in($port, $packed_ip);
@@ -278,8 +292,9 @@ sub create_raw_socket {
 
 # One ICMP round trip. The echo request goes out, then select() and
 # recv() until the timeout runs out. Reply matching (source address,
-# id, seq) is implemented for IPv4 only. Returns the RTT in seconds,
-# or undef on failure.
+# id, seq) works for both families: IPv4 raw reads carry the IP
+# header, ICMPv6 reads are the bare echo packet. Returns the RTT in
+# seconds, or undef on failure.
 sub icmp_ping {
     my ($target, $tos, $timeout, $is_ipv6, $family, $addr) = @_;
     
@@ -398,6 +413,59 @@ sub icmp_ping {
             debug_log("ICMP validation failed");
             next;
         }
+    
+        # On IPv6 a raw ICMPv6 read is the echo packet alone, no IPv6
+        # header: echo reply is type 129 at offset 0. The source
+        # address comes back in $from from recv().
+        elsif ($is_ipv6) {
+            unless (length($response) >= 8) {
+                debug_log("Short ICMPv6 packet: $resp_len bytes");
+                next;
+            }
+    
+            my ($from_port, $from_bin) = unpack_sockaddr_in6($from);
+            my $from_ip = inet_ntop(AF_INET6, $from_bin);
+    
+            unless ($from_ip =~ /^(?:$resolved_ip)$/) {
+                debug_log(sprintf("Received response from different IP: %s (resolved target was %s)",
+                    $from_ip, $resolved_ip));
+                next;
+            }
+    
+            my ($type, $code, $checksum, $recv_id, $recv_seq) =
+                unpack("CCnnn", substr($response, 0, 8));
+    
+            debug_log(sprintf(
+                "ICMPv6 << From=%s [%s] Type=%d, Code=%d, ID=0x%04x, Seq=%d (expected: ID=0x%04x, Seq=%d)",
+                $target, $from_ip, $type, $code, $recv_id, $recv_seq, $CONFIG{ICMP_ID}, $seq
+            ));
+    
+            # Destination-unreachable and time-exceeded are hard
+            # failures, same as the IPv4 types handled above.
+            if ($type == 1) {  # Destination Unreachable
+                debug_log("Received ICMPv6 Destination Unreachable from $from_ip");
+                close($socket);
+                return undef;
+            }
+            if ($type == 3) {  # Time Exceeded
+                debug_log("Received ICMPv6 Time Exceeded from $from_ip");
+                close($socket);
+                return undef;
+            }
+    
+            # Echo reply with our id and sequence: this is the one.
+            if ($type == 129 &&
+                $code == 0 &&
+                $recv_id == $CONFIG{ICMP_ID} &&
+                $recv_seq == $seq) {
+                my $end_time = time();
+                close($socket);
+                return ($end_time - $start_time);
+            }
+    
+            debug_log("ICMPv6 validation failed");
+            next;
+        }
     }
     
     debug_log("Timeout waiting for response");
@@ -461,12 +529,13 @@ sub tcp_ping {
     my $connect_result = connect($socket, $dest);
     my $connect_error = $!;
     
-    # On a non-blocking socket connect() should fail with EINPROGRESS.
-    # An immediate true return would be a surprise, so do not trust it.
+    # On a non-blocking socket connect() usually fails with EINPROGRESS
+    # while the handshake runs, but it can also complete immediately
+    # (loopback targets do this). True is a success only when SO_ERROR
+    # is 0, which tcp_connected() verifies.
     if ($connect_result) {
-        debug_log("Unexpected immediate connection success");
-        close($socket);
-        return undef;
+        return tcp_connected($socket, $resolved_ip, $target, $port,
+                             $family, $start_time);
     }
     
     unless ($! == EINPROGRESS) {
@@ -503,56 +572,68 @@ sub tcp_ping {
     }
     
     if (vec($wrote, fileno($socket), 1)) {
-        # Ask SO_ERROR how the handshake actually ended.
-        my $error = getsockopt($socket, SOL_SOCKET, SO_ERROR);
-        if (!defined $error) {
-            debug_log("Failed to get socket error status");
-            close($socket);
-            return undef;
-        }
-        
-        my $errno = unpack("I", $error);
-        if ($errno != 0) {
-            debug_log(sprintf("Connection failed: %s (errno: %d)", 
-                $errno ? $! : "Unknown error", $errno));
-            close($socket);
-            return undef;
-        }
-        
-        # The socket is writable; confirm the kernel connected where we
-        # aimed before trusting the result.
-        my $peer_name = getpeername($socket);
-        if ($peer_name) {
-            my ($peer_port, $peer_addr);
-            if ($family == AF_INET6) {
-                ($peer_port, $peer_addr) = unpack_sockaddr_in6($peer_name);
-                $peer_addr = inet_ntop(AF_INET6, $peer_addr);
-            } else {
-                ($peer_port, $peer_addr) = unpack_sockaddr_in($peer_name);
-                $peer_addr = inet_ntoa($peer_addr);
-            }
-            
-            unless ($peer_addr =~ /^(?:$resolved_ip)$/) {
-                debug_log(sprintf("Connected to unexpected IP: %s (resolved target was %s)",
-                    $peer_addr, $resolved_ip));
-                close($socket);
-                return undef;
-            }
-            
-            debug_log(sprintf("TCP connection successful to %s [%s]:%d", 
-                $target, $peer_addr, $port));
-        }
-        
-        my $end_time = time();
-        my $duration = $end_time - $start_time;
-        
-        close($socket);
-        return $duration;
+        # SO_ERROR, peer check and timing are shared with the
+        # immediate-success path above.
+        return tcp_connected($socket, $resolved_ip, $target, $port,
+                             $family, $start_time);
     }
     
     debug_log("Unexpected select result");
     close($socket);
     return undef;
+}
+
+# Shared tail of tcp_ping for both connect paths (immediate and
+# select-driven): ask SO_ERROR how the handshake ended, and only call
+# it a success when it is 0 and the kernel connected where we aimed.
+# Returns the elapsed time in seconds, or undef on failure.
+sub tcp_connected {
+    my ($socket, $resolved_ip, $target, $port, $family, $start_time) = @_;
+    
+    my $error = getsockopt($socket, SOL_SOCKET, SO_ERROR);
+    if (!defined $error) {
+        debug_log("Failed to get socket error status");
+        close($socket);
+        return undef;
+    }
+    
+    my $errno = unpack("I", $error);
+    if ($errno != 0) {
+        debug_log(sprintf("Connection failed: %s (errno: %d)",
+            $errno ? $! : "Unknown error", $errno));
+        close($socket);
+        return undef;
+    }
+    
+    # Confirm the kernel connected where we aimed before trusting the
+    # result.
+    my $peer_name = getpeername($socket);
+    if ($peer_name) {
+        my ($peer_port, $peer_addr);
+        if ($family == AF_INET6) {
+            ($peer_port, $peer_addr) = unpack_sockaddr_in6($peer_name);
+            $peer_addr = inet_ntop(AF_INET6, $peer_addr);
+        } else {
+            ($peer_port, $peer_addr) = unpack_sockaddr_in($peer_name);
+            $peer_addr = inet_ntoa($peer_addr);
+        }
+    
+        unless ($peer_addr =~ /^(?:$resolved_ip)$/) {
+            debug_log(sprintf("Connected to unexpected IP: %s (resolved target was %s)",
+                $peer_addr, $resolved_ip));
+            close($socket);
+            return undef;
+        }
+    
+        debug_log(sprintf("TCP connection successful to %s [%s]:%d",
+            $target, $peer_addr, $port));
+    }
+    
+    my $end_time = time();
+    my $duration = $end_time - $start_time;
+    
+    close($socket);
+    return $duration;
 }
 
 # Probe one monitor pollcount times and roll up the numbers. Returns
@@ -728,8 +809,11 @@ sub submit_results {
         results  => $results
     };
     
-    debug_log("Submit payload:");
-    debug_log(encode_json($payload));
+    # Never debug_log the plaintext shared secret: log a masked copy.
+    my $log_payload = { %$payload };
+    $log_payload->{password} = 'REDACTED';
+    debug_log("Submit payload (password redacted):");
+    debug_log(encode_json($log_payload));
     
     my $response = $ua->post(
         "$CONFIG{API_SERVER}/agent/$CONFIG{AGENT_ID}/monitors",

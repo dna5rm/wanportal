@@ -7,3 +7,8 @@
 !htdocs/
 !run-*.sh
 !*.pl
+
+# Re-exclude build artifacts inside the kept dirs: the packaged agent image
+# (netping_latest.tar.gz, ~21 MB) is a build output served by the dashboard,
+# not source - it must not bloat the Docker build context.
+htdocs/assets/*.tar.gz
