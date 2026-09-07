@@ -177,7 +177,12 @@
         // Initialize all tooltips
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
         const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl, {
-            html: true,
+            // html: false — tooltip titles carry user-entered text
+            // (e.g. credential comments, agent descriptions). html:true
+            // sets the content via innerHTML, which re-interprets
+            // server-side-escaped user text (&lt;img ...&gt;) as live
+            // markup — a stored-XSS vector.
+            html: false,
             placement: 'auto'
         }));
 
@@ -196,9 +201,3 @@
         }
     });
 </script>
-
-<?php if (isset($additional_scripts)): ?>
-    <?php foreach ($additional_scripts as $script): ?>
-        <script src="<?= htmlspecialchars($script) ?>"></script>
-    <?php endforeach; ?>
-<?php endif; ?>

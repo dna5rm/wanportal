@@ -17,27 +17,12 @@ if (!isset($_SESSION['is_admin']) || !$_SESSION['is_admin']) {
     exit;
 }
 
-// Fetch users from API
-$ch = curl_init();
-curl_setopt_array($ch, [
-    CURLOPT_URL => "http://localhost/cgi-bin/api/users",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        "Authorization: Bearer " . $_SESSION['token'],
-        "Content-Type: application/json"
-    ]
-]);
-
-$response = curl_exec($ch);
-$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
+// Fetch users from the API via the shared api_get() helper
+// (auto-loaded by config.php), matching agents/targets/monitors.
 $users = [];
-if ($status === 200) {
-    $data = json_decode($response, true);
-    if ($data['status'] === 'success') {
-        $users = $data['users'];
-    }
+$response = api_get('/users');
+if ($response && ($response['status'] ?? '') === 'success') {
+    $users = $response['users'];
 }
 
 wanportal_render_head('Users', ['datatables' => true]);
@@ -74,8 +59,8 @@ wanportal_render_header_row('Users', [
                         </div>
                         <div class="col-md-2">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="showInactive">
-                                <label class="form-check-label" for="showInactive">
+                                <input class="form-check-input" type="checkbox" id="showInactiveFilter">
+                                <label class="form-check-label" for="showInactiveFilter">
                                     Show Inactive
                                 </label>
                             </div>
@@ -88,7 +73,7 @@ wanportal_render_header_row('Users', [
 
     <!-- Users Table -->
     <div class="table-responsive">
-        <table class="table table-hover">
+        <table id="tablePager" class="table table-hover">
             <thead>
                 <tr>
                     <th>Username</th>
@@ -153,17 +138,29 @@ wanportal_render_header_row('Users', [
                 <?php endforeach; ?>
             </tbody>
         </table>
+    </div>
 
 <script>
+// Toast on redirect from user_edit.php?saved=1; strip the query
+// param after firing so a refresh doesn't re-toast.
+wanportalPageOnLoad = function() {
+    var url = new URL(window.location.href);
+    if (url.searchParams.get('saved') === '1') {
+        showToast('User saved', 'success');
+        url.searchParams.delete('saved');
+        window.history.replaceState({}, '', url.toString());
+    }
+};
+
 // Filter functionality
 document.getElementById('searchFilter').addEventListener('input', filterUsers);
 document.getElementById('adminFilter').addEventListener('change', filterUsers);
-document.getElementById('showInactive').addEventListener('change', filterUsers);
+document.getElementById('showInactiveFilter').addEventListener('change', filterUsers);
 
 function filterUsers() {
     const search = document.getElementById('searchFilter').value.toLowerCase();
     const adminFilter = document.getElementById('adminFilter').value;
-    const showInactive = document.getElementById('showInactive').checked;
+    const showInactive = document.getElementById('showInactiveFilter').checked;
     
     const rows = document.querySelectorAll('tbody tr');
     

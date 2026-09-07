@@ -245,7 +245,6 @@ wanportal_render_header_row(
             </div>
         </div>
     </div>
-</div>
 
 <?php wanportal_render_page_end(); ?>
 <?php $mysqli->close(); ?>

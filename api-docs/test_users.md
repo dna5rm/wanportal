@@ -6,10 +6,12 @@ TOKEN=$(curl -s -X POST http://localhost/cgi-bin/api/login \
   -d '{"username":"admin","password":"netops"}' | jq -r '.token')
 ```
 
+Every `/users` route requires an admin token.
+
 ## List all users
 
 ```bash
-curl -s -X GET http://localhost/cgi-bin/api/users \
+curl -s http://localhost/cgi-bin/api/users \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
@@ -20,14 +22,17 @@ curl -s -X POST http://localhost/cgi-bin/api/users \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "username": "jdoe",
-    "password": "Test123!@#",
-    "full_name": "John Doe",
-    "email": "jdoe@example.com",
+    "username": "deskuser",
+    "password": "<user-password>",
+    "full_name": "Service Desk",
+    "email": "deskuser@example.com",
     "is_admin": false,
     "is_active": true
   }' | jq '.'
 ```
+
+Passwords need at least eight characters with at least one letter and
+one digit.
 
 ## Create another user (admin user)
 
@@ -36,16 +41,16 @@ curl -s -X POST http://localhost/cgi-bin/api/users \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "username": "jane.admin",
-    "password": "Admin123!@#",
-    "full_name": "Jane Smith",
-    "email": "jane@example.com",
+    "username": "netops.admin",
+    "password": "<admin-password>",
+    "full_name": "NOC Administrator",
+    "email": "netops-admin@example.com",
     "is_admin": true,
     "is_active": true
   }' | jq '.'
 ```
 
-## Try to create user with weak password (should fail)
+## Try to create a user with a weak password (should fail)
 
 ```bash
 curl -s -X POST http://localhost/cgi-bin/api/users \
@@ -58,38 +63,48 @@ curl -s -X POST http://localhost/cgi-bin/api/users \
   }' | jq '.'
 ```
 
-## Update user (replace USER-UUID with actual UUID)
+### Expected response:
+
+```json
+{
+  "status": "error",
+  "message": "Password does not meet complexity requirements"
+}
+```
+
+## Update a user (replace USER-UUID with an actual UUID)
 
 ```bash
 curl -s -X PUT http://localhost/cgi-bin/api/users/USER-UUID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "full_name": "John Doe Updated",
-    "email": "john.new@example.com",
+    "full_name": "Service Desk (evenings)",
+    "email": "desk-evenings@example.com",
     "is_active": true
   }' | jq '.'
 ```
 
-## Change user's password (replace USER-UUID)
+## Change a user's password (replace USER-UUID)
 
 ```bash
 curl -s -X PUT http://localhost/cgi-bin/api/users/USER-UUID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "password": "NewPass123!@#"
+    "password": "<new-user-password>"
   }' | jq '.'
 ```
 
-## Try to modify admin user with non-admin token (should fail)
+## Try to modify the built-in admin with a non-admin token (should fail)
 
-First, get a non-admin token
+First get a non-admin token (the standard user created above), then
+try to deactivate the built-in admin account:
 
 ```bash
 NON_ADMIN_TOKEN=$(curl -s -X POST http://localhost/cgi-bin/api/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"jdoe","password":"NewPass123!@#"}' | jq -r '.token')
+  -d '{"username":"deskuser","password":"<user-password>"}' | jq -r '.token')
 
 curl -s -X PUT http://localhost/cgi-bin/api/users/ADMIN-UUID \
   -H "Authorization: Bearer $NON_ADMIN_TOKEN" \
@@ -99,6 +114,19 @@ curl -s -X PUT http://localhost/cgi-bin/api/users/ADMIN-UUID \
   }' | jq '.'
 ```
 
+### Expected response:
+
+```json
+{
+  "status": "error",
+  "message": "Unauthorized"
+}
+```
+
+A non-admin is stopped by the admin check before the built-in-admin
+protection even comes into play; the built-in `admin` account can only
+be changed by the admin itself.
+
 ## Delete a user (replace USER-UUID)
 
 ```bash
@@ -106,16 +134,44 @@ curl -s -X DELETE http://localhost/cgi-bin/api/users/USER-UUID \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
-## Try to delete admin user (should fail)
+### Expected response:
+
+```json
+{
+  "status": "success",
+  "message": "User deleted successfully",
+  "id": "USER-UUID"
+}
+```
+
+## Try to delete the admin user (should fail)
 
 ```bash
 curl -s -X DELETE http://localhost/cgi-bin/api/users/ADMIN-UUID \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
-## List users with non-admin token (should fail)
+### Expected response:
+
+```json
+{
+  "status": "error",
+  "message": "Cannot delete admin user"
+}
+```
+
+## List users with a non-admin token (should fail)
 
 ```bash
-curl -s -X GET http://localhost/cgi-bin/api/users \
+curl -s http://localhost/cgi-bin/api/users \
   -H "Authorization: Bearer $NON_ADMIN_TOKEN" | jq '.'
+```
+
+### Expected response:
+
+```json
+{
+  "status": "error",
+  "message": "Unauthorized"
+}
 ```

@@ -19,6 +19,10 @@ $downHosts = $monitorsResponse['monitors'] ?? [];
 // can be tweaked without a Perl-side change.
 $allMonitorsResponse = api_get('/monitors?is_active=1');
 $allMonitors = $allMonitorsResponse['monitors'] ?? [];
+// True when the /monitors fetch failed: api_get() returns null on
+// transport errors, non-200 responses, and undecodable JSON. The
+// summary cards must not render their all-zero stats in that case.
+$monitorsFetchFailed = ($allMonitorsResponse === null);
 
 $monitor_stats = [
     'total'     => 0,
@@ -60,8 +64,10 @@ $topSlow = array_slice($topSlow, 0, 5);
 // Initialize error message
 $error_message = null;
 
-// Check for API errors
-if ($agentsResponse === null || $monitorsResponse === null) {
+// Check for API errors. The all-monitors fetch drives the summary
+// cards and the Top 5 widget; a failure there must surface as the
+// error banner rather than a dashboard full of zeros.
+if ($agentsResponse === null || $monitorsResponse === null || $monitorsFetchFailed) {
     $error_message = "Unable to fetch data from API";
 }
 
@@ -142,7 +148,10 @@ wanportal_render_head('Console', [
                  status. Sits directly above the Top 5 slowest
                  widget so the two summary tables read together as a
                  pair: cards give the high-level breakdown, slowest
-                 table gives the per-link detail. -->
+                 table gives the per-link detail. When the /monitors
+                 fetch fails the cards are skipped entirely — a wall
+                 of zeros would read as "everything healthy". -->
+            <?php if (!$monitorsFetchFailed): ?>
             <div class="row g-3 mb-4">
                 <div class="col-md-3">
                     <div class="card stat-card h-100 border">
@@ -183,6 +192,7 @@ wanportal_render_head('Console', [
                     </div>
                 </div>
             </div>
+            <?php endif; ?>
 
             <!-- Top 5 slowest monitors (excluding down — those
                  are in the down table below) -->
@@ -304,7 +314,6 @@ wanportal_render_head('Console', [
 
         </div>
     </div>
-</div>
 
 <?php wanportal_render_page_end(); ?>
 

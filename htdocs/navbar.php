@@ -39,8 +39,12 @@ if (!isset($_SESSION['csrf_token'])) {
 <meta name="csrf-token" content="<?= htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
 <?php
 
-// Add Bootstrap Icons in head if not already loaded
-if (!defined('NAVBAR_LOADED')): ?>
+// Add Bootstrap Icons only when the page chrome hasn't already
+// loaded them: wanportal_render_head() emits the stylesheet and
+// defines WANPORTAL_ICONS_LOADED, so without this check every page
+// that uses the partial loaded the icon font twice (once in <head>,
+// once again here in the body).
+if (!defined('NAVBAR_LOADED') && !defined('WANPORTAL_ICONS_LOADED')): ?>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">
     <?php define('NAVBAR_LOADED', true);
 endif;

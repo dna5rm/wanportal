@@ -1,9 +1,12 @@
 # Test: Public APIs
 
-## List all agents (without passwords)
+These endpoints need no login. They expose the monitoring topology
+read-only; agent passwords never appear in any response.
+
+## List all agents
 
 ```bash
-curl -s -X GET http://localhost/cgi-bin/api/agents | jq '.'
+curl -s http://localhost/cgi-bin/api/agents | jq '.'
 ```
 
 ### Expected response:
@@ -17,14 +20,9 @@ curl -s -X GET http://localhost/cgi-bin/api/agents | jq '.'
       "name": "LOCAL",
       "address": "127.0.0.1",
       "description": "Local Agent",
-      "last_seen": "2024-01-01 00:00:00",
-      "is_active": 1,
-      "created_at": "2024-01-01 00:00:00",
-      "created_by": "system",
-      "updated_at": null,
-      "updated_by": null
-    },
-    // ... other agents ...
+      "last_seen": "2025-06-13 23:39:58",
+      "is_active": 1
+    }
   ]
 }
 ```
@@ -32,7 +30,7 @@ curl -s -X GET http://localhost/cgi-bin/api/agents | jq '.'
 ## List all targets
 
 ```bash
-curl -s -X GET http://localhost/cgi-bin/api/targets | jq '.'
+curl -s http://localhost/cgi-bin/api/targets | jq '.'
 ```
 
 ### Expected response:
@@ -45,13 +43,8 @@ curl -s -X GET http://localhost/cgi-bin/api/targets | jq '.'
       "id": "12345678-1234-5678-1234-567812345678",
       "address": "8.8.8.8",
       "description": "Google DNS",
-      "is_active": 1,
-      "created_at": "2024-01-01 00:00:00",
-      "created_by": "admin",
-      "updated_at": null,
-      "updated_by": null
-    },
-    // ... other targets ...
+      "is_active": 1
+    }
   ]
 }
 ```
@@ -59,10 +52,14 @@ curl -s -X GET http://localhost/cgi-bin/api/targets | jq '.'
 ## List all monitors
 
 ```bash
-curl -s -X GET http://localhost/cgi-bin/api/monitors | jq '.'
+curl -s http://localhost/cgi-bin/api/monitors | jq '.'
 ```
 
 ### Expected response:
+
+One entry per monitor. The `is_active` flag is the effective one — a
+monitor counts as inactive when its agent or its target is inactive
+too.
 
 ```json
 {
@@ -76,58 +73,45 @@ curl -s -X GET http://localhost/cgi-bin/api/monitors | jq '.'
       "protocol": "ICMP",
       "port": 0,
       "dscp": "BE",
+      "pollcount": 5,
+      "pollinterval": 60,
       "is_active": 1,
+      "sample": 120,
       "current_loss": 0,
       "current_median": 15.5,
+      "current_min": 14.2,
+      "current_max": 18.9,
+      "current_stddev": 1.1,
       "avg_loss": 0,
       "avg_median": 14.8,
-      "last_update": "2024-01-01 00:00:00",
-      "created_at": "2024-01-01 00:00:00",
-      "updated_at": null,
+      "avg_min": 13.7,
+      "avg_max": 19.4,
+      "avg_stddev": 1.3,
+      "prev_loss": 0,
+      "last_clear": "2025-06-13 20:00:00",
+      "last_down": "2025-06-01 04:12:00",
+      "last_update": "2025-06-13 23:39:58",
+      "total_down": 2,
       "agent_name": "LOCAL",
-      "target_address": "8.8.8.8"
-    },
-    // ... other monitors ...
+      "agent_is_active": 1,
+      "target_address": "8.8.8.8",
+      "target_is_active": 1
+    }
   ]
 }
 ```
 
-## Filter agents by status
+## Filter monitors
+
+`/monitors` is the only listing with filters, and they are query
+parameters:
 
 ```bash
-curl -s -X GET http://localhost/cgi-bin/api/agents \
-  -H "Content-Type: application/json" \
-  -d '{"is_active": true}' | jq '.'
+# Monitors currently at exactly 0% loss
+curl -s "http://localhost/cgi-bin/api/monitors?current_loss=0" | jq '.'
+
+# Only effectively active monitors
+curl -s "http://localhost/cgi-bin/api/monitors?is_active=1" | jq '.'
 ```
 
-## Filter targets by address pattern
-
-```bash
-curl -s -X GET http://localhost/cgi-bin/api/targets \
-  -H "Content-Type: application/json" \
-  -d '{"address_like": "8.8.%"}' | jq '.'
-```
-
-## Filter monitors by agent
-
-```bash
-curl -s -X GET http://localhost/cgi-bin/api/monitors \
-  -H "Content-Type: application/json" \
-  -d '{"agent_id": "00000000-0000-0000-0000-000000000000"}' | jq '.'
-```
-
-## Filter monitors by target
-
-```bash
-curl -s -X GET http://localhost/cgi-bin/api/monitors \
-  -H "Content-Type: application/json" \
-  -d '{"target_id": "12345678-1234-5678-1234-567812345678"}' | jq '.'
-```
-
-## Filter monitors by protocol
-
-```bash
-curl -s -X GET http://localhost/cgi-bin/api/monitors \
-  -H "Content-Type: application/json" \
-  -d '{"protocol": "ICMP"}' | jq '.'
-```
+`/agents` and `/targets` take no filters.

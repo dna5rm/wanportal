@@ -71,14 +71,23 @@ try {
 // after the page content. We pass both through head_extras
 // because that's the only place to inject <script src> in the
 // page chrome.
-$head_extras  = '    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism-okaidia.min.css" rel="stylesheet" />' . "\n";
-$head_extras .= '    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />' . "\n";
-$head_extras .= '    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/prism.min.js"></script>' . "\n";
-$head_extras .= '    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-perl.min.js"></script>' . "\n";
-$head_extras .= '    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/line-numbers/prism-line-numbers.min.js"></script>' . "\n";
+//
+// Host choice: the CSP in .htaccess allows script-src from
+// cdn.jsdelivr.net but NOT cdnjs.cloudflare.com (style-src allows
+// both). Prism used to load its JS from cdnjs, so the highlighter
+// was silently blocked. jsdelivr is already in script-src AND
+// style-src, so serving Prism from there needs no CSP change.
+$head_extras  = '    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/themes/prism-okaidia.min.css" rel="stylesheet" />' . "\n";
+$head_extras .= '    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />' . "\n";
+$head_extras .= '    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/prism.min.js"></script>' . "\n";
+$head_extras .= '    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/components/prism-perl.min.js"></script>' . "\n";
+$head_extras .= '    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.24.1/plugins/line-numbers/prism-line-numbers.min.js"></script>' . "\n";
 
-wanportal_render_head(basename(htmlspecialchars($filename)), ['head_extras' => $head_extras]);
-wanportal_render_header_row('Script: ' . basename(htmlspecialchars($filename, ENT_QUOTES, 'UTF-8')));
+// Both render_head() and render_header_row() escape the title
+// themselves; pass the RAW basename (pre-escaping here would
+// double-encode any special characters).
+wanportal_render_head(basename($filename), ['head_extras' => $head_extras]);
+wanportal_render_header_row('Script: ' . basename($filename));
 ?>
         <div class="row">
         <div class="col-md-3">

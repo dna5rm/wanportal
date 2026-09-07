@@ -312,7 +312,6 @@ wanportal_render_header_row(($id ? 'Edit' : 'New') . ' Monitor', [
             </div>
         </div>
     </div>
-</div>
 
 <?php wanportal_render_page_end(); ?>
 

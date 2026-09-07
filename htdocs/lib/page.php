@@ -165,6 +165,10 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
         // Bootstrap 5.3.8 + Bootstrap Icons on every page.
         echo '    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" />' . "\n";
         echo '    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css">' . "\n";
+        // Mark the icon font as loaded: navbar.php (included below)
+        // re-emits the same <link> otherwise, because its own
+        // NAVBAR_LOADED guard is never set by anything else.
+        define('WANPORTAL_ICONS_LOADED', true);
 
         // DataTables CSS — only on pages that have a tablePager table.
         if (!empty($options['datatables'])) {
@@ -189,7 +193,10 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
             echo '    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />' . "\n";
         }
 
-        echo '    <link rel="stylesheet" href="/assets/base.css">' . "\n";
+        // Cache-bust base.css with its mtime, matching footer.php's
+        // ?v= treatment of local JS — without it browsers can serve a
+        // stale copy after a deploy and the user sees broken styling.
+        echo '    <link rel="stylesheet" href="/assets/base.css?v=' . filemtime(__DIR__ . '/../assets/base.css') . '">' . "\n";
 
         // Page-specific extras (custom <meta> tags, additional
         // <link> tags, etc.). The caller is responsible for

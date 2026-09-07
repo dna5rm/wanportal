@@ -302,6 +302,15 @@ wanportal_render_header_row($title, $actions, ['extra_buttons' => $extra_buttons
                      footer instead of being clipped by a 60vh
                      column's edge. -->
                 <div class="d-flex flex-column">
+                    <!-- Loading and error status for the chart fetch
+                         (showLoading()/showError() in the inline
+                         script below target these IDs). Hidden by
+                         default; the JS flips style.display. -->
+                    <div id="loading" class="text-center my-3" style="display: none;">
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Loading chart data…
+                    </div>
+                    <div id="errorMessage" class="alert bg-warning-subtle text-warning-emphasis border border-warning-subtle mb-3" role="alert" style="display: none;"></div>
                     <div class="flex-grow-1 d-flex flex-column">
                         <div id="chartContainer" class="flex-grow-1" style="min-height: 60vh;">
                             <canvas id="networkChart"></canvas>
@@ -352,7 +361,6 @@ wanportal_render_header_row($title, $actions, ['extra_buttons' => $extra_buttons
 
         </div>
     </div>
-</div>
 
 <?php wanportal_render_page_end(); ?>
 
@@ -674,7 +682,7 @@ function confirmReset() {
     if (!confirm('Reset all statistics for this monitor? This clears averages, counters, and last-clear timestamp.')) return;
     const mid = new URLSearchParams(window.location.search).get('id');
     if (!mid) { showToast('No monitor ID', 'danger'); return; }
-    proxyRequest('POST', '/cgi-bin/api/monitor/' + mid + '/reset')
+    proxyRequest('POST', '/monitor/' + mid + '/reset')
         .then(() => { showToast('Statistics reset successfully', 'success'); setTimeout(() => location.reload(), 800); })
         .catch(err => showToast(err.message || 'Reset failed', 'danger'));
 }

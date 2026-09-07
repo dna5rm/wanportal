@@ -2,7 +2,13 @@ openapi: 3.0.0
 
 info:
   title: NetOPS Monitoring API
-  description: API for managing network monitoring agents, targets, monitors, credentials, and users.
+  description: |
+    API for managing network monitoring agents, targets, monitors,
+    credentials, and users. The read-only listing endpoints (agents,
+    targets, monitors, RRD data), the health check and the spec itself
+    are public; the agent polling endpoints authenticate with the
+    agent's own password, every other endpoint requires a bearer token
+    issued by /login, and writes are admin-only.
   version: 1.1.0
 
 servers:
@@ -69,9 +75,12 @@ components:
           type: string
         last_seen:
           type: string
-          format: date-time
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS)
         is_active:
-          type: boolean
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 when active, 0 when not; request bodies also accept true/false
         password:
           type: string
           description: Agent password (only returned on auth-protected /agent/{id} for admin users, never on public /agents)
@@ -87,7 +96,10 @@ components:
         description:
           type: string
         is_active:
-          type: boolean
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 when active, 0 when not; request bodies also accept true/false
 
     Monitor:
       type: object
@@ -122,7 +134,10 @@ components:
           minimum: 10
           maximum: 3600
         is_active:
-          type: boolean
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 when active, 0 when not; request bodies also accept true/false
         sample:
           type: integer
         current_loss:
@@ -149,23 +164,29 @@ components:
           type: number
         last_clear:
           type: string
-          format: date-time
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS)
         last_down:
           type: string
-          format: date-time
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS)
         last_update:
           type: string
-          format: date-time
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS)
         total_down:
           type: integer
         agent_name:
           type: string
         agent_is_active:
-          type: boolean
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 when the agent is active, 0 when not
         target_address:
           type: string
         target_is_active:
-          type: boolean
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 when the target is active, 0 when not
 
     User:
       type: object
@@ -181,25 +202,31 @@ components:
           type: string
           format: email
         is_admin:
-          type: boolean
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 for admin users, 0 for regular users
         is_active:
-          type: boolean
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 when active, 0 when not; request bodies also accept true/false
         last_login:
           type: string
-          format: date-time
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS)
         failed_attempts:
           type: integer
         locked_until:
           type: string
-          format: date-time
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS)
         created_at:
           type: string
-          format: date-time
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS)
         created_by:
           type: string
         updated_at:
           type: string
-          format: date-time
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS)
         updated_by:
           type: string
 
@@ -229,27 +256,31 @@ components:
           type: string
         expiry_date:
           type: string
-          format: date-time
+          description: Expiration timestamp (YYYY-MM-DD HH:MM:SS), or null
         is_active:
-          type: boolean
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 when active, 0 when not; request bodies also accept true/false
         sensitivity:
           type: string
           enum: [LOW, MEDIUM, HIGH, CRITICAL]
         metadata:
-          type: object
+          type: string
+          description: JSON-encoded metadata text (stored MariaDB JSON column returned as text), or null
         created_at:
           type: string
-          format: date-time
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS)
         created_by:
           type: string
         last_accessed_at:
           type: string
-          format: date-time
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS)
         last_accessed_by:
           type: string
         updated_at:
           type: string
-          format: date-time
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS)
         updated_by:
           type: string
 
@@ -291,7 +322,11 @@ paths:
       tags:
         - Authentication
       summary: User authentication
-      description: Authenticates a user via local database or LDAP (if enabled). Returns a JWT token for API access.
+      description: |
+        Authenticates a user via local database or LDAP (if enabled).
+        Returns a signed JWT that carries the username and an is_admin
+        flag and is valid for one hour. Local accounts lock for 30
+        minutes after 5 failed attempts.
       requestBody:
         required: true
         content:
@@ -320,6 +355,12 @@ paths:
                   token:
                     type: string
                     description: JWT token
+        '400':
+          description: Invalid input (username and password are required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Invalid credentials or account locked
           content:
@@ -351,6 +392,12 @@ paths:
                   data:
                     type: object
                     description: Decoded JWT payload
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /cgi-bin/api/agent:
     post:
@@ -380,6 +427,11 @@ paths:
                   default: true
                 password:
                   type: string
+                  description: |
+                    Agent password used by the polling endpoints. If
+                    omitted, a well-known placeholder (CHANGE_ME) is
+                    assigned - set a real password before deploying the
+                    agent.
               required:
                 - name
       responses:
@@ -400,6 +452,12 @@ paths:
                     format: uuid
         '400':
           description: Invalid input or duplicate name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
           content:
             application/json:
               schema:
@@ -494,6 +552,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '400':
+          description: Invalid input (empty body or invalid IP address)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       tags:
         - Agents
@@ -531,7 +601,7 @@ paths:
                       type: string
                       format: uuid
         '403':
-          description: Cannot delete LOCAL agent
+          description: Admin required, or attempt to delete the LOCAL agent
           content:
             application/json:
               schema:
@@ -548,7 +618,15 @@ paths:
       tags:
         - Agent Monitors
       summary: Get agent's monitor assignments
-      description: Returns a list of active monitors assigned to the specified agent. Only returns monitors that are due for polling based on their interval.
+      description: |
+        Returns a list of active monitors assigned to the specified
+        agent, limited to monitors that are due for polling based on
+        their interval. Agents authenticate with their agent password
+        (sent in the request body), not with a user JWT - the same
+        password the agent was created with. If the agent exists but is
+        inactive, the response is success with an empty list. Each call
+        also refreshes the agent's stored address (first X-Forwarded-For
+        hop, validated as IPv4/IPv6) and last_seen time.
       parameters:
         - in: path
           name: id
@@ -601,7 +679,7 @@ paths:
                         pollinterval:
                           type: integer
         '401':
-          description: Authentication failed
+          description: Invalid agent credentials
           content:
             application/json:
               schema:
@@ -630,6 +708,7 @@ paths:
                   type: string
                 results:
                   type: array
+                  description: Batch of poll results. May be empty or omitted - the call then succeeds without filing anything.
                   items:
                     type: object
                     properties:
@@ -646,16 +725,26 @@ paths:
                         type: number
                       stddev:
                         type: number
+                    required:
+                      - id
+                      - min
+                      - max
+                      - median
+                      - loss
+                      - stddev
               required:
                 - password
-                - results
       responses:
         '200':
           description: Results submitted successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Success'
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
         '400':
           description: Invalid input
           content:
@@ -663,7 +752,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
-          description: Authentication failed
+          description: Invalid agent credentials
           content:
             application/json:
               schema:
@@ -714,6 +803,12 @@ paths:
                     format: uuid
         '400':
           description: Invalid input or duplicate address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
           content:
             application/json:
               schema:
@@ -813,6 +908,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       tags:
         - Targets
@@ -852,6 +953,12 @@ paths:
                     description: List of monitor IDs that were deleted
         '404':
           description: Target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
           content:
             application/json:
               schema:
@@ -933,6 +1040,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Agent or target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
           content:
             application/json:
               schema:
@@ -1043,6 +1156,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       tags:
         - Monitors
@@ -1076,6 +1195,12 @@ paths:
                     format: uuid
         '404':
           description: Monitor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
           content:
             application/json:
               schema:
@@ -1119,6 +1244,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /cgi-bin/api/agents:
     get:
@@ -1153,9 +1284,11 @@ paths:
                           type: string
                         last_seen:
                           type: string
-                          format: date-time
+                          description: Server timestamp (YYYY-MM-DD HH:MM:SS)
                         is_active:
-                          type: boolean
+                          type: integer
+                          minimum: 0
+                          maximum: 1
 
   /cgi-bin/api/targets:
     get:
@@ -1192,12 +1325,14 @@ paths:
             type: integer
             minimum: 0
             maximum: 100
-          description: Filter by current loss percentage
+          description: Exact-match filter on current loss percentage
         - in: query
           name: is_active
           schema:
-            type: boolean
-          description: Filter by active status
+            type: integer
+            minimum: 0
+            maximum: 1
+          description: Filter by effective active state (1 = active, 0 = inactive)
       responses:
         '200':
           description: Successful operation
@@ -1219,7 +1354,12 @@ paths:
       tags:
         - Public API
       summary: Get RRD data
-      description: Retrieves monitoring data from RRD files. Can return raw data or generate graphs. Supports both RTT and loss metrics with customizable time ranges.
+      description: |
+        Retrieves monitoring data from RRD files. Returns raw data points
+        as JSON, or a PNG graph when cmd=graph. Supports both RTT and
+        loss metrics. The monitor id is validated as a UUID before it is
+        used. With no start/end given, the range defaults to the last
+        three hours.
       parameters:
         - in: query
           name: id
@@ -1283,7 +1423,7 @@ paths:
                           description: Unix timestamp
                         datetime:
                           type: string
-                          format: date-time
+                          description: Timestamp (YYYY-MM-DD HH:MM:SS)
                         loss:
                           type: number
                         rtt:
@@ -1317,15 +1457,28 @@ paths:
       tags:
         - Credentials
       summary: List credentials
-      description: Returns a list of all stored credentials with optional filtering. Passwords are not included in the response unless specifically requested.
+      description: |
+        Returns a list of stored credentials with optional filtering.
+        Passwords are never included in list responses. With no
+        is_active parameter only active entries are listed; pass
+        is_active=0 for inactive ones or is_active=1 for active ones
+        (there is no combined listing). is_active only accepts 0 or 1.
+
+        Any other credential column (site, name, type, username, url,
+        owner, sensitivity, ...) can be used as a query parameter:
+        values match exactly by default, accept comparison prefixes
+        (=, !=, <, <=, >, >=), a %...% wildcard for a LIKE match, and
+        the sentinels NULL and NOT NULL for null checks.
       security:
         - bearerAuth: []
       parameters:
         - in: query
           name: is_active
           schema:
-            type: boolean
-          description: Filter by active status
+            type: integer
+            minimum: 0
+            maximum: 1
+          description: Filter by active status (only 0 or 1 accepted)
         - in: query
           name: site
           schema:
@@ -1432,13 +1585,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /cgi-bin/api/credentials/{id}:
     get:
       tags:
         - Credentials
       summary: Get credential details
-      description: Retrieves detailed information about a specific credential. Updates last_accessed timestamp when credential is viewed.
+      description: Retrieves detailed information about a specific credential. The stored password is included only for admin users; every view also updates the credential's last_accessed_at / last_accessed_by stamp.
       security:
         - bearerAuth: []
       parameters:
@@ -1542,6 +1701,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       tags:
         - Credentials
@@ -1573,6 +1738,12 @@ paths:
                     description: Indicates whether soft or hard delete was performed
         '404':
           description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
           content:
             application/json:
               schema:

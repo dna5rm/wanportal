@@ -62,13 +62,6 @@ if ($id) {
     }
 }
 
-if ($id) {
-    error_log("User ID: " . $id);
-    error_log("API Status: " . $status);
-    error_log("Raw Response: " . $response);
-    error_log("Decoded User Data: " . print_r($user, true));
-}
-
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!wanportal_csrf_valid()) {
@@ -286,7 +279,6 @@ wanportal_render_header_row(($id ? 'Edit' : 'New') . ' User', [
         </div>
         <?php endif; ?>
     </div>
-</div>
 
 <?php wanportal_render_page_end(); ?>
 

@@ -278,7 +278,6 @@ wanportal_render_header_row(($id ? 'Edit' : 'New') . ' Credential', [
             </a>
         </div>
     </form>
-</div>
 
 <?php wanportal_render_page_end(); ?>
 

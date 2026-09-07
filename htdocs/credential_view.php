@@ -82,7 +82,7 @@ $head_extras .= '        .password-field .toggle-password { position: absolute; 
 $head_extras .= '    </style>';
 
 wanportal_render_head('View Credential', ['head_extras' => $head_extras]);
-wanportal_render_header_row('View Credential: ' . htmlspecialchars($cred['name'], ENT_QUOTES, 'UTF-8'), [
+wanportal_render_header_row('View Credential: ' . $cred['name'], [
     [
         'url'     => '/credentials.php',
         'icon'    => 'bi bi-arrow-left',

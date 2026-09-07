@@ -25,36 +25,15 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
-// Fetch credentials from API
-$ch = curl_init();
+// Fetch credentials from the API via the shared api_get() helper
+// (auto-loaded by config.php), matching agents/targets/monitors.
 $is_active = isset($_GET['is_active']) ? $_GET['is_active'] : '1';
 if (!preg_match('/^[01]$/', $is_active)) { $is_active = '1'; }
-$url = "http://localhost/cgi-bin/api/credentials?is_active=" . $is_active;
-
-curl_setopt_array($ch, [
-    CURLOPT_URL => $url,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        "Authorization: Bearer " . $_SESSION['token'],
-        "Content-Type: application/json"
-    ]
-]);
-
-$response = curl_exec($ch);
-$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-if ($status === 401) {
-    header('Location: /login.php');
-    exit;
-}
 
 $credentials = [];
-if ($status === 200) {
-    $data = json_decode($response, true);
-    if ($data['status'] === 'success') {
-        $credentials = $data['credentials'];
-    }
+$response = api_get('/credentials?is_active=' . $is_active);
+if ($response && ($response['status'] ?? '') === 'success') {
+    $credentials = $response['credentials'];
 }
 
 wanportal_render_head('Credentials', ['datatables' => true]);
@@ -126,7 +105,8 @@ wanportal_render_header_row('Credentials Management', [
                             </a>
                         </td>
                         <td class="text-center">
-                            <span class="badge bg-<?= getBadgeColor($cred['type']) ?>">
+                            <?php $badge_color = getBadgeColor($cred['type']); ?>
+                            <span class="badge bg-<?= $badge_color ?>-subtle text-<?= $badge_color ?>-emphasis border border-<?= $badge_color ?>-subtle">
                                 <?= htmlspecialchars($cred['type']) ?>
                             </span>
                         </td>
@@ -166,40 +146,28 @@ wanportal_render_header_row('Credentials Management', [
             </tbody>
         </table>
     </div>
-</div>
-
-<?php wanportal_render_page_end(); ?>
 
 <script>
+// Toast on redirect from credential_edit.php?saved=1; strip the
+// query param after firing so a refresh doesn't re-toast.
+wanportalPageOnLoad = function() {
+    var url = new URL(window.location.href);
+    if (url.searchParams.get('saved') === '1') {
+        showToast('Credential saved', 'success');
+        url.searchParams.delete('saved');
+        window.history.replaceState({}, '', url.toString());
+    }
+};
+
 // Filter functionality
 document.getElementById('typeFilter').addEventListener('change', filterCredentials);
 document.getElementById('siteFilter').addEventListener('input', filterCredentials);
 document.getElementById('activeFilter').addEventListener('change', function() {
-    // Debug log
-    console.log('Changing active filter to:', this.value);
-
-    // Construct new URL with the is_active parameter
+    // Construct the new URL with the is_active parameter and redirect.
     let url = new URL(window.location.href);
     url.searchParams.set('is_active', this.value);
-
-    // Debug log
-    console.log('Redirecting to:', url.toString());
-
-    // Redirect to new URL
     window.location.href = url.toString();
 });
-
-// Helper function for badge colors
-function getBadgeColor(type) {
-    const colors = {
-        'ACCOUNT': 'primary',
-        'CERTIFICATE': 'success',
-        'API': 'info',
-        'PSK': 'warning',
-        'CODE': 'secondary'
-    };
-    return colors[type] || 'secondary';
-}
 
 function filterCredentials() {
     const type = document.getElementById('typeFilter').value.toLowerCase();
@@ -243,3 +211,5 @@ document.addEventListener('DOMContentLoaded', function() {
     filterCredentials();
 });
 </script>
+
+<?php wanportal_render_page_end(); ?>

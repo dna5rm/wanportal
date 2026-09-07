@@ -57,8 +57,8 @@ Stores monitoring configurations and statistics.
 | `protocol` | varchar(10) | Protocol (ICMP/ICMPV6/TCP) |
 | `port` | int(11) | Port number (for TCP) |
 | `dscp` | varchar(10) | DSCP marking |
-| `pollcount` | int(11) | Number of polls per interval |
-| `pollinterval` | int(11) | Interval between polls (seconds) |
+| `pollcount` | int(11) | Pings per probe cycle (the agent caps a cycle at five) |
+| `pollinterval` | int(11) | Seconds between poll cycles |
 | `is_active` | tinyint(1) | Active status flag |
 | `sample` | bigint(20) | Number of samples collected |
 | `current_loss` | int(11) | Current packet loss percentage |
@@ -99,7 +99,7 @@ Stores user account information and access control.
 |--------|------|-------------|
 | `id` | char(36) | Primary key (UUID) |
 | `username` | varchar(255) | Unique username |
-| `password_hash` | varchar(255) | SHA-256 password hash |
+| `password_hash` | varchar(255) | bcrypt password hash |
 | `full_name` | varchar(255) | User's full name |
 | `email` | varchar(255) | User's email address |
 | `is_admin` | boolean | Administrator flag |
@@ -119,7 +119,9 @@ Stores user account information and access control.
 - KEY `idx_email` (`email`)
 
 **Notes:**
-- System maintains a special 'admin' user
+- System maintains a special 'admin' user, seeded at startup with the
+  database password as its initial password
+- Passwords are stored as bcrypt hashes
 - Accounts lock after 5 failed attempts
 - Lock duration is 30 minutes
 
@@ -133,7 +135,7 @@ Stores secure credentials and access tokens.
 | `name` | varchar(255) | Credential name |
 | `type` | ENUM | Type (ACCOUNT/CERTIFICATE/API/PSK/CODE) |
 | `username` | varchar(255) | Associated username |
-| `password` | text | Encrypted secret/password |
+| `password` | text | Stored secret value (only admins see it, via the detail endpoint) |
 | `url` | text | Related URL |
 | `owner` | varchar(255) | Credential owner |
 | `comment` | text | Additional notes |
@@ -158,6 +160,9 @@ Stores secure credentials and access tokens.
 - Supports soft delete via `is_active` flag
 - Tracks access history
 - Supports structured metadata storage
+- Secrets are stored as-is; visibility is controlled at the API layer
+  (list responses never include passwords, detail responses only for
+  admins)
 
 ## Data Storage
 - Primary data stored in MySQL/MariaDB

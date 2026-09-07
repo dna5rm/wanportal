@@ -169,7 +169,6 @@ wanportal_render_header_row(($id ? 'Edit' : 'New') . ' Target', [
             </div>
         </div>
     </div>
-</div>
 
 <?php wanportal_render_page_end(); ?>
 

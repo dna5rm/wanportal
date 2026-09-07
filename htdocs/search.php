@@ -80,7 +80,9 @@ try {
     die("Error: " . $e->getMessage());
 }
 wanportal_render_head('Search Results', ['datatables' => true]);
-wanportal_render_header_row('Search: ' . htmlspecialchars($search, ENT_QUOTES, 'UTF-8'), [], [
+// Pass the RAW search term: wanportal_render_header_row() escapes
+// the title itself, so pre-escaping here double-encodes (& -> &amp;amp;).
+wanportal_render_header_row('Search: ' . $search, [], [
     'show_inactive_toggle' => true,
 ]);
 ?>
@@ -223,7 +225,6 @@ wanportal_render_header_row('Search: ' . htmlspecialchars($search, ENT_QUOTES, '
             </div>
         </div>
     </div>
-</div>
 
 <?php wanportal_render_page_end(); ?>
 <?php $mysqli->close(); ?>
