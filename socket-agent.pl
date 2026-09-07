@@ -1,5 +1,71 @@
 #!/usr/bin/env perl
 
+=head1 NAME
+
+socket-agent.pl - raw-socket ping agent with working DSCP marking
+
+=head1 SYNOPSIS
+
+    SERVER=https://wanportal.example.com PASSWORD=... AGENT_ID=... \
+        /srv/socket-agent.pl [-d]
+
+=head1 DESCRIPTION
+
+This agent exists because Net::Ping's TOS support does not actually
+work: whatever TOS value you hand it never reaches the packets, so DSCP
+marking never gets on the wire. Here the monitor's DSCP name is mapped
+to a TOS byte and set directly on the socket, IP_TOS for IPv4 and
+IPV6_TCLASS for IPv6, which does work.
+
+The pinging is done by hand on raw sockets. ICMP echo requests are
+built with pack() (type 8 for IPv4, 128 for IPv6); TCP monitors are
+timed with a non-blocking connect and select(). Names are resolved to
+numeric addresses first, and replies are checked against the numeric
+address and the ICMP id and sequence, so stray packets are ignored.
+
+One gap: ICMP reply matching is implemented for IPv4 only. ICMPv6
+replies are read but never matched, so IPv6 echo probes currently time
+out. TCP probes work for both families.
+
+Raw sockets need root; the script refuses to run without it. Monitors
+are fanned out over Parallel::ForkManager, four workers per CPU core
+by default.
+
+Dockerfile.agent ships netping-agent.pl; this is the raw-socket
+variant for when monitors need their DSCP class honored on the wire.
+
+SSL certificate verification is off on purpose: agents are allowed to
+talk to a server with a self-signed certificate.
+
+=head1 OPTIONS
+
+-d, --debug    Verbose debug output on stderr.
+-h, --help     Print the usage summary and exit.
+
+=head1 ENVIRONMENT
+
+SERVER        Base URL of the wanportal API. Required.
+PASSWORD      Shared secret for this agent. Required.
+AGENT_ID      Identifier assigned by the server. Required.
+PING_TIMEOUT  Per-probe timeout in seconds. Default 5.
+PING_SIZE     Accepted but unused; the echo payload is fixed at 56
+              bytes. Default 56.
+
+=head1 EXIT STATUS
+
+Exits nonzero when run without root, when SERVER, PASSWORD or AGENT_ID
+is missing, when the monitor fetch fails, or when result submission
+fails. A monitor that cannot be probed is reported as 100% loss rather
+than aborting the run.
+
+=head1 SEE ALSO
+
+netping-agent.pl - the shipped default agent (Net::Ping based)
+
+netping-legacy.pl - the old-Perl fallback
+
+=cut
+
 use strict;
 use warnings;
 use Socket qw(
@@ -28,7 +94,9 @@ use Sys::CPU;
 
 our $VERSION = '2.0.0';
 
-# DSCP to TOS mapping
+# DSCP name to TOS byte; the same value serves as the IPv6 traffic
+# class. The mapping only reaches the wire because the sockets below
+# are raw and get it set directly. Net::Ping cannot do this.
 use constant {
     DSCP_MAP => {
         'BE' => 0x00,    # Best Effort
@@ -55,7 +123,7 @@ use constant {
     }
 };
 
-# Command line options
+# Options: -d/--debug, -h/--help. Workers default to four per core.
 my $debug = 0;
 my $help = 0;
 my $max_processes = Sys::CPU::cpu_count() * 4;
@@ -70,10 +138,10 @@ if ($help) {
     exit 0;
 }
 
-# Check for root privileges
+# Raw sockets need root; bail out early with a clear message.
 die "This script must be run as root for raw socket access\n" unless $> == 0;
 
-# Configuration
+# Environment. The three API settings are required.
 my %CONFIG = (
     AGENT_ID        => $ENV{AGENT_ID}      || die("ERROR: AGENT_ID env not set\n"),
     PASSWORD        => $ENV{PASSWORD}      || die("ERROR: PASSWORD env not set\n"),
@@ -83,7 +151,8 @@ my %CONFIG = (
     ICMP_ID        => $$,                  # Use process ID for ICMP identifier
 );
 
-# Debug logger
+# Log lines. debug_log stays quiet without -d/--debug and writes to
+# stderr with explicit flushes so forked workers do not garble output.
 sub debug_log {
     return unless $debug;
     my ($msg) = @_;
@@ -92,7 +161,6 @@ sub debug_log {
     STDERR->flush();
 }
 
-# Info logger
 sub info_log {
     my ($msg) = @_;
     my $timestamp = strftime("%Y-%m-%d %H:%M:%S", localtime);
@@ -100,7 +168,9 @@ sub info_log {
     STDOUT->flush();
 }
 
-# Resolve hostname to IP address
+# Resolve a target to its numeric address. AI_V4MAPPED keeps v4
+# answers alive on v6-capable stacks. Returns (ip, v6 flag, family,
+# packed addr), or nothing when resolution fails.
 sub resolve_host {
     my ($hostname) = @_;
     debug_log("Resolving hostname: $hostname");
@@ -128,7 +198,7 @@ sub resolve_host {
     return;
 }
 
-# Calculate checksum for ICMP packets
+# Standard Internet checksum: a 16-bit one's-complement sum.
 sub checksum {
     my ($data) = @_;
     my $sum = 0;
@@ -140,21 +210,24 @@ sub checksum {
     return ~$sum & 0xffff;
 }
 
-# Create ICMP/ICMPv6 packet
+# Build one echo request: type 8 for IPv4 or 128 for IPv6, with a
+# "NetPing" marker plus zero padding for the payload. The checksum is
+# patched in after the first packing pass.
 sub create_icmp_packet {
     my ($id, $seq, $is_ipv6) = @_;
     
-    my $type = $is_ipv6 ? 128 : 8;  # Echo Request (8 for IPv4, 128 for IPv6)
+    my $type = $is_ipv6 ? 128 : 8;  # echo request
     my $code = 0;
     my $checksum = 0;
-    my $data = "NetPing" . "0" x 48;  # Pad to DEFAULT_SIZE
+    my $data = "NetPing" . "0" x 48;  # marker + zeros, 56-byte payload
     
     my $packet = pack("CCnnn a56", $type, $code, $checksum, $id, $seq, $data);
     $checksum = checksum($packet);
     return pack("CCnnn a56", $type, $code, $checksum, $id, $seq, $data);
 }
 
-# Create socket address structure
+# Pack (port, address, family) into the sockaddr form that send() and
+# connect() expect.
 sub create_sockaddr {
     my ($port, $addr, $family) = @_;
     
@@ -166,7 +239,8 @@ sub create_sockaddr {
     }
 }
 
-# Create and configure socket
+# Open the socket for the protocol and stamp TOS/TCLASS and timeouts
+# on it. This is where DSCP marking actually happens.
 sub create_raw_socket {
     my ($protocol, $tos, $family, $timeout) = @_;
     
@@ -191,7 +265,8 @@ sub create_raw_socket {
             or debug_log("Failed to set TOS: $!");
     }
 
-    # Set socket timeout
+    # SO_RCVTIMEO / SO_SNDTIMEO take a struct timeval: seconds plus
+    # microseconds.
     my $timeout_struct = pack('l!l!', int($timeout), ($timeout - int($timeout)) * 1_000_000);
     setsockopt($socket, SOL_SOCKET, SO_RCVTIMEO, $timeout_struct)
         or debug_log("Failed to set receive timeout: $!");
@@ -201,11 +276,16 @@ sub create_raw_socket {
     return $socket;
 }
 
-# Perform ICMP ping
+# One ICMP round trip. The echo request goes out, then select() and
+# recv() until the timeout runs out. Reply matching (source address,
+# id, seq) is implemented for IPv4 only. Returns the RTT in seconds,
+# or undef on failure.
 sub icmp_ping {
     my ($target, $tos, $timeout, $is_ipv6, $family, $addr) = @_;
     
-    # Get the resolved IP address for comparison
+    # Replies are matched against the numeric address, not the name: a
+    # name can resolve to several addresses, and only one of them is
+    # ours.
     my ($resolved_ip, $is_ip_v6, $ip_family, $ip_addr) = resolve_host($target);
     unless ($resolved_ip) {
         debug_log("Could not resolve $target");
@@ -258,14 +338,14 @@ sub icmp_ping {
         my $resp_len = length($response);
         debug_log(sprintf("Received %d bytes", $resp_len));
         
-        # For IPv4, parse IP header to get source address
+        # On IPv4 a raw ICMP read includes the IP header; parse it to
+        # get the source address.
         if (!$is_ipv6 && length($response) >= 20) {
             my ($ver_ihl, $tos, $len, $id, $frag, $ttl, $proto, $chk, $src, $dst) = 
                 unpack('CCnnnCCnNN', substr($response, 0, 20));
             
             my $from_ip = join('.', unpack('C4', pack('N', $src)));
             
-            # Compare against the resolved IP instead of hostname
             unless ($from_ip =~ /^(?:$resolved_ip)$/) {
                 debug_log(sprintf("Received response from different IP: %s (resolved target was %s)", 
                     $from_ip, $resolved_ip));
@@ -274,7 +354,7 @@ sub icmp_ping {
             
             debug_log(sprintf("Received response from %s [%s]", $target, $from_ip));
             
-            # Dump first few bytes for debugging
+            # First bytes as hex, purely for debug eyes.
             my $hex_dump = unpack("H*", substr($response, 0, 32));
             debug_log("Response hex dump: $hex_dump");
             
@@ -292,7 +372,8 @@ sub icmp_ping {
                 $target, $from_ip, $type, $code, $recv_id, $recv_seq, $CONFIG{ICMP_ID}, $seq
             ));
             
-            # Check for error responses
+            # Destination-unreachable and time-exceeded are hard
+            # failures, not packets to wait past.
             if ($type == 3) {  # Destination Unreachable
                 debug_log("Received Destination Unreachable from $from_ip");
                 close($socket);
@@ -304,7 +385,7 @@ sub icmp_ping {
                 return undef;
             }
             
-            # Verify it's our echo reply
+            # Echo reply with our id and sequence: this is the one.
             if ($type == 0 && 
                 $code == 0 && 
                 $recv_id == $CONFIG{ICMP_ID} && 
@@ -324,18 +405,20 @@ sub icmp_ping {
     return undef;
 }
 
-# Perform TCP ping
+# One timed TCP connect: non-blocking connect(), select() for
+# writability, then SO_ERROR to find out how the handshake ended.
+# Returns the elapsed time in seconds, or undef on failure.
 sub tcp_ping {
     my ($target, $port, $tos, $timeout, $family, $addr) = @_;
     
-    # Get the resolved IP address for comparison
+    # Resolve to the numeric address; the peer check below compares
+    # against it, same as icmp_ping.
     my ($resolved_ip, $is_ip_v6, $ip_family, $ip_addr) = resolve_host($target);
     unless ($resolved_ip) {
         debug_log("Could not resolve $target");
         return undef;
     }
     
-    # Validate port
     unless ($port && $port > 0 && $port <= 65535) {
         debug_log("Invalid TCP port: $port");
         return undef;
@@ -351,7 +434,7 @@ sub tcp_ping {
         return undef;
     }
     
-    # Set TCP specific options
+    # TCP tuning: disable Nagle.
     setsockopt($socket, IPPROTO_TCP, TCP_NODELAY, pack("l", 1))
         or debug_log("Failed to set TCP_NODELAY: $!");
     
@@ -370,35 +453,33 @@ sub tcp_ping {
             return undef;
         };
     
-    # Create proper socket address structure using resolved IP
+    # connect() against the numeric address so the peer check below is
+    # exact.
     my $dest = create_sockaddr($port, $resolved_ip, $family);
     
     my $start_time = time();
     my $connect_result = connect($socket, $dest);
     my $connect_error = $!;
     
-    # If connect() returns true immediately, something is wrong
-    # (should return false in non-blocking mode)
+    # On a non-blocking socket connect() should fail with EINPROGRESS.
+    # An immediate true return would be a surprise, so do not trust it.
     if ($connect_result) {
         debug_log("Unexpected immediate connection success");
         close($socket);
         return undef;
     }
     
-    # Check if the error is what we expect (EINPROGRESS)
     unless ($! == EINPROGRESS) {
         debug_log("Connect failed immediately: $!");
         close($socket);
         return undef;
     }
     
-    # Prepare for select
     my $wout = '';
     my $eout = $wout;
     vec($wout, fileno($socket), 1) = 1;
     vec($eout, fileno($socket), 1) = 1;
     
-    # Wait for connection completion
     my ($wrote, $error);
     my $select_result = select(undef, $wrote = $wout, $error = $eout, $timeout);
     
@@ -422,7 +503,7 @@ sub tcp_ping {
     }
     
     if (vec($wrote, fileno($socket), 1)) {
-        # Get socket error status
+        # Ask SO_ERROR how the handshake actually ended.
         my $error = getsockopt($socket, SOL_SOCKET, SO_ERROR);
         if (!defined $error) {
             debug_log("Failed to get socket error status");
@@ -438,7 +519,8 @@ sub tcp_ping {
             return undef;
         }
         
-        # Connection successful - verify the peer address
+        # The socket is writable; confirm the kernel connected where we
+        # aimed before trusting the result.
         my $peer_name = getpeername($socket);
         if ($peer_name) {
             my ($peer_port, $peer_addr);
@@ -450,7 +532,6 @@ sub tcp_ping {
                 $peer_addr = inet_ntoa($peer_addr);
             }
             
-            # Compare against the resolved IP
             unless ($peer_addr =~ /^(?:$resolved_ip)$/) {
                 debug_log(sprintf("Connected to unexpected IP: %s (resolved target was %s)",
                     $peer_addr, $resolved_ip));
@@ -474,7 +555,8 @@ sub tcp_ping {
     return undef;
 }
 
-# Main ping function
+# Probe one monitor pollcount times and roll up the numbers. Returns
+# the stats hashref; the caller tags the monitor id on.
 sub pinghost {
     my ($monitor) = @_;
     
@@ -484,7 +566,7 @@ sub pinghost {
     my $pollcount = $monitor->{pollcount} // 5;
     my $dscp = $monitor->{dscp} // 'BE';
     
-    # Resolve target address
+    # Resolve once up front; the probe subs match replies against it.
     my ($resolved_addr, $is_ipv6, $family, $addr) = resolve_host($target);
     unless ($resolved_addr) {
         debug_log("Could not resolve $target");
@@ -531,7 +613,7 @@ sub pinghost {
             debug_log(sprintf("Ping %d/%d failed", $i, $pollcount));
         }
         
-        # Small delay between pings
+        # 10ms breather between probes.
         usleep(10000) if $i < $pollcount;
     }
     
@@ -555,11 +637,11 @@ sub pinghost {
     return $stats;
 }
 
-# Calculate statistics
+# Roll loss/median/min/max/stddev up from the collected RTTs.
 sub calculate_stats {
     my ($loss, $rtts) = @_;
     
-    # If 100% loss or no RTTs, return all zeros except loss
+    # Nothing came back: zeros across the board except loss.
     if ($loss == 100 || !@$rtts) {
         return {
             loss => $loss,
@@ -570,7 +652,6 @@ sub calculate_stats {
         };
     }
 
-    # Calculate stats from valid RTTs
     my @sorted = sort { $a <=> $b } @$rtts;
     my $count = @sorted;
     
@@ -595,7 +676,8 @@ sub calculate_stats {
     };
 }
 
-# Initialize HTTP client
+# LWP client. SSL certificate verification is off on purpose: agents
+# are allowed to talk to a server with a self-signed certificate.
 sub init_http_client {
     debug_log("Initializing HTTP client...");
     $ENV{PERL_LWP_SSL_VERIFY_HOSTNAME} = 0;
@@ -662,7 +744,6 @@ sub submit_results {
         unless $data->{status} && $data->{status} eq 'success';
 }
 
-# Print usage information
 sub print_usage {
     print <<EOF;
 NetPing Agent v$VERSION
@@ -691,7 +772,8 @@ Supports:
 EOF
 }
 
-# Main execution
+# Fetch the monitors, fan them out over the ForkManager pool, collect
+# the results and submit them.
 sub main {
     info_log("Starting NetPing Agent v$VERSION");
     info_log("Using $max_processes parallel processes");
@@ -716,7 +798,7 @@ sub main {
     my $pm = Parallel::ForkManager->new($max_processes);
     my @results;
     
-    # Set up data collection from child processes
+    # Children hand their stats back through run_on_finish.
     $pm->run_on_finish(sub {
         my ($pid, $exit_code, $ident, $exit_signal, $core_dump, $data) = @_;
         
@@ -731,17 +813,14 @@ sub main {
         }
     });
 
-    # Process each monitor in parallel
     foreach my $mon (@$monitors) {
         $pm->start and next;
         
         eval {
             debug_log("Processing monitor: " . $mon->{id});
             
-            # Perform ping tests
             my $stats = pinghost($mon);
             
-            # Add monitor ID to stats
             $stats->{id} = $mon->{id};
             
             debug_log(sprintf(
@@ -760,10 +839,8 @@ sub main {
         }
     }
     
-    # Wait for all child processes to complete
     $pm->wait_all_children;
     
-    # Submit results if we have any
     if (@results) {
         eval {
             submit_results($ua, \@results);
@@ -783,12 +860,11 @@ sub main {
     return 0;
 }
 
-# Execute main function with error handling
+# Run main(); anything it fails to catch dies here.
 eval {
     exit main();
 };
 
-# Handle any unhandled exceptions
 if ($@) {
     my $error = $@;
     debug_log("Fatal error: $error");

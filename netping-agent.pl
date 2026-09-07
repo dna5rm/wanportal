@@ -1,5 +1,47 @@
 #!/usr/bin/env perl
 
+=head1 NAME
+
+netping-agent.pl - wanportal remote ping agent
+
+=head1 SYNOPSIS
+
+    SERVER=https://wanportal.example.com PASSWORD=... AGENT_ID=... \
+        /srv/netping-agent.pl
+
+=head1 DESCRIPTION
+
+This is the default remote agent. It fetches the monitor list for its
+AGENT_ID from the wanportal API, forks a child per monitor to ping it,
+and posts the results back in chunks of 100. Each chunk gets up to
+three submission attempts; chunks that still fail are logged and
+dropped, and the agent exits normally.
+
+Each monitor is probed at most five times (pollcount can lower that)
+with ICMP by default, or TCP/UDP when the monitor calls for it. An
+address containing a colon is pinged with icmpv6. The monitor's DSCP
+name maps to a TOS byte for Net::Ping, and unrecognized names fall
+back to 0. Probing stops early after three misses in a row. Results
+carry loss percent, median, min, max and standard deviation.
+
+SSL certificate verification is off on purpose: agents are allowed to
+talk to a server with a self-signed certificate.
+
+=head1 ENVIRONMENT
+
+SERVER      Base URL of the wanportal API. Required.
+PASSWORD    Shared secret for this agent. Required.
+AGENT_ID    Identifier assigned by the server. Required.
+DEBUG       Enables debug output on stdout. Optional.
+
+=head1 EXIT STATUS
+
+Exits nonzero when SERVER, PASSWORD or AGENT_ID is missing, when the
+monitor fetch fails, or when a child cannot be forked. Failed result
+submissions are logged but do not change the exit status.
+
+=cut
+
 use strict;
 use warnings;
 use Net::Ping;
@@ -18,7 +60,7 @@ my $PASSWORD = $ENV{PASSWORD} || die("ERROR: PASSWORD env not set\n");
 my $SERVER = $ENV{SERVER} || die("ERROR: SERVER env not set\n");
 my $debug = $ENV{DEBUG} || 0;
 
-# DSCP to TOS mapping
+# DSCP name to TOS byte (Net::Ping takes a TOS, not a DSCP code)
 my $DSCP_MAP = {
     'BE' => 0x00,    # Best Effort
     'EF' => 0xB8,    # Expedited Forwarding
@@ -60,7 +102,8 @@ sub info_log {
 
 info_log(sprintf("Starting NetPing Agent v%s (%s)", $VERSION, $AGENT_ID));
 
-# Initialize HTTP client with better timeout handling
+# HTTP client. SSL verification is off on purpose: agents may talk to a
+# server with a self-signed certificate.
 my $ua = LWP::UserAgent->new(
     timeout => 30,
     max_redirect => 0,
@@ -90,7 +133,7 @@ die "No monitors array in API response\n" unless ref $data->{monitors} eq 'ARRAY
 my @hosts = @{$data->{monitors}};
 info_log("Processing " . scalar(@hosts) . " monitors");
 
-# Process monitors
+# One child per monitor, up to MAX_PROCESSES at a time.
 my $MAX_PROCESSES = min(120, scalar(@hosts));
 my $current_processes = 0;
 my @results;
@@ -103,7 +146,7 @@ $SIG{CHLD} = sub {
 };
 
 foreach my $monitor (@hosts) {
-    # Basic validation
+    # Skip entries with no id or address.
     next unless $monitor->{id} && $monitor->{address};
     
     # Wait if we've hit the process limit
@@ -262,6 +305,7 @@ sub ping {
     my $consecutive_fails = 0;
     
     for my $i (1..$count) {
+        # Three misses in a row: stop probing early.
         last if $consecutive_fails >= 3;
         
         my @result = $p->ping($monitor->{address});

@@ -90,6 +90,14 @@ export SERVER=http://127.0.0.1:3385/cgi-bin/api
 
 TLS certs are not verified by default (self-signed / lab).
 
+The same agent also ships as a cron container. `build_agent.sh` builds
+`Dockerfile.agent` into `netping:<date>` + `netping:latest` and packages it to
+`htdocs/assets/netping_latest.tar.gz` (gitignored; downloadable from the
+dashboard). Only `netping-agent.pl` and `run-agent.sh` are in the image —
+`netping-legacy.pl` and `socket-agent.pl` are not packaged. Run it with
+`--network host` and `SERVER`/`PASSWORD`/`AGENT_ID` env vars. See
+[api-docs/agent-image.md](api-docs/agent-image.md) for details.
+
 ## Tests
 
 Two entry points, both from the repo root:

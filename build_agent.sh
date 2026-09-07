@@ -1,17 +1,25 @@
 #!/bin/bash
 #
-# Build and package Docker image for Netping Agent
+# Build and package the netping agent Docker image (Dockerfile.agent).
 #
-# This script builds a Docker image, tags it with both date and latest,
-# saves it to a compressed archive, and provides usage instructions.
+# What it does, in order:
+#   1. Builds Dockerfile.agent with two tags: netping:<YYYYMMDD> and
+#      netping:latest. The date tag keeps versioned images around locally;
+#      the archive below is always cut from :latest.
+#   2. Writes the image to htdocs/assets/netping_latest.tar.gz so the
+#      dashboard can serve it as a download (the "Docker Image" card on the
+#      netping page). The archive is a build artifact and gitignored.
+#   3. Prints load/run instructions for the target host.
+#
+# Run from the repo root. See api-docs/agent-image.md for what the image contains.
 
 set -euo pipefail
 
 # Configuration
-IMAGE="netping"
-BUILD_DATE=$(date +%Y%m%d)
+IMAGE="netping"                                        # base name for both tags
+BUILD_DATE=$(date +%Y%m%d)                             # date tag; :latest is tagged in the same build
 DOCKERFILE="Dockerfile.agent"
-ARCHIVE_NAME="./htdocs/assets/${IMAGE}_latest.tar.gz"
+ARCHIVE_NAME="./htdocs/assets/${IMAGE}_latest.tar.gz"  # gitignored; served by the dashboard
 
 # Color codes for output
 RED='\033[0;31m'
@@ -37,7 +45,7 @@ success() {
 # Main execution
 log "Starting build process for ${IMAGE} image..."
 
-# Build Docker image
+# Build Docker image: one build, two tags
 log "Building Docker image..."
 if docker build --tag "${IMAGE}:${BUILD_DATE}" --tag "${IMAGE}:latest" --file "${DOCKERFILE}" .; then
     success "Docker image built successfully"
@@ -50,7 +58,8 @@ fi
 log "Current ${IMAGE} images:"
 docker images "${IMAGE}"
 
-# Save image to compressed archive
+# Save image to compressed archive. docker save | gzip streams straight to
+# the file, so no intermediate uncompressed tarball is ever written.
 log "Saving image to ${ARCHIVE_NAME}..."
 if docker save "${IMAGE}:latest" | gzip > "${ARCHIVE_NAME}"; then
     success "Image saved to ${ARCHIVE_NAME}"
@@ -59,7 +68,8 @@ else
     exit 1
 fi
 
-# Print usage instructions
+# Print usage instructions. The run example uses --network host so probes
+# originate from the host's own network stack, matching what the host sees.
 echo -e "\n${GREEN}=== Docker Image Build Complete ===${NC}
 
 The image has been built and saved successfully.

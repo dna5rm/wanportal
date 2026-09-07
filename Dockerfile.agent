@@ -1,26 +1,49 @@
+# netping agent image: Alpine + cronie + Perl, runs the probe agent from cron.
+# Built by ./build_agent.sh -> tags netping:<date> and netping:latest, then
+# packaged to htdocs/assets/netping_latest.tar.gz. See api-docs/agent-image.md.
+#
+# The image ships only netping-agent.pl and its cron wrapper run-agent.sh.
+# netping-legacy.pl and socket-agent.pl are intentionally not packaged;
+# run those from a checkout instead.
 FROM alpine:3.21
 
 # Create and set working directory
 WORKDIR /srv
 
-# Copy agent files
+# Copy the shipped agent script and its cron wrapper; nothing else from the
+# repo goes into the image.
 COPY netping-agent.pl /srv/
 COPY run-agent.sh /srv/
 
-# Install Packages & Update
+# Refresh base packages
 RUN apk -q update && apk -q upgrade
+
+# Runtime packages:
+#   cronie  - crond, the container's main process; runs the agent every minute
+#   curl/jq - not used by the agent itself; handy for poking the API from a
+#             shell via docker exec
+#   tzdata  - sane timestamps in logs
+#   perl + modules - the API client: LWP over HTTPS (IO::Socket::SSL) and JSON
+#             payloads. perl-sys-cpu and perl-parallel-forkmanager are only
+#             needed by socket-agent.pl, which is not part of this image.
 RUN apk add --no-cache cronie curl jq tzdata
 RUN apk add --no-cache perl perl-io-socket-ssl perl-json perl-sys-cpu \
     perl-lwp-useragent-determined perl-lwp-protocol-https perl-parallel-forkmanager
 
-## Configure Crontab
+# Cron schedule: one probe cycle per minute. Job output is redirected to
+# /proc/1/fd/1 and fd/2 - PID 1 is the shell wrapping crond, and its
+# stdout/stderr are the container's, so probe activity shows up in `docker
+# logs`. run-agent.sh picks up SERVER/PASSWORD/AGENT_ID from /srv/.env when
+# mounted, otherwise from /proc/1/environ - cron jobs do not inherit the
+# container env.
 RUN install -m 0644 /dev/stdin /etc/crontabs/root <<EOF
 */1 * * * * /srv/run-agent.sh > /proc/1/fd/1 2>/proc/1/fd/2
 EOF
 
-# Fix Permissions & Cleanup
+# Fix permissions, then drop the apk cache to keep the layer small
 RUN chmod 755 /srv/*.pl /srv/*.sh
 RUN rm -rf /var/cache/apk/*
 
-# Run services
+# Foreground crond; -s sends job output to syslog instead of trying to mail
+# it (the crontab redirect above already sends it to the container's stdout).
 CMD crond -f -s

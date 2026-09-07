@@ -1,5 +1,59 @@
 #!/usr/bin/env perl
 
+=head1 NAME
+
+netping-legacy.pl - legacy Net::Ping fallback agent
+
+=head1 SYNOPSIS
+
+    SERVER=https://wanportal.example.com PASSWORD=... AGENT_ID=... \
+        /srv/netping-legacy.pl
+
+=head1 DESCRIPTION
+
+This is the old-Perl fallback agent. It is not copied into
+Dockerfile.agent; the agent that ships is netping-agent.pl. This file
+stays in the tree as the legacy fallback.
+
+The flow matches the shipped agent: fetch the monitor list for
+AGENT_ID, fork one child per monitor (up to 120 in flight), ping each
+target with Net::Ping, and post the results back in chunks of 100 with
+up to three attempts per chunk. Chunks that still fail are logged and
+dropped.
+
+DSCP is where it falls short. The monitor's DSCP name is mapped to a
+TOS byte, but nothing applies it: Net::Ping gets no TOS value here,
+and Net::Ping's own TOS handling does not actually work anyway. Every
+packet leaves best effort regardless of what the monitor asks for.
+Real marking needs socket-agent.pl, which builds raw ICMP and stamps
+IP_TOS / IPV6_TCLASS on the socket itself.
+
+SSL certificate verification is off on purpose: agents are allowed to
+talk to a server with a self-signed certificate.
+
+=head1 ENVIRONMENT
+
+SERVER      Base URL of the wanportal API. Must include a path after
+            the host (https://host/api). Required.
+PASSWORD    Shared secret for this agent. Required.
+AGENT_ID    Identifier assigned by the server. Required.
+DEBUG       Enables debug output on stdout. Optional.
+
+=head1 EXIT STATUS
+
+Exits nonzero when SERVER, PASSWORD or AGENT_ID is missing, when the
+SERVER URL cannot be parsed, or when the monitor fetch or a fork
+fails. Failed result submissions are logged but do not change the exit
+status.
+
+=head1 SEE ALSO
+
+netping-agent.pl - the shipped default agent
+
+socket-agent.pl - raw sockets with working DSCP marking
+
+=cut
+
 use strict;
 use warnings;
 use Net::Ping;
@@ -11,13 +65,14 @@ use List::Util qw(min max);
 
 our $VERSION = '0.0.1';
 
-# Get environment variables
 my $AGENT_ID = $ENV{AGENT_ID} || die("ERROR: AGENT_ID env not set\n");
 my $PASSWORD = $ENV{PASSWORD} || die("ERROR: PASSWORD env not set\n");
 my $SERVER = $ENV{SERVER} || die("ERROR: SERVER env not set\n");
 my $debug = $ENV{DEBUG} || 0;
 
-# DSCP to TOS mapping
+# DSCP name to TOS byte. Resolved for every monitor but never applied:
+# Net::Ping gets no TOS here, and its own TOS handling does not work
+# anyway, so packets leave unmarked (see the POD).
 my $DSCP_MAP = {
     'BE' => 0x00,    # Best Effort
     'EF' => 0xB8,    # Expedited Forwarding
@@ -42,7 +97,7 @@ my $DSCP_MAP = {
     'CS7' => 0xE0,
 };
 
-# Debug logger
+# Timestamped log lines. debug_log stays quiet unless DEBUG is set.
 sub debug_log {
     return unless $debug;
     my ($msg) = @_;
@@ -50,7 +105,6 @@ sub debug_log {
     printf "[DEBUG][%s] %s\n", $timestamp, $msg;
 }
 
-# Info logger
 sub info_log {
     my ($msg) = @_;
     my $timestamp = strftime("%Y-%m-%d %H:%M:%S", localtime);
@@ -59,11 +113,14 @@ sub info_log {
 
 info_log(sprintf("Starting NetPing Agent v%s (%s)", $VERSION, $AGENT_ID));
 
-# Parse SERVER URL
+# SERVER must include a path after the host; split it off for the API
+# routes below.
 $SERVER =~ m{^https://([^/]+)(/.*)$} or die "Invalid SERVER URL\n";
 my ($host, $path) = ($1, $2);
 
-# Fetch monitors from API
+# Fetch this agent's monitors over a hand-rolled HTTPS GET. SSL
+# certificate verification is off on purpose: agents are allowed to
+# talk to a server with a self-signed certificate.
 debug_log("Fetching monitors from API...");
 
 my $ssl = IO::Socket::SSL->new(
@@ -101,7 +158,8 @@ die "API Error: Invalid response\n" unless $response =~ /^HTTP\/1\.\d 200/;
 
 debug_log("Raw response body: $body");
 
-# Extract JSON from the response
+# The JSON sits somewhere inside the response body; carve from the
+# first { to the last } and decode that.
 $body =~ s/^.*?(\{.*\}).*$/$1/s;
 
 debug_log("Extracted JSON: $body");
@@ -114,12 +172,13 @@ die "No monitors array in API response\n" unless ref $data->{monitors} eq 'ARRAY
 my @hosts = @{$data->{monitors}};
 info_log("Processing " . scalar(@hosts) . " monitors");
 
-# Process monitors
+# Fork one child per monitor, capped at MAX_PROCESSES in flight. Each
+# child pings its target and writes a single result line down a pipe.
 my $MAX_PROCESSES = min(120, scalar(@hosts));
 my $current_processes = 0;
 my @results;
 
-# Set up child reaper
+# Reap finished children so the in-flight counter stays accurate.
 $SIG{CHLD} = sub {
     while ((my $pid = waitpid(-1, 0)) > 0) {
         $current_processes--;
@@ -127,10 +186,9 @@ $SIG{CHLD} = sub {
 };
 
 foreach my $monitor (@hosts) {
-    # Basic validation
     next unless $monitor->{id} && $monitor->{address};
 
-    # Wait if we've hit the process limit
+    # At the cap: wait for a child to be reaped before forking another.
     while ($current_processes >= $MAX_PROCESSES) {
         sleep(0.01);
     }
@@ -157,7 +215,7 @@ foreach my $monitor (@hosts) {
     }
 }
 
-# Collect results
+# Read one result line back from each child's pipe.
 my @final_results;
 foreach my $result (@results) {
     my $line = readline($result->{reader});
@@ -177,7 +235,9 @@ foreach my $result (@results) {
     }
 }
 
-# Submit results if we have any
+# Post results to the API in chunks of 100, three attempts per chunk.
+# Chunks that still fail are logged and dropped; the exit status does
+# not change.
 if (@final_results) {
     debug_log("Final Results:");
     debug_log(sprintf("  %-36s %8s %8s %8s %8s %8s",
@@ -197,7 +257,6 @@ if (@final_results) {
 
     debug_log("Preparing to submit " . scalar(@final_results) . " results");
 
-    # Split results into chunks of 100
     my $chunk_size = 100;
     my $retry_count = 3;
     my $retry_delay = 2;
@@ -241,6 +300,8 @@ if (@final_results) {
 
 exit 0;
 
+# Ping one monitor with Net::Ping. Returns (loss, median, min, max,
+# stddev).
 sub ping {
     my $monitor = shift;
 
@@ -266,11 +327,12 @@ sub ping {
     my $consecutive_fails = 0;
 
     for my $i (1..$count) {
+        # Three misses in a row: stop probing early.
         last if $consecutive_fails >= 3;
 
         my ($success, $rtt) = $p->ping($monitor->{address});
         if ($success) {
-            $rtt *= 1000;  # Convert to milliseconds
+            $rtt *= 1000;  # seconds to milliseconds
             push @rtts, $rtt;
             $consecutive_fails = 0;
         } else {
@@ -289,7 +351,8 @@ sub ping {
         my $min = $rtts[0];
         my $max = $rtts[-1];
 
-        # Calculate median
+        # rtts is sorted by now; the median is the middle value, or the
+        # mean of the middle pair.
         my $median;
         if ($success % 2 == 0) {
             $median = ($rtts[$success/2 - 1] + $rtts[$success/2]) / 2;
@@ -297,7 +360,7 @@ sub ping {
             $median = $rtts[int($success/2)];
         }
 
-        # Calculate standard deviation
+        # Population standard deviation around the mean.
         my $mean = sum(@rtts) / $success;
         my $variance = sum(map { ($_ - $mean) ** 2 } @rtts) / $success;
         my $stddev = sqrt($variance);
@@ -308,12 +371,14 @@ sub ping {
     return (100, 0, 0, 0, 0);
 }
 
+# Local sum() helper; List::Util is imported without sum here.
 sub sum {
     my $sum = 0;
     $sum += $_ for @_;
     return $sum;
 }
 
+# Local sqrt() by Newton's method; plenty accurate for a stddev.
 sub sqrt {
     my ($x) = @_;
     return 0 if $x == 0;
@@ -327,6 +392,7 @@ sub sqrt {
 sub submit_results {
     my ($chunk) = @_;
 
+    # Same hand-rolled HTTPS as the monitor fetch, this time a POST.
     my $ssl = IO::Socket::SSL->new(
         PeerHost => $host,
         PeerPort => 443,
@@ -363,7 +429,7 @@ sub submit_results {
 
     debug_log("Submit raw response body: $body");
 
-    # Extract JSON from the response
+    # Carve the JSON out of the body the same way as above.
     $body =~ s/^.*?(\{.*\}).*$/$1/s;
 
     debug_log("Submit extracted JSON: $body");
