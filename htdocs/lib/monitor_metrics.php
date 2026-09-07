@@ -40,6 +40,7 @@
  * Each color is one of: 'bg-success', 'bg-info', 'bg-warning', 'bg-danger'.
  *
  * @param array $row Monitor row, by reference
+ * @return void
  */
 function monitor_color_classes(array &$row): void
 {

@@ -1,3 +1,28 @@
+=head1 NAME
+
+agent_monitors - the agent-facing polling endpoints (agent password auth)
+
+=head1 SYNOPSIS
+
+    # wired up by the cgi-bin/api dispatcher, OUTSIDE the JWT group
+    use agent_monitors qw(register_agent_monitors);
+    register_agent_monitors($db_config);
+
+=head1 DESCRIPTION
+
+The contract between the portal and its pollers. The GET hands an
+agent the active monitor assignments that are due for polling; the
+POST accepts a batch of results and files them into each monitor's
+RRD file.
+
+These routes deliberately sit outside the JWT group. A running
+agent knows only its own id and its agent password - it never holds
+a user JWT. Every call is checked against the password stored in
+the agents table, and the agent's address and last-seen time are
+refreshed along the way.
+
+=cut
+
 package agent_monitors;
 use strict;
 use warnings;

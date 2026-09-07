@@ -6,18 +6,27 @@ define('WARNING_THRESHOLD_HOURS', 3);
 define('DANGER_THRESHOLD_HOURS', 5);
 define('API_BASE_URL', 'http://localhost/cgi-bin/api');
 
-// ------------------------------------------------------------------
-// Session bootstrap
-// ------------------------------------------------------------------
-// Centralized session_start() that hardens the session cookie.
-// Bare session_start() in the page files would use PHP's default
-// cookie params (no HttpOnly, no SameSite, no Secure), so every
-// page should call wanportal_session_start() instead.
-//
-// The htdocs/.user.ini file also sets the same options for
-// mod_php processes that don't go through this helper, but having
-// the logic here too means the settings apply even if the
-// .user.ini is missing, has wrong perms, or is cached.
+/**
+ * Start the session with hardened cookie parameters.
+ *
+ * Centralized session_start() that hardens the session cookie. Bare
+ * session_start() in the page files would use PHP's default cookie
+ * params (no HttpOnly, no SameSite, no Secure), so every page should
+ * call wanportal_session_start() instead.
+ *
+ * Before starting, the helper sets HttpOnly, SameSite=Lax and strict
+ * mode, and marks the cookie Secure when the request is effectively
+ * HTTPS (Apache terminates TLS directly, or a reverse proxy sent
+ * X-Forwarded-Proto: https). Re-entrant: returns immediately when a
+ * session is already active.
+ *
+ * The htdocs/.user.ini file also sets the same options for mod_php
+ * processes that don't go through this helper, but having the logic
+ * here too means the settings apply even if the .user.ini is
+ * missing, has wrong perms, or is cached.
+ *
+ * @return void
+ */
 function wanportal_session_start(): void
 {
     if (session_status() === PHP_SESSION_ACTIVE) {

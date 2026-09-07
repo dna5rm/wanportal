@@ -170,5 +170,17 @@ else
 fi
 
 echo
+echo "== tests/run.sh =="
+if [[ -f "$ROOT/tests/run.sh" ]]; then
+  if bash "$ROOT/tests/run.sh"; then
+    ok "tests/run.sh"
+  else
+    bad "tests/run.sh"
+  fi
+else
+  echo "SKIP  tests/run.sh (not present)"
+fi
+
+echo
 echo "passed=$pass failed=$fail"
 exit $(( fail > 0 ? 1 : 0 ))

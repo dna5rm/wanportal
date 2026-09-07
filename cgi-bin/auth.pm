@@ -1,3 +1,30 @@
+=head1 NAME
+
+auth - login, token issuing, and the JWT middleware
+
+=head1 SYNOPSIS
+
+    # /login is public; the middleware guards the JWT group in the
+    # cgi-bin/api dispatcher
+    use auth qw(auth_middleware register_login);
+    register_login($db_config);
+    group { under auth_middleware(app->defaults); ... };
+
+=head1 DESCRIPTION
+
+Login checks the local users table first (bcrypt) and falls back to
+LDAP when it is enabled in the environment. Success issues a
+one-hour signed JWT carrying the username and an is_admin flag;
+repeated local failures lock the account for half an hour.
+
+The middleware guards everything registered inside the route group:
+it requires a Bearer token, verifies the signature and expiry
+against the shared secret, and stashes the decoded payload for the
+handlers. Any valid LDAP login is treated as an admin - a
+deliberate policy of this deployment.
+
+=cut
+
 package auth;
 use strict;
 use warnings;

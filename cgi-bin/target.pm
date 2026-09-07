@@ -1,3 +1,23 @@
+=head1 NAME
+
+target - monitored target registry (JWT-protected)
+
+=head1 SYNOPSIS
+
+    # wired up by the cgi-bin/api dispatcher, inside the JWT group
+    use target qw(register_target);
+    register_target($db_config);
+
+=head1 DESCRIPTION
+
+Owns the C<targets> table and its CRUD routes. Addresses are
+validated as IPv4, IPv6 or a plain hostname before they are stored.
+
+Every route requires a valid user JWT; create, update and delete
+are admin-only.
+
+=cut
+
 package target;
 use strict;
 use warnings;

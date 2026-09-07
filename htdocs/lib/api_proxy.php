@@ -111,7 +111,8 @@ function api_request(string $method, string $path, ?array $body = null): array
  * (agents, targets, monitors) and auth-protected ones.
  *
  * @param string $path    API path beginning with "/", may include query string
- * @return array|null     Decoded JSON body, or null on transport/HTTP error
+ * @return array|null     Decoded JSON body, or null on transport error,
+ *                         non-200 status, or JSON decode failure
  */
 function api_get(string $path): ?array
 {

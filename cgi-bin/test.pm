@@ -1,3 +1,20 @@
+=head1 NAME
+
+test - JWT smoke-test endpoint
+
+=head1 SYNOPSIS
+
+    # wired up by the cgi-bin/api dispatcher, inside the JWT group
+    use test qw(register_test);
+
+=head1 DESCRIPTION
+
+C<POST /test> does nothing except require the JWT middleware and
+echo the decoded token payload back. Handy for checking that a
+token is valid and what flags it carries.
+
+=cut
+
 package test;
 use strict;
 use warnings;

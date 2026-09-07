@@ -1,3 +1,25 @@
+=head1 NAME
+
+credentials - the stored-credential vault (JWT-protected)
+
+=head1 SYNOPSIS
+
+    # wired up by the cgi-bin/api dispatcher, inside the JWT group
+    use credentials qw(register_credentials);
+    register_credentials($db_config);
+
+=head1 DESCRIPTION
+
+Owns the C<credentials> table - the vault of ACCOUNT, CERTIFICATE,
+API, PSK and CODE entries - and its CRUD routes.
+
+Auth rules: every route needs a valid user JWT. The listing never
+returns password fields. The detail view shows the password to
+admins only and stamps who viewed it and when. Creating, updating
+and deleting are admin-only.
+
+=cut
+
 package credentials;
 use strict;
 use warnings;

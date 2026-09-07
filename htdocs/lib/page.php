@@ -31,21 +31,25 @@
 if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
     define('WANPORTAL_PAGE_LIB_LOADED', true);
 
-    // ----------------------------------------------------------------
-    // show_inactive: read/write the per-user session preference and
-    // expose the value as a local variable. Seven pages had this
-    // exact 5-line block copy-pasted; consolidating it here removes
-    // the chance for the copies to drift.
-    //
-    // Usage:
-    //     $show_inactive = wanportal_get_show_inactive();
-    //
-    // After this call, both $_SESSION['show_inactive'] (the
-    // authoritative value) and $show_inactive (a convenience local)
-    // are updated and in sync. The local is what page templates
-    // should read; the session is what wanportal_render_header_row
-    // reads to decide whether to render the toggle as checked.
-    // ----------------------------------------------------------------
+    /**
+     * Read the per-user "Show Inactive" preference and keep it in sync.
+     *
+     * Reads $_GET['show_inactive'] when present (it takes priority,
+     * because the wanportal_render_page_end() JS hook round-trips
+     * toggle changes through the URL), otherwise falls back to
+     * $_SESSION['show_inactive']. The resolved value is written back
+     * to the session, so the next page navigation sees the same
+     * choice the user just made.
+     *
+     * After the call, $_SESSION['show_inactive'] (the authoritative
+     * value) and the returned bool are in sync. Page templates should
+     * read the return value; wanportal_render_header_row() reads the
+     * session to decide whether the toggle renders as checked, so
+     * pages with the toggle must call this BEFORE the render call or
+     * the checked state lags the session by one request.
+     *
+     * @return bool True when inactive rows should be shown.
+     */
     function wanportal_get_show_inactive(): bool
     {
         $value = isset($_GET['show_inactive'])
@@ -55,58 +59,71 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
         return $value;
     }
 
-    // ----------------------------------------------------------------
-    // render_head: emit <!DOCTYPE>, <html>, <head>, and the opening
-    // of <body> + the navbar include. The page only needs to render
-    // its own body content after this call.
-    //
-    // Parameters:
-    //   $title   string   Used for the <title> tag and as a fallback
-    //                    for the header-row h3 if render_header_row
-    //                    isn't given a different title.
-    //   $options array    Per-page feature flags. Recognized keys:
-    //                       'datatables'   -> adds DataTables 1.13.11
-    //                                         CSS to <head>
-    //                       'select2'      -> adds Select2 4.1.0-rc.0
-    //                                         CSS to <head>
-    //                       'leaflet'      -> adds Leaflet 1.9.4 CSS
-    //                                         to <head>
-    //                       'prism'        -> adds Prism 1.24.1 CSS
-    //                                         (okaidia theme + line
-    //                                         numbers) to <head>
-    //                       'head_extras'  -> arbitrary HTML to emit
-    //                                         inside <head> after
-    //                                         the standard meta tags
-    //                                         and CSS, before the
-    //                                         pre-paint dark-mode
-    //                                         script. Used for
-    //                                         page-specific meta
-    //                                         tags (e.g. the
-    //                                         <meta http-equiv=
-    //                                         "refresh"> on the
-    //                                         dashboard) or
-    //                                         page-specific <link>
-    //                                         tags. The string is
-    //                                         passed through
-    //                                         unmodified, so the
-    //                                         caller is responsible
-    //                                         for escaping anything
-    //                                         user-controlled.
-    //                     Anything not listed here is silently
-    //                     ignored, so passing extra keys is safe.
-    //
-    // The CDN <script> tags for the matching libraries live in
-    // footer.php — they get loaded on every page. The CSS lives in
-    // <head> so it can block render to avoid a flash of unstyled
-    // content. This split matches the original pages' behavior.
-    //
-    // The pre-paint dark-mode restore script (mirrored from the
-    // runtime toggle in footer.php) lives here so dark-mode users
-    // don't see a flash of light background before the footer
-    // script restores their choice. The localStorage key MUST
-    // match the one in footer.php ('wanportal-theme'); if they
-    // drift, the toggle will fight the pre-paint restore.
-    // ----------------------------------------------------------------
+    /**
+     * Emit <!DOCTYPE>, <html>, <head> (meta + CDN CSS), the pre-paint
+     * dark-mode restore script, <body> open, and the navbar include.
+     * The page only renders its own body content after this call;
+     * pair it with wanportal_render_page_end(). A second call in the
+     * same request is a no-op (guarded by WANPORTAL_HEAD_RENDERED).
+     *
+     * $options keys (all optional; anything not listed here is
+     * silently ignored, so passing extra keys is safe):
+     *   datatables   bool    add the DataTables CSS to <head> (pages
+     *                        with a tablePager table)
+     *   select2      bool    add the Select2 CSS to <head> and define
+     *                        WANPORTAL_NEEDS_SELECT2 so footer.php
+     *                        conditionally loads its JS + init code
+     *   leaflet      bool    add the Leaflet CSS to <head> and define
+     *                        WANPORTAL_NEEDS_LEAFLET so footer.php
+     *                        conditionally loads its JS
+     *   prism        bool    add the Prism CSS (okaidia theme + line
+     *                        numbers) to <head>
+     *   head_extras  string  arbitrary HTML emitted inside <head>
+     *                        after the standard meta tags and CSS and
+     *                        before the pre-paint script. For
+     *                        page-specific <meta> tags (e.g. the
+     *                        auto-refresh tag on the dashboard),
+     *                        <link> tags, or <script src> tags. The
+     *                        string is emitted verbatim, so the
+     *                        caller escapes user-controlled data.
+     *
+     * The CDN <script> tags for the matching libraries live in
+     * footer.php — they get loaded on every page. The CSS lives in
+     * <head> so it can block render to avoid a flash of unstyled
+     * content. This split matches the original pages' behavior.
+     *
+     * Constants exposed for page bodies:
+     *   WANPORTAL_SERVER_NAME  uppercase first hostname label (e.g.
+     *                          "NETOPS" from "netops.crc1.net"),
+     *                          stripped to [A-Za-z0-9-] so an
+     *                          attacker-controlled SERVER_NAME (Host
+     *                          header) can never carry HTML/JS
+     *                          metacharacters into <title>; falls
+     *                          back to "LOCALHOST" when stripping
+     *                          empties the label.
+     *   WANPORTAL_TITLE        htmlspecialchars'd $title, reused as
+     *                          the header-row h3 fallback.
+     *
+     * The pre-paint dark-mode restore script (mirrored from the
+     * runtime toggle in footer.php) keeps dark-mode users from seeing
+     * a flash of light background before the footer script restores
+     * their choice. Its localStorage key MUST stay in sync with
+     * footer.php ('wanportal-theme'); if the two drift, the toggle
+     * will fight the pre-paint restore.
+     *
+     * @param string $title   Used for <title> and as a fallback for
+     *                        the header-row h3 when render_header_row
+     *                        isn't given a different title.
+     * @param array  $options Per-page feature flags, see description.
+     * @return void
+     * @global array $menuItems Navbar menu items from config.php's
+     *                          top-level scope. PHP functions do not
+     *                          inherit caller variables, so it is
+     *                          pulled in here explicitly; the empty
+     *                          fallback keeps the navbar include from
+     *                          iterating over an undefined variable
+     *                          when config.php was not loaded first.
+     */
     function wanportal_render_head(string $title, array $options = []): void
     {
         // Guard against double-emit if a page calls render_head twice.
@@ -221,89 +238,63 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
         echo '<div class="container-fluid">' . "\n";
     }
 
-    // ----------------------------------------------------------------
-    // render_header_row: emit the standard page header — the h3
-    // title on the left, the btn-group on the right with Back |
-    // Home, then any page-specific action buttons, then optionally
-    // the Show Inactive toggle.
-    //
-    // Parameters:
-    //   $title    string  Page title. If not given, falls back to
-    //                     the WANPORTAL_TITLE constant set by
-    //                     render_head.
-    //                     Each action is an associative array
-    //                     with:
-    //                       'url'     string  (optional)  renders
-    //                                        the action as an
-    //                                        <a href> link
-    //                       'click'   string  (optional)  renders
-    //                                        the action as a
-    //                                        <button onclick>
-    //                                        button. Useful for
-    //                                        actions that trigger
-    //                                        JS (confirm prompts,
-    //                                        modal opens, etc.)
-    //                                        without a navigation.
-    //                       'label'   string  required
-    //                       'icon'    string  optional, e.g. 'bi-pencil'
-    //                       'variant' string  Bootstrap variant,
-    //                                        e.g. 'primary', 'danger',
-    //                                        'warning'. Default 'secondary'.
-    //                       'auth'    bool    if true, only render for
-    //                                        authenticated users.
-    //                       'admin'   bool    if true, only render for
-    //                                        admins.
-    //                     url and click are mutually exclusive; an
-    //                     action with both renders as <a> with the
-    //                     click handler ignored. An action with
-    //                     neither is silently skipped.
-    //                     Back and Home are always rendered (the
-    //                     Back button is itself conditional on a
-    //                     referer, matching the original pages).
-    //   $options  array   Per-row options. Recognized keys:
-    //                       'show_inactive_toggle'  bool  if true,
-    //                                            render the
-    //                                            "Inactive" form-
-    //                                            switch toggle
-    //                                            inside the btn-
-    //                                            group, reading
-    //                                            its state from
-    //                                            $_SESSION.
-    //                                            The page must
-    //                                            have called
-    //                                            wanportal_get_show_inactive
-    //                                            first so the
-    //                                            session value is
-    //                                            in sync.
-    //                       'extra_buttons'  string  raw HTML to
-    //                                            emit inside the
-    //                                            btn-group AFTER
-    //                                            the standard
-    //                                            Back / Home /
-    //                                            page actions /
-    //                                            optional show-
-    //                                            inactive toggle.
-    //                                            Used for page-
-    //                                            specific
-    //                                            in-header
-    //                                            controls (e.g.
-    //                                            monitor.php's
-    //                                            "Legacy Graph"
-    //                                            switch). The
-    //                                            string is passed
-    //                                            through
-    //                                            unmodified, so
-    //                                            the caller is
-    //                                            responsible for
-    //                                            escaping.
-    //
-    // Convention: the title is h3, the actions are btn-sm inside a
-    // btn-group, and the Show Inactive toggle (if requested) is
-    // placed LAST in the group. This matches the layout the
-    // existing detail pages established (agent.php, target.php,
-    // search.php) and the wanportal skill documents in its
-    // header-row convention.
-    // ----------------------------------------------------------------
+    /**
+     * Emit the standard page header: the h3 title on the left, the
+     * btn-group on the right with Back | Home, then any page-specific
+     * action buttons, then optionally the Show Inactive toggle.
+     *
+     * $title falls back to the WANPORTAL_TITLE constant set by
+     * wanportal_render_head() when null.
+     *
+     * Each $actions entry is an associative array with:
+     *   url      string  (optional) render the action as an <a href>
+     *                    link (a navigation action)
+     *   click    string  (optional) render the action as a <button
+     *                    onclick> button, for JS-triggered actions
+     *                    (confirm prompts, modal opens, etc.) without
+     *                    a navigation
+     *   label    string  required button text
+     *   icon     string  optional Bootstrap Icons class, e.g. 'bi-pencil'
+     *   variant  string  Bootstrap variant, e.g. 'primary', 'danger',
+     *                    'warning'; default 'secondary'
+     *   auth     bool    when true, render only for authenticated
+     *                    users ($_SESSION['user'])
+     *   admin    bool    when true, render only for admins
+     *                    ($_SESSION['is_admin'])
+     * url and click are mutually exclusive: an action with both
+     * renders as <a> with the click handler ignored; an action with
+     * neither is skipped rather than erroring. Back renders only when
+     * a referer is present (deep links and hard refreshes skip the
+     * button entirely); Home always renders.
+     *
+     * $options keys:
+     *   show_inactive_toggle bool  render the "Inactive" form-switch
+     *                        toggle inside the btn-group, placed LAST.
+     *                        Its checked state reads from
+     *                        $_SESSION['show_inactive'], so the page
+     *                        must have called
+     *                        wanportal_get_show_inactive() first or
+     *                        the toggle lags the session by one
+     *                        request.
+     *   extra_buttons        string  raw HTML emitted inside the
+     *                        btn-group AFTER the standard Back / Home /
+     *                        page actions / optional show-inactive
+     *                        toggle, for page-specific in-header
+     *                        controls (e.g. monitor.php's "Legacy
+     *                        Graph" switch). Emitted verbatim, so the
+     *                        caller escapes user-controlled data.
+     *
+     * Convention: the title is h3, the actions are btn-sm inside a
+     * btn-group — matching the layout the existing detail pages
+     * established (agent.php, target.php, search.php).
+     *
+     * @param string|null $title   Page title; null falls back to
+     *                             WANPORTAL_TITLE.
+     * @param array       $actions Action button definitions, see
+     *                             description.
+     * @param array       $options Row options, see description.
+     * @return void
+     */
     function wanportal_render_header_row(?string $title = null, array $actions = [], array $options = []): void
     {
         $title = $title ?? (defined('WANPORTAL_TITLE') ? WANPORTAL_TITLE : '');
@@ -398,23 +389,30 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
         echo '</div>' . "\n";
     }
 
-    // ----------------------------------------------------------------
-    // render_stats_card: emit the "Statistics" card with a list of
-    // label/value pairs and a colored badge for the value. Used by
-    // agent.php, target.php, monitor.php, and search.php.
-    //
-    // Parameters:
-    //   $title   string   Card title (e.g. "Statistics", "Search Statistics")
-    //   $stats   array    List of [label, value, variant] triples.
-    //                     variant is one of 'success', 'warning',
-    //                     'secondary', 'primary', 'info', 'danger'.
-    //                     Pass an empty array to render just the
-    //                     title (no items).
-    //
-    // This replaces ~30 lines of copy-pasted list-group markup that
-    // existed in the four pages with subtle drift (one had "Inactive
-    // Monitors", another had "Total Results", etc.).
-    // ----------------------------------------------------------------
+    /**
+     * Emit the "Statistics" card: a list-group of label/value rows
+     * with a colored badge for each value. Used by agent.php,
+     * target.php, monitor.php, and search.php; replaces ~30 lines of
+     * copy-pasted list-group markup that existed in the four pages
+     * with subtle drift (one had "Inactive Monitors", another had
+     * "Total Results", etc.).
+     *
+     * Each $stats entry is a [label, value, variant] triple. variant
+     * is one of 'success', 'warning', 'secondary', 'primary', 'info',
+     * 'danger' (default 'secondary'), rendered as the dark-mode-aware
+     * subtle trio: bg-{color}-subtle + text-{color}-emphasis +
+     * border-{color}-subtle. Entries without both a label and a value
+     * are skipped defensively. Pass an empty array to render just the
+     * title (no items).
+     *
+     * Does NOT fit cards that mix stats with timestamp rows (e.g.
+     * monitor.php's stats card) — keep those hand-rolled.
+     *
+     * @param string $title Card title (e.g. "Statistics", "Search
+     *                      Statistics").
+     * @param array  $stats List of [label, value, variant] triples.
+     * @return void
+     */
     function wanportal_render_stats_card(string $title, array $stats): void
     {
         echo '<div class="card mb-3">' . "\n";
@@ -442,21 +440,28 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
         echo '</div>' . "\n";
     }
 
-    // ----------------------------------------------------------------
-    // render_page_end: emit the closing </div> for the container,
-    // the footer include, the showInactive JS hook, and the closing
-    // </body></html>. Safe to call even if render_head wasn't called
-    // (it falls back to a no-op), which lets pages opt out of
-    // render_head (e.g. login.php, which has its own pre-paint
-    // script) and still call render_page_end for the body close.
-    //
-    // The showInactive hook round-trips the toggle's state through
-    // the URL on every change. That way $_SESSION['show_inactive']
-    // is updated on the server side, and the next page navigation
-    // (e.g. agent.php -> target.php) sees the same value the user
-    // just set. The hook reads/writes nothing if the toggle isn't
-    // on the page (i.e. document.getElementById returns null).
-    // ----------------------------------------------------------------
+    /**
+     * Close the page: the closing </div> for the container, the
+     * footer include, the showInactive JS hook, and the closing
+     * </body></html>.
+     *
+     * Safe to call even when wanportal_render_head() wasn't called:
+     * the container close and footer include are skipped unless
+     * WANPORTAL_HEAD_RENDERED is defined, which lets pages opt out of
+     * render_head (e.g. login.php, which has its own pre-paint
+     * script) and still call render_page_end for the body close.
+     *
+     * The showInactive hook round-trips the toggle's state through
+     * the URL on every change. That way $_SESSION['show_inactive']
+     * is updated on the server side, and the next page navigation
+     * (e.g. agent.php -> target.php) sees the same value the user
+     * just set. It preserves all other query params (e.g. ?id=...,
+     * ?q=...) and the hash fragment, and reads/writes nothing if the
+     * toggle isn't on the page (document.getElementById returns
+     * null).
+     *
+     * @return void
+     */
     function wanportal_render_page_end(): void
     {
         // Close the container-fluid div that render_head opened.

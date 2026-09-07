@@ -1,3 +1,26 @@
+=head1 NAME
+
+monitor - monitor definitions and lifecycle (JWT-protected)
+
+=head1 SYNOPSIS
+
+    # wired up by the cgi-bin/api dispatcher, inside the JWT group
+    use monitor qw(register_monitor);
+    register_monitor($db_config, \%valid_protocols, \%valid_dscp);
+
+=head1 DESCRIPTION
+
+Owns the C<monitors> table and the monitor routes: detail, create,
+update, delete, plus the admin-only counter reset. Protocol, DSCP
+class, port and poll settings are validated before anything reaches
+the database.
+
+Every route requires a valid user JWT; writes and the reset are
+admin-only. The collected samples themselves are served by the
+public RRD endpoint (see public_api), not here.
+
+=cut
+
 package monitor;
 use strict;
 use warnings;

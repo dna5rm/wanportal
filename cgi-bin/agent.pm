@@ -1,3 +1,27 @@
+=head1 NAME
+
+agent - agent registry endpoints (JWT-protected)
+
+=head1 SYNOPSIS
+
+    # wired up by the cgi-bin/api dispatcher, inside the JWT group
+    use agent qw(register_agent);
+    register_agent($db_config);
+
+=head1 DESCRIPTION
+
+Owns the C<agents> table and the operator-facing agent routes:
+create, update, delete, and the single-agent detail view. The table
+is created on first run and a loopback agent is seeded
+automatically.
+
+Every route requires a valid user JWT. Mutations are admin-only,
+and the agent's password is only ever returned to admins. The
+agents themselves never use these routes - they authenticate with
+their agent password through agent_monitors instead.
+
+=cut
+
 package agent;
 use strict;
 use warnings;

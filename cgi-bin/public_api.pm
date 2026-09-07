@@ -1,3 +1,28 @@
+=head1 NAME
+
+public_api - unauthenticated, read-only dashboard data
+
+=head1 SYNOPSIS
+
+    # wired up by the cgi-bin/api dispatcher, OUTSIDE the JWT group
+    use public_api qw(register_public_endpoints);
+    register_public_endpoints($db_config);
+
+=head1 DESCRIPTION
+
+The deliberately public face of the API: the health check, the
+agent / target / monitor listings, and RRD graph rendering. The
+display pages read these without logging in - the monitoring
+topology is meant to be visible to anyone who can reach the portal,
+and agent passwords never appear in any response.
+
+The RRD endpoint turns a monitor's collected samples into a graph
+image. The monitor id is allow-listed as a UUID before it is used
+against the database or an RRD filename, so it cannot smuggle in
+path separators.
+
+=cut
+
 package public_api;
 use strict;
 use warnings;

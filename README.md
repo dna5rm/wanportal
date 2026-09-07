@@ -22,7 +22,7 @@ There is no `entrypoint.sh`. Schema tables are created by the Perl modules on fi
 
 ## Run it
 
-Copy `.env` from your secrets store (never commit it). Compose falls back to `MYSQL_PASSWORD=netops` and a built-in JWT/APP secret if you omit those keys. Change them before anything faces a network.
+Copy `.env` from your secrets store (never commit it). Compose has built-in fallbacks for `MYSQL_PASSWORD`, `JWT_SECRET`, and `APP_SECRET` so the stack boots without them; set real values before anything faces a network.
 
 ```sh
 docker compose up --build -d
@@ -48,11 +48,11 @@ Environment only. Typical keys:
 MYSQL_HOST=wandb
 MYSQL_PORT=3306
 MYSQL_USER=root
-MYSQL_PASSWORD=netops
+MYSQL_PASSWORD=change-me
 MYSQL_DB=netops
 HTTP_PORT=3385
-JWT_SECRET=   # set this
-APP_SECRET=   # set this
+JWT_SECRET=
+APP_SECRET=
 AUTH_LDAP_ENABLED=false
 ```
 
@@ -75,7 +75,7 @@ curl -sS -X POST http://127.0.0.1:3385/cgi-bin/api/login \
   -d '{"username":"admin","password":"YOUR_MYSQL_PASSWORD"}'
 ```
 
-Use the returned token as `Authorization: Bearer ...`. Browser pages should call `window.proxyRequest(...)` so the JWT stays on the server (`htdocs/proxy.php`).
+Send the returned token in the Authorization header (bearer scheme). Browser pages should call `window.proxyRequest(...)` so the JWT stays on the server (`htdocs/proxy.php`).
 
 RRD files live at `/var/rrd/<monitor_id>.rrd` in the container (named volume `rrd`). Deleting a monitor/target/agent through the API removes the matching RRDs.
 
@@ -89,6 +89,17 @@ export SERVER=http://127.0.0.1:3385/cgi-bin/api
 ```
 
 TLS certs are not verified by default (self-signed / lab).
+
+## Tests
+
+Two entry points, both from the repo root:
+
+```sh
+bash scripts/validate.sh   # syntax, live smoke, audit gates, unit tests
+bash tests/run.sh          # unit tests only
+```
+
+`scripts/validate.sh` is the gate to run before any commit: it compiles the Perl API and every PHP page inside the container, hits the live health endpoint, replays the fixed audit regressions, and finishes with `tests/run.sh`. Both need the `wanportal` container up. See [TESTING.md](TESTING.md) for what the suites cover and how to add tests.
 
 ## Security notes (by design)
 

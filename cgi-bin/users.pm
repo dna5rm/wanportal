@@ -1,3 +1,28 @@
+=head1 NAME
+
+users - local account management (JWT-protected, admin-only)
+
+=head1 SYNOPSIS
+
+    # wired up by the cgi-bin/api dispatcher, inside the JWT group
+    use users qw(ensure_users_table validate_user register_users);
+    register_users($db_config);
+
+=head1 DESCRIPTION
+
+Owns the C<users> table: account creation, profile and permission
+updates, password changes and deactivation. Every /users route
+checks the admin flag on the caller's JWT, and the built-in admin
+account can only be changed by itself.
+
+New passwords must be at least eight characters with a letter and a
+digit, stored as bcrypt hashes. The table is created at startup and
+seeded with an initial admin whose password starts out as the
+database password. validate_user is the shared local-account check
+(bcrypt, lockout, active flag) that the login path in auth uses.
+
+=cut
+
 package users;
 use strict;
 use warnings;
