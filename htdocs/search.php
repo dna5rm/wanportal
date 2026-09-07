@@ -10,74 +10,43 @@ if (empty($search)) {
 
 $show_inactive = wanportal_get_show_inactive();
 
-try {
-    // Search query with prepared statement
-    $stmt = $mysqli->prepare("
-        SELECT 
-            m.*,
-            a.name as agent_name,
-            a.address as agent_address,
-            a.description as agent_description,
-            a.is_active as agent_is_active,
-            t.address as target_address,
-            t.description as target_description,
-            t.is_active as target_is_active
-        FROM monitors m
-        JOIN agents a ON m.agent_id = a.id
-        JOIN targets t ON m.target_id = t.id
-        WHERE 
-            m.description LIKE ? OR
-            a.name LIKE ? OR
-            a.address LIKE ? OR
-            t.address LIKE ? OR
-            t.description LIKE ?
-        ORDER BY m.description, a.name, t.address
-    ");
+// Search runs through the public /monitors endpoint's q filter, which
+// LIKEs across monitor description, agent name/address, and target
+// address/description -- the same sweep this page used to run by hand.
+$monitorsResponse = api_get('/monitors?q=' . rawurlencode($search));
+$monitors = [];
 
-    $search_param = "%$search%";
-    $stmt->bind_param("sssss", 
-        $search_param, $search_param, $search_param, 
-        $search_param, $search_param
-    );
+// Calculate statistics while walking the rows
+$stats = [
+    'total' => 0,
+    'active' => 0,
+    'inactive' => 0,
+    'effectively_inactive' => 0
+];
 
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $monitors = [];
+foreach (($monitorsResponse['monitors'] ?? []) as $row) {
+    // Color classes for the results table.
+    monitor_color_classes($row);
 
-    // Calculate statistics while fetching
-    $stats = [
-        'total' => 0,
-        'active' => 0,
-        'inactive' => 0,
-        'effectively_inactive' => 0
-    ];
+    // Calculate effective status
+    $row['effectively_active'] = $row['is_active'] &&
+                               $row['agent_is_active'] &&
+                               $row['target_is_active'];
 
-    while ($row = $result->fetch_assoc()) {
-        // Color classes for the results table.
-        monitor_color_classes($row);
-
-        // Calculate effective status
-        $row['effectively_active'] = $row['is_active'] &&
-                                   $row['agent_is_active'] &&
-                                   $row['target_is_active'];
-
-        // Update statistics
-        $stats['total']++;
-        if ($row['effectively_active']) {
-            $stats['active']++;
-        } else {
-            $stats['effectively_inactive']++;
-            if (!$row['is_active']) {
-                $stats['inactive']++;
-            }
+    // Update statistics
+    $stats['total']++;
+    if ($row['effectively_active']) {
+        $stats['active']++;
+    } else {
+        $stats['effectively_inactive']++;
+        // monitor_is_active is the monitor's own flag; is_active on the
+        // row is the effective one (monitor AND agent AND target).
+        if (!$row['monitor_is_active']) {
+            $stats['inactive']++;
         }
-
-        $monitors[] = $row;
     }
-    $stmt->close();
 
-} catch (Exception $e) {
-    die("Error: " . $e->getMessage());
+    $monitors[] = $row;
 }
 wanportal_render_head('Search Results', ['datatables' => true]);
 // Pass the RAW search term: wanportal_render_header_row() escapes
@@ -227,4 +196,3 @@ wanportal_render_header_row('Search: ' . $search, [], [
     </div>
 
 <?php wanportal_render_page_end(); ?>
-<?php $mysqli->close(); ?>

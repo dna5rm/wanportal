@@ -13,53 +13,31 @@ $activeAgents = array_filter($agentsResponse['agents'] ?? [], function($agent) {
 $monitorsResponse = api_get('/monitors?current_loss=100&is_active=1');
 $downHosts = $monitorsResponse['monitors'] ?? [];
 
-// Fetch all monitors (active+inactive) for the summary cards and
-// "top 5 slowest" widget. We compute the dashboard stats here
-// rather than hitting a specialized API endpoint so the layout
-// can be tweaked without a Perl-side change.
-$allMonitorsResponse = api_get('/monitors?is_active=1');
-$allMonitors = $allMonitorsResponse['monitors'] ?? [];
-// True when the /monitors fetch failed: api_get() returns null on
-// transport errors, non-200 responses, and undecodable JSON. The
-// summary cards must not render their all-zero stats in that case.
-$monitorsFetchFailed = ($allMonitorsResponse === null);
+// Dashboard rollup (counts, percents, top-5 slowest) comes from the
+// public /dashboard endpoint, so this page and any other consumer
+// share one definition of up / degraded / down instead of the page
+// re-sorting /monitors rows by hand.
+$dashboardResponse = api_get('/dashboard');
+$dashboard = $dashboardResponse['dashboard'] ?? null;
+
+// True when a fetch failed: api_get() returns null on transport
+// errors, non-200 responses, and undecodable JSON. The summary cards
+// must not render their all-zero stats in that case.
+$monitorsFetchFailed = ($dashboardResponse === null || !is_array($dashboard));
 
 $monitor_stats = [
-    'total'     => 0,
-    'up'        => 0,
-    'degraded'  => 0,    // 1 <= loss < 100
-    'down'      => 0,    // loss >= 100
-    'effectively_active' => 0,  // monitor active AND agent active AND target active
+    'total'    => $dashboard['total']    ?? 0,
+    'up'       => $dashboard['up']       ?? 0,
+    'degraded' => $dashboard['degraded'] ?? 0,
+    'down'     => $dashboard['down']     ?? 0,
 ];
-foreach ($allMonitors as $m) {
-    $monitor_stats['total']++;
-    $loss = (float)($m['current_loss'] ?? 0);
-    if ($loss >= 100)        $monitor_stats['down']++;
-    elseif ($loss >= 1)      $monitor_stats['degraded']++;
-    else                     $monitor_stats['up']++;
-    // Effectively-active means the link is monitored (i.e. not
-    // disabled by the operator). We approximate this by the
-    // current_loss being a recent value (0..100); 0 means
-    // "sampled and fine" which is what effective-active looks like.
-    if ($m['is_active'] == 1 && $m['agent_is_active'] == 1 && $m['target_is_active'] == 1) {
-        $monitor_stats['effectively_active']++;
-    }
-}
-$pct_up        = $monitor_stats['total'] > 0 ? round(100 * $monitor_stats['up']        / $monitor_stats['total']) : 0;
-$pct_degraded  = $monitor_stats['total'] > 0 ? round(100 * $monitor_stats['degraded']  / $monitor_stats['total']) : 0;
-$pct_down      = $monitor_stats['total'] > 0 ? round(100 * $monitor_stats['down']      / $monitor_stats['total']) : 0;
+$pct_up        = $dashboard['percent_up']       ?? 0;
+$pct_degraded  = $dashboard['percent_degraded'] ?? 0;
+$pct_down      = $dashboard['percent_down']     ?? 0;
 
-// Top 5 slowest by current_median (excluding down monitors —
-// those are already in the down table below)
-$topSlow = $allMonitors;
-usort($topSlow, function ($a, $b) {
-    $a_loss = (float)($a['current_loss'] ?? 0);
-    $b_loss = (float)($b['current_loss'] ?? 0);
-    if ($a_loss >= 100 && $b_loss < 100) return 1;  // down sorts to end
-    if ($a_loss < 100 && $b_loss >= 100) return -1;
-    return (float)($b['current_median'] ?? 0) <=> (float)($a['current_median'] ?? 0);
-});
-$topSlow = array_slice($topSlow, 0, 5);
+// Top 5 slowest links straight from the rollup (down monitors are
+// already excluded server-side — they sit in the down table below).
+$topSlow = $dashboard['top_slow'] ?? [];
 
 // Initialize error message
 $error_message = null;

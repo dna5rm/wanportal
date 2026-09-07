@@ -20,9 +20,9 @@ tiers:
                       polling endpoints (agent-password auth lives
                       inside that module), and /login
 
-    JWT-protected   - users, credentials, agent, target, monitor
-                      and the token test, all behind the auth
-                      middleware; writes are admin-only
+    JWT-protected   - users, credentials, agent, target, monitor,
+                      the token test and /session, all behind the
+                      auth middleware; writes are admin-only
 
 Syntax checks go through this dispatcher, not the individual .pm
 files: the endpoint modules register routes against the running
@@ -41,7 +41,7 @@ use DBI;
 
 # Modular endpoints
 use users           qw(ensure_users_table register_users);
-use auth            qw(auth_middleware register_login);
+use auth            qw(auth_middleware register_login register_session);
 use test            qw(register_test);
 use credentials     qw(register_credentials);
 use public_api      qw(register_public_endpoints);
@@ -98,6 +98,7 @@ group {
     under auth_middleware(app->defaults);
 
     register_test();
+    register_session();
     register_users($db_config);
     register_credentials($db_config);
     register_agent($db_config);

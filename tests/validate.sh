@@ -99,6 +99,44 @@ sys.exit(0)
 PY
 fi
 
+# GET /session must echo the caller's claims and require the bearer token
+if [[ -n "$tok" ]]; then
+  curl -sS --max-time 8 "${auth[@]}" "$API/session" -o /tmp/wanportal-session.json || true
+  python3 - <<'PY' && ok "GET /session returns claims" || bad "GET /session claims wrong/missing"
+import json,sys
+d=json.load(open("/tmp/wanportal-session.json"))
+if d.get("status")!="success": sys.exit(1)
+if d.get("username")!="admin": sys.exit(1)
+if d.get("is_admin") is not True: sys.exit(1)
+e=d.get("exp")
+if not isinstance(e,int) or e<=0: sys.exit(1)
+sys.exit(0)
+PY
+
+  code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "$API/session" || echo 000)
+  if [[ "$code" == "401" ]]; then
+    ok "GET /session without bearer is 401"
+  else
+    bad "GET /session without bearer http $code (want 401)"
+  fi
+
+  # the /login response must carry the claims (login.php stores them in the PHP session)
+  curl -sS --max-time 8 -X POST "$API/login" \
+    -H 'Content-Type: application/json' \
+    -d "{\"username\":\"admin\",\"password\":\"$pw\"}" \
+    -o /tmp/wanportal-login.json || true
+  python3 - <<'PY' && ok "login response carries claims" || bad "login response missing claims"
+import json,sys
+d=json.load(open("/tmp/wanportal-login.json"))
+if d.get("status")!="success": sys.exit(1)
+if d.get("username")!="admin": sys.exit(1)
+if d.get("is_admin") is not True: sys.exit(1)
+e=d.get("exp")
+if not isinstance(e,int) or e<=0: sys.exit(1)
+sys.exit(0)
+PY
+fi
+
 # Host header must not be used as API URL in netping.php
 if grep -n "https://{\$server_name}" "$ROOT/htdocs/netping.php" >/dev/null; then
   bad "netping.php still interpolates SERVER_NAME into API URL"

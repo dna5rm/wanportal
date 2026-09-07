@@ -17,57 +17,30 @@ $end   = $_GET['end']   ?? $now->format('Y-m-d\TH:i');
 
 $show_inactive = wanportal_get_show_inactive();
 
-try {
-    $stmt = $mysqli->prepare("
-        SELECT
-            m.*,
-            t.address as target_address,
-            t.description as target_description,
-            t.is_active as target_is_active,
-            a.name as agent_name,
-            a.description as agent_description,
-            a.address as agent_address,
-            a.is_active as agent_is_active
-        FROM monitors m
-        JOIN targets t ON m.target_id = t.id
-        JOIN agents a ON m.agent_id = a.id
-        WHERE m.id = ?
-    ");
-    if (!$stmt) {
-        throw new Exception("Prepare failed: " . $mysqli->error);
-    }
-
-    $stmt->bind_param("s", $id);
-    if (!$stmt->execute()) {
-        throw new Exception("Execute failed: " . $stmt->error);
-    }
-
-    $result = $stmt->get_result();
-    if (!$result || $result->num_rows === 0) {
-        throw new Exception("Monitor not found");
-    }
-
-    $monitor = $result->fetch_assoc();
-    $stmt->close();
-
-    $monitor_stats = [
-        'total_samples' => $monitor['sample'],
-        'total_down' => $monitor['total_down'],
-        'current_status' => $monitor['current_loss'] >= 100 ? 'down' : 'up',
-        'effectively_active' => $monitor['is_active'] && $monitor['agent_is_active'] && $monitor['target_is_active']
-    ];
-
-    // Mirror onto the row so the template's $monitor['effectively_active']
-    // reads are well-defined (the ternaries downstream fall through to
-    // the bg-secondary fallback without this).
-    $monitor['effectively_active'] = $monitor_stats['effectively_active'];
-
-    // Color classes for the row. Thresholds in lib/monitor_metrics.php.
-    monitor_color_classes($monitor);
-
-} catch (Exception $e) {
-    die("Error: " . $e->getMessage());
+// The monitor row comes from the public API detail endpoint, which
+// joins the agent and target fields the page displays. api_get()
+// returns null on a 404 or transport failure, so a miss reads as
+// "not found" here either way.
+$monitorResponse = api_get('/monitors/' . rawurlencode($id));
+if (!$monitorResponse || ($monitorResponse['status'] ?? '') !== 'success') {
+    die("Error: Monitor not found");
 }
+$monitor = $monitorResponse['monitor'];
+
+$monitor_stats = [
+    'total_samples' => $monitor['sample'],
+    'total_down' => $monitor['total_down'],
+    'current_status' => $monitor['current_loss'] >= 100 ? 'down' : 'up',
+    'effectively_active' => $monitor['is_active'] && $monitor['agent_is_active'] && $monitor['target_is_active']
+];
+
+// Mirror onto the row so the template's $monitor['effectively_active']
+// reads are well-defined (the ternaries downstream fall through to
+// the bg-secondary fallback without this).
+$monitor['effectively_active'] = $monitor_stats['effectively_active'];
+
+// Color classes for the row. Thresholds in lib/monitor_metrics.php.
+monitor_color_classes($monitor);
 
 // Actions: Raw Data (always), Reset Stats (non-LOCAL, auth),
 // Edit (auth). No "Agent" button -- monitor.php is the canonical
@@ -177,7 +150,7 @@ wanportal_render_header_row($title, $actions, ['extra_buttons' => $extra_buttons
                             <?php else: ?>
                                 <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Inactive</span>
                                 <sup>
-                                    <?php if (!$monitor['is_active']): ?>
+                                    <?php if (!$monitor['monitor_is_active']): ?>
                                         <small>(Monitor disabled)</small>
                                     <?php endif; ?>
                                     <?php if (!$monitor['agent_is_active']): ?>
@@ -703,4 +676,3 @@ function showError(message) {
     console.error(`Error: ${message}`);
 }
 </script>
-<?php $mysqli->close(); ?>

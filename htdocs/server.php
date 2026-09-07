@@ -29,12 +29,11 @@ $agentCounts = count_entries_from_api($agentsResponse['agents'] ?? []);
 $targetsCount = count_entries_from_api($targetsResponse['targets'] ?? []);
 $monitorsCount = count_entries_from_api($monitorsResponse['monitors'] ?? []);
 
-// Compute server metrics
-$uptimeSeconds = 0;
-$uptime = shell_exec('cat /proc/uptime');
-if ($uptime !== null) {
-    $uptimeSeconds = (int)floatval(explode(' ', $uptime)[0]);
-}
+// Compute server metrics. Uptime comes from the public /health
+// endpoint (the API reads /proc/uptime), so this page no longer
+// shells out to cat it.
+$healthResponse = api_get('/health');
+$uptimeSeconds = (int)($healthResponse['uptime_seconds'] ?? 0);
 
 function format_uptime($secs) {
     $d = floor($secs/86400);

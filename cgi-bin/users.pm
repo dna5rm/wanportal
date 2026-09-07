@@ -143,11 +143,50 @@ sub is_valid_password {
     return $password =~ $PASSWORD_REGEX;
 }
 
+# Build the WHERE clause and bind params for the GET /users listing
+# filters.
+#
+# Supported query params:
+#   q          substring match (LIKE %q%) over username, full_name, email
+#   is_admin   0 or 1 -- any other value (including absent) means no filter
+#   is_active  0 or 1 -- any other value (including absent) means no filter
+#
+# Every value is bound as a placeholder, so user input can never fragment
+# the SQL. Kept as a standalone sub (no $dbh, no Mojolicious boot needed)
+# so tests/perl/users_filters.t can extract it from source and drive it
+# with a stub controller -- keep it self-contained.
+sub build_user_filters {
+    my ($c) = @_;
+    my @where;
+    my @params;
+
+    # Boolean filters: only 0 or 1 are accepted; anything else is ignored
+    for my $col (qw(is_admin is_active)) {
+        my $value = $c->param($col);
+        if (defined $value && $value =~ /^[01]$/) {
+            push @where, "$col = ?";
+            push @params, $value;
+        }
+    }
+
+    # Free-text search across username, full_name and email
+    my $q = $c->param('q');
+    if (defined $q && length $q) {
+        my $like = '%' . $q . '%';
+        push @where, '(username LIKE ? OR full_name LIKE ? OR email LIKE ?)';
+        push @params, $like, $like, $like;
+    }
+
+    return (\@where, \@params);
+}
+
 sub register_users {
     my ($db_config) = @_;
 
     # @summary List all users
-    # @description Returns a list of all users in the system. Requires admin privileges.
+    # @description Returns a list of users in the system. Requires admin privileges.
+    # Optional query filters: q (substring match over username, full_name and
+    # email), is_admin and is_active (0 or 1; any other value is ignored).
     # Passwords are never included in the response.
     # @tags Users
     # @security bearerAuth
@@ -162,16 +201,20 @@ sub register_users {
             }, status => 403);
         }
 
+        # Optional listing filters (q, is_admin, is_active) -- see
+        # build_user_filters above
+        my ($where, $params) = build_user_filters($c);
+        my $sql = 'SELECT '
+            . 'id, username, full_name, email, is_admin, is_active, '
+            . 'last_login, created_at, updated_at '
+            . 'FROM users';
+        $sql .= ' WHERE ' . join(' AND ', @$where) if @$where;
+        $sql .= ' ORDER BY username';
+
         my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
         
-        my $sth = $dbh->prepare(q{
-            SELECT 
-                id, username, full_name, email, is_admin, is_active, 
-                last_login, created_at, updated_at
-            FROM users 
-            ORDER BY username
-        });
-        $sth->execute();
+        my $sth = $dbh->prepare($sql);
+        $sth->execute(@$params);
         
         my $users = $sth->fetchall_arrayref({});
         $dbh->disconnect;

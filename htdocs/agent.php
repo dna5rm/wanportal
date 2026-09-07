@@ -9,80 +9,43 @@ if (!$id) die("No agent ID specified");
 
 $show_inactive = wanportal_get_show_inactive();
 
-try {
-    $stmt = $mysqli->prepare("
-        SELECT id, name, address, description, last_seen, is_active
-        FROM agents
-        WHERE id = ?
-    ");
-    if (!$stmt) {
-        throw new Exception("Prepare failed: " . $mysqli->error);
-    }
+// Detail and its monitor list both come from the public API.
+// api_get() returns null on a 404 or transport failure, so a miss
+// reads as "not found" here either way.
+$agentResponse = api_get('/agents/' . rawurlencode($id));
+if (!$agentResponse || ($agentResponse['status'] ?? '') !== 'success') {
+    die("Error: Agent not found");
+}
+$agent = $agentResponse['agent'];
 
-    $stmt->bind_param("s", $id);
-    if (!$stmt->execute()) {
-        throw new Exception("Execute failed: " . $stmt->error);
-    }
+$monitorsResponse = api_get('/monitors?agent_id=' . rawurlencode($id));
+$monitors = [];
 
-    $result = $stmt->get_result();
-    if (!$result || $result->num_rows === 0) {
-        throw new Exception("Agent not found");
-    }
+$monitor_stats = [
+    'total' => 0,
+    'active' => 0,
+    'inactive' => 0,
+    'effectively_inactive' => 0
+];
 
-    $agent = $result->fetch_assoc();
-    $stmt->close();
+foreach (($monitorsResponse['monitors'] ?? []) as $row) {
+    // Color classes for the row (current vs lifetime avg).
+    // Thresholds live in lib/monitor_metrics.php.
+    monitor_color_classes($row);
 
-    $stmt = $mysqli->prepare("
-        SELECT
-            m.*,
-            t.address as target_address,
-            t.description as target_description,
-            t.is_active as target_is_active
-        FROM monitors m
-        JOIN targets t ON m.target_id = t.id
-        WHERE m.agent_id = ?
-        ORDER BY m.description, m.id
-    ");
-    if (!$stmt) {
-        throw new Exception("Prepare failed: " . $mysqli->error);
-    }
-
-    $stmt->bind_param("s", $id);
-    if (!$stmt->execute()) {
-        throw new Exception("Execute failed: " . $stmt->error);
-    }
-
-    $result = $stmt->get_result();
-    $monitors = [];
-
-    $monitor_stats = [
-        'total' => 0,
-        'active' => 0,
-        'inactive' => 0,
-        'effectively_inactive' => 0
-    ];
-
-    while ($row = $result->fetch_assoc()) {
-        // Color classes for the row (current vs lifetime avg).
-        // Thresholds live in lib/monitor_metrics.php.
-        monitor_color_classes($row);
-
-        $monitor_stats['total']++;
-        if ($row['is_active'] && $row['target_is_active'] && $agent['is_active']) {
-            $monitor_stats['active']++;
-        } else {
-            $monitor_stats['effectively_inactive']++;
-            if (!$row['is_active']) {
-                $monitor_stats['inactive']++;
-            }
+    $monitor_stats['total']++;
+    if ($row['is_active'] && $row['target_is_active'] && $agent['is_active']) {
+        $monitor_stats['active']++;
+    } else {
+        $monitor_stats['effectively_inactive']++;
+        // monitor_is_active is the monitor's own flag; is_active on the
+        // row is the effective one (monitor AND agent AND target).
+        if (!$row['monitor_is_active']) {
+            $monitor_stats['inactive']++;
         }
-
-        $monitors[] = $row;
     }
-    $stmt->close();
 
-} catch (Exception $e) {
-    die("Error: " . $e->getMessage());
+    $monitors[] = $row;
 }
 
 // Action buttons. "Agent" is hidden for LOCAL agents (no netping
@@ -196,7 +159,7 @@ wanportal_render_header_row(
                                             $inactive_reason = [];
                                             if (!$agent['is_active']) $inactive_reason[] = "Agent disabled";
                                             if (!$m['target_is_active']) $inactive_reason[] = "Target disabled";
-                                            if (!$m['is_active']) $inactive_reason[] = "Monitor disabled";
+                                            if (!$m['monitor_is_active']) $inactive_reason[] = "Monitor disabled";
                                             ?>
                                             <i class="bi bi-info-circle text-muted" 
                                                data-bs-toggle="tooltip" 
@@ -247,4 +210,3 @@ wanportal_render_header_row(
     </div>
 
 <?php wanportal_render_page_end(); ?>
-<?php $mysqli->close(); ?>

@@ -43,16 +43,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($status === 200) {
                 $data = json_decode($response, true);
-                if ($data['status'] === 'success' && isset($data['token'])) {
-                    // Decode the JWT token to get the claims.
-                    // JWT uses base64url encoding (- and _ instead of +
-                    // and /), so we must translate before base64_decode.
-                    $tokenParts = explode('.', $data['token']);
-                    $payload = json_decode(base64_decode(strtr($tokenParts[1], '-_', '+/')), true);
+                if (is_array($data) && ($data['status'] ?? null) === 'success' && isset($data['token'])) {
+                    // Session claims come straight from the /login JSON
+                    // (username, is_admin, exp). The JWT is stored opaque
+                    // and never decoded in PHP.
 
-                    $_SESSION['user'] = $username;
+                    $_SESSION['user'] = $data['username'] ?? $username;
                     $_SESSION['token'] = $data['token'];
-                    $_SESSION['is_admin'] = $payload['is_admin'] ?? false;
+                    $_SESSION['is_admin'] = !empty($data['is_admin']);
+                    if (isset($data['exp'])) {
+                        $_SESSION['token_exp'] = (int)$data['exp'];
+                    }
                     $_SESSION['last_activity'] = time();
                     
                     header('Location: /index.php');

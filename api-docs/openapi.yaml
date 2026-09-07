@@ -312,7 +312,9 @@ paths:
         Authenticates a user via local database or LDAP (if enabled).
         Returns a signed JWT that carries the username and an is_admin
         flag and is valid for one hour. Local accounts lock for 30
-        minutes after 5 failed attempts.
+        minutes after 5 failed attempts. The response also carries
+        the signed claims (username, is_admin, exp) so clients never
+        decode the token themselves.
       requestBody:
         required: true
         content:
@@ -341,6 +343,15 @@ paths:
                   token:
                     type: string
                     description: JWT token
+                  username:
+                    type: string
+                    description: Authenticated username claim
+                  is_admin:
+                    type: boolean
+                    description: Admin flag claim
+                  exp:
+                    type: integer
+                    description: Token expiry as Unix epoch seconds (claim)
         '400':
           description: Invalid input (username and password are required)
           content:
@@ -349,6 +360,39 @@ paths:
                 $ref: '#/components/schemas/Error'
         '401':
           description: Invalid credentials or account locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /cgi-bin/api/session:
+    get:
+      tags:
+        - Authentication
+      summary: Get current session claims
+      description: Returns the username, is_admin flag and expiry timestamp carried by the caller's bearer token. Requires a valid JWT.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Claims of the caller's token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  username:
+                    type: string
+                  is_admin:
+                    type: boolean
+                  exp:
+                    type: integer
+                    description: Unix epoch seconds when the token expires
+        '401':
+          description: Missing or invalid bearer token
           content:
             application/json:
               schema:
@@ -1276,6 +1320,63 @@ paths:
                           minimum: 0
                           maximum: 1
 
+  /cgi-bin/api/agents/{id}:
+    get:
+      tags:
+        - Public API
+      summary: Get agent details
+      description: Returns a single monitoring agent without sensitive information. Passwords are never included in the response.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Agent ID
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  agent:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      address:
+                        type: string
+                      description:
+                        type: string
+                      last_seen:
+                        type: string
+                        description: Server timestamp (YYYY-MM-DD HH:MM:SS)
+                      is_active:
+                        type: integer
+                        minimum: 0
+                        maximum: 1
+        '400':
+          description: Invalid agent ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /cgi-bin/api/targets:
     get:
       tags:
@@ -1297,6 +1398,46 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Target'
+
+  /cgi-bin/api/targets/{id}:
+    get:
+      tags:
+        - Public API
+      summary: Get target details
+      description: Returns a single monitoring target.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Target ID
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  target:
+                    $ref: '#/components/schemas/Target'
+        '400':
+          description: Invalid target ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /cgi-bin/api/monitors:
     get:
@@ -1334,6 +1475,147 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Monitor'
+
+  /cgi-bin/api/monitors/{id}:
+    get:
+      tags:
+        - Public API
+      summary: Get monitor details
+      description: |
+        Returns a single monitor with current status, configuration, and
+        joined agent/target fields. Rows carry the computed
+        latency_flag / latency_threshold_ms pair (also present on
+        /monitors list rows): the threshold is avg_median + 2*avg_stddev,
+        and the flag is raised only for effectively-active monitors with
+        fresh data (last_update newer than 3 * pollinterval seconds),
+        loss below 100%, at least two samples, and a current median
+        above that threshold. monitor_is_active is the monitor's own
+        enabled flag, while is_active is the effective one (monitor AND
+        agent AND target).
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Monitor ID
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  monitor:
+                    allOf:
+                      - $ref: '#/components/schemas/Monitor'
+                      - type: object
+                        properties:
+                          monitor_is_active:
+                            type: integer
+                            minimum: 0
+                            maximum: 1
+                            description: The monitor's own enabled flag, before the agent/target rollup
+                          agent_description:
+                            type: string
+                          agent_address:
+                            type: string
+                          target_description:
+                            type: string
+                          latency_flag:
+                            type: integer
+                            minimum: 0
+                            maximum: 1
+                            description: 1 when the monitor is a live latency spike by the shared rules
+                          latency_threshold_ms:
+                            type: number
+                            description: Spike bar in ms (avg_median + 2*avg_stddev); 0 means no baseline
+        '400':
+          description: Invalid monitor ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Monitor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /cgi-bin/api/dashboard:
+    get:
+      tags:
+        - Public API
+      summary: Dashboard rollup
+      description: |
+        Aggregated health over effectively-active monitors: up (loss
+        below 1%), degraded (1% to 99%), and down (loss at 100%) counts
+        with percents rounded half-up, plus the top five slowest links
+        by current median. Down monitors sort last so the slowest slots
+        go to live links first.
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  dashboard:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                        description: Effectively-active monitors
+                      up:
+                        type: integer
+                        description: Monitors with current loss below 1%
+                      degraded:
+                        type: integer
+                        description: Monitors with current loss between 1% and 99%
+                      down:
+                        type: integer
+                        description: Monitors with current loss at 100%
+                      percent_up:
+                        type: integer
+                      percent_degraded:
+                        type: integer
+                      percent_down:
+                        type: integer
+                      top_slow:
+                        type: array
+                        maxItems: 5
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+                            description:
+                              type: string
+                            agent_id:
+                              type: string
+                              format: uuid
+                            target_id:
+                              type: string
+                              format: uuid
+                            agent_name:
+                              type: string
+                            target_address:
+                              type: string
+                            current_median:
+                              type: number
+                            current_loss:
+                              type: number
 
   /cgi-bin/api/rrd:
     get:
@@ -1740,9 +2022,32 @@ paths:
       tags:
         - Users
       summary: List all users
-      description: Returns a list of all users in the system. Requires admin privileges. Passwords are never included in the response.
+      description: Returns a list of users in the system. Requires admin privileges. Passwords are never included in the response. Optional query filters - q (substring match over username, full_name and email), is_admin and is_active (only 0 or 1 accepted; any other value is ignored).
       security:
         - bearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema:
+            type: string
+          description: Substring filter matched against username, full_name and email
+        - in: query
+          name: is_admin
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1
+          description: Filter by admin role (only 0 or 1 accepted; any other value is ignored)
+        - in: query
+          name: is_active
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1
+          description: Filter by account status (only 0 or 1 accepted; any other value is ignored)
       responses:
         '200':
           description: Successful operation

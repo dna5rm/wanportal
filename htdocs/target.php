@@ -7,79 +7,41 @@ if (!$id) die("No target ID specified");
 
 $show_inactive = wanportal_get_show_inactive();
 
-try {
-    $stmt = $mysqli->prepare("
-        SELECT id, address, description, is_active
-        FROM targets
-        WHERE id = ?
-    ");
-    if (!$stmt) {
-        throw new Exception("Prepare failed: " . $mysqli->error);
-    }
+// Detail and its monitor list both come from the public API; a null
+// api_get() response (404 or transport failure) reads as "not found".
+$targetResponse = api_get('/targets/' . rawurlencode($id));
+if (!$targetResponse || ($targetResponse['status'] ?? '') !== 'success') {
+    die("Error: Target not found");
+}
+$target = $targetResponse['target'];
 
-    $stmt->bind_param("s", $id);
-    if (!$stmt->execute()) {
-        throw new Exception("Execute failed: " . $stmt->error);
-    }
+$monitorsResponse = api_get('/monitors?target_id=' . rawurlencode($id));
+$monitors = [];
 
-    $result = $stmt->get_result();
-    if (!$result || $result->num_rows === 0) {
-        throw new Exception("Target not found");
-    }
+$monitor_stats = [
+    'total' => 0,
+    'active' => 0,
+    'inactive' => 0,
+    'effectively_inactive' => 0
+];
 
-    $target = $result->fetch_assoc();
-    $stmt->close();
+foreach (($monitorsResponse['monitors'] ?? []) as $row) {
+    // Color classes for the row. Thresholds in lib/monitor_metrics.php.
+    monitor_color_classes($row);
 
-    $stmt = $mysqli->prepare("
-        SELECT
-            m.*,
-            a.name as agent_name,
-            a.description as agent_description,
-            a.is_active as agent_is_active
-        FROM monitors m
-        JOIN agents a ON m.agent_id = a.id
-        WHERE m.target_id = ?
-        ORDER BY a.name, m.description
-    ");
-    if (!$stmt) {
-        throw new Exception("Prepare failed: " . $mysqli->error);
-    }
-
-    $stmt->bind_param("s", $id);
-    if (!$stmt->execute()) {
-        throw new Exception("Execute failed: " . $stmt->error);
-    }
-
-    $result = $stmt->get_result();
-    $monitors = [];
-
-    $monitor_stats = [
-        'total' => 0,
-        'active' => 0,
-        'inactive' => 0,
-        'effectively_inactive' => 0
-    ];
-
-    while ($row = $result->fetch_assoc()) {
-        // Color classes for the row. Thresholds in lib/monitor_metrics.php.
-        monitor_color_classes($row);
-
-        $monitor_stats['total']++;
-        if ($row['is_active'] && $row['agent_is_active'] && $target['is_active']) {
-            $monitor_stats['active']++;
-        } else {
-            $monitor_stats['effectively_inactive']++;
-            if (!$row['is_active']) {
-                $monitor_stats['inactive']++;
-            }
+    $monitor_stats['total']++;
+    if ($row['is_active'] && $row['agent_is_active'] && $target['is_active']) {
+        $monitor_stats['active']++;
+    } else {
+        $monitor_stats['effectively_inactive']++;
+        // monitor_is_active is the monitor's own flag; is_active on the
+        // row is the effective one (monitor AND agent AND target).
+        if (!$row['monitor_is_active']) {
+            $monitor_stats['inactive']++;
         }
-
-        $monitors[] = $row;
     }
-    $stmt->close();
 
-} catch (Exception $e) {
-    die("Error: " . $e->getMessage());
+    $monitors[] = $row;
 }
 
 // Actions. Only "Edit" for non-LOCAL targets, gated on auth.
@@ -192,7 +154,7 @@ wanportal_render_header_row(
                                             $inactive_reason = [];
                                             if (!$target['is_active']) $inactive_reason[] = "Target disabled";
                                             if (!$m['agent_is_active']) $inactive_reason[] = "Agent disabled";
-                                            if (!$m['is_active']) $inactive_reason[] = "Monitor disabled";
+                                            if (!$m['monitor_is_active']) $inactive_reason[] = "Monitor disabled";
                                             ?>
                                             <i class="bi bi-info-circle text-muted"
                                                data-bs-toggle="tooltip"
@@ -270,4 +232,3 @@ wanportal_render_header_row(
     </div>
 
 <?php wanportal_render_page_end(); ?>
-<?php $mysqli->close(); ?>

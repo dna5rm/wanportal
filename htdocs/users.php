@@ -19,10 +19,32 @@ if (!isset($_SESSION['is_admin']) || !$_SESSION['is_admin']) {
 
 // Fetch users from the API via the shared api_get() helper
 // (auto-loaded by config.php), matching agents/targets/monitors.
+//
+// Filtering is server-side: GET /users supports q (substring match over
+// username/full_name/email), is_admin and is_active (0 or 1; any other
+// value is ignored by the API, so they are normalized here too). The
+// "Show Inactive" checkbox maps to is_active: checked == no is_active
+// param (all users), unchecked == is_active=1 (active only).
+$q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
+$is_admin = (isset($_GET['is_admin']) && preg_match('/^[01]$/', $_GET['is_admin'])) ? $_GET['is_admin'] : '';
+$is_active = (isset($_GET['is_active']) && preg_match('/^[01]$/', $_GET['is_active'])) ? $_GET['is_active'] : '';
+$show_inactive = ($is_active === '');
+
+$api_params = [];
+if ($q !== '') {
+    $api_params['q'] = $q;
+}
+if ($is_admin !== '') {
+    $api_params['is_admin'] = $is_admin;
+}
+if ($is_active !== '') {
+    $api_params['is_active'] = $is_active;
+}
+
 $users = [];
-$response = api_get('/users');
+$response = api_get('/users' . ($api_params ? '?' . http_build_query($api_params) : ''));
 if ($response && ($response['status'] ?? '') === 'success') {
-    $users = $response['users'];
+    $users = $response['users'] ?? [];
 }
 
 wanportal_render_head('Users', ['datatables' => true]);
@@ -48,18 +70,19 @@ wanportal_render_header_row('Users', [
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-4">
-                            <input type="text" id="searchFilter" class="form-control" placeholder="Search users...">
+                            <input type="text" id="searchFilter" class="form-control" placeholder="Search users..."
+                                   value="<?= htmlspecialchars($q, ENT_QUOTES, 'UTF-8') ?>">
                         </div>
                         <div class="col-md-2">
                             <select id="adminFilter" class="form-select">
-                                <option value="">All Users</option>
-                                <option value="1">Admins Only</option>
-                                <option value="0">Non-Admins Only</option>
+                                <option value="" <?= $is_admin === '' ? 'selected' : '' ?>>All Users</option>
+                                <option value="1" <?= $is_admin === '1' ? 'selected' : '' ?>>Admins Only</option>
+                                <option value="0" <?= $is_admin === '0' ? 'selected' : '' ?>>Non-Admins Only</option>
                             </select>
                         </div>
                         <div class="col-md-2">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="showInactiveFilter">
+                                <input class="form-check-input" type="checkbox" id="showInactiveFilter" <?= $show_inactive ? 'checked' : '' ?>>
                                 <label class="form-check-label" for="showInactiveFilter">
                                     Show Inactive
                                 </label>
@@ -152,38 +175,49 @@ wanportalPageOnLoad = function() {
     }
 };
 
-// Filter functionality
-document.getElementById('searchFilter').addEventListener('input', filterUsers);
-document.getElementById('adminFilter').addEventListener('change', filterUsers);
-document.getElementById('showInactiveFilter').addEventListener('change', filterUsers);
+// Server-side filters: navigate to the same URL with updated query
+// params; PHP re-queries GET /users (q, is_admin, is_active) and
+// re-renders the table. No client-side row hiding.
 
-function filterUsers() {
-    const search = document.getElementById('searchFilter').value.toLowerCase();
-    const adminFilter = document.getElementById('adminFilter').value;
-    const showInactive = document.getElementById('showInactiveFilter').checked;
-    
-    const rows = document.querySelectorAll('tbody tr');
-    
-    rows.forEach(row => {
-        const username = row.cells[0].textContent.toLowerCase();
-        const fullName = row.cells[1].textContent.toLowerCase();
-        const email = row.cells[2].textContent.toLowerCase();
-        const isAdmin = row.querySelector('.badge').textContent.trim() === 'Admin';
-        const isActive = !row.classList.contains('table-secondary');
-        
-        const searchMatch = username.includes(search) || 
-                          fullName.includes(search) || 
-                          email.includes(search);
-        
-        const adminMatch = adminFilter === '' || 
-                          (adminFilter === '1' && isAdmin) || 
-                          (adminFilter === '0' && !isAdmin);
-        
-        const activeMatch = showInactive || isActive;
-        
-        row.style.display = (searchMatch && adminMatch && activeMatch) ? '' : 'none';
-    });
+// Update one filter param and reload. An empty value removes the param
+// entirely so the API sees no filter for it.
+function applyUsersFilter(key, value) {
+    var url = new URL(window.location.href);
+    if (value === '' || value === null) {
+        url.searchParams.delete(key);
+    } else {
+        url.searchParams.set(key, value);
+    }
+    window.location.href = url.toString();
 }
+
+// Free-text search: debounce keystrokes so typing doesn't reload the
+// page per character; Enter applies immediately.
+var searchTimer = null;
+document.getElementById('searchFilter').addEventListener('input', function() {
+    clearTimeout(searchTimer);
+    var value = this.value.trim();
+    searchTimer = setTimeout(function() {
+        applyUsersFilter('q', value);
+    }, 500);
+});
+document.getElementById('searchFilter').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        clearTimeout(searchTimer);
+        applyUsersFilter('q', this.value.trim());
+    }
+});
+
+document.getElementById('adminFilter').addEventListener('change', function() {
+    applyUsersFilter('is_admin', this.value);
+});
+
+document.getElementById('showInactiveFilter').addEventListener('change', function() {
+    // Checked == show all users (no is_active param);
+    // unchecked == active only (is_active=1).
+    applyUsersFilter('is_active', this.checked ? '' : '1');
+});
 
 // Delete confirmation
 function deleteUser(id, username) {

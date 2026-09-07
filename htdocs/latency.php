@@ -3,20 +3,14 @@ require_once 'config.php';
 require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
 
-// Fetch monitors from API
-$ch = curl_init(API_BASE_URL . '/monitors');
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-$response = curl_exec($ch);
-$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
+// Monitors come from the public API via the shared api_get() helper;
+// the raw curl-to-API dance this page used to do is gone.
+$data = api_get('/monitors');
 
 $latencyIssues = [];
-if ($status === 200) {
-    $data = json_decode($response, true);
-    if ($data['status'] === 'success') {
-        // Filter monitors for latency issues
-        $latencyIssues = array_filter($data['monitors'], 'wanportal_is_latency_issue');
-    }
+if ($data && ($data['status'] ?? '') === 'success') {
+    // Filter monitors for latency issues
+    $latencyIssues = array_filter($data['monitors'], 'wanportal_is_latency_issue');
 }
 
 // Latency Report auto-refreshes every 5 minutes. Pass the meta

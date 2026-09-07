@@ -5,11 +5,25 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CTR="${WANPORTAL_CONTAINER:-wanportal}"
 fail=0
 
-in_ctr() {
-  docker exec "$CTR" "$@"
-}
+# No docker CLI on this host (e.g. we are already inside the container,
+# where /srv is the live tree) - run the suites in-process instead of
+# insisting on a docker inspect we cannot perform.
+if command -v docker >/dev/null 2>&1; then
+  in_ctr() {
+    docker exec "$CTR" "$@"
+  }
+  have_ctr=0
+  if docker inspect "$CTR" >/dev/null 2>&1; then
+    have_ctr=1
+  fi
+else
+  in_ctr() {
+    "$@"
+  }
+  have_ctr=1
+fi
 
-if docker inspect "$CTR" >/dev/null 2>&1; then
+if [ "$have_ctr" -eq 1 ]; then
   if in_ctr sh -c 'command -v prove >/dev/null && test -d /srv/tests/perl'; then
     if in_ctr prove -l -r /srv/tests/perl; then
       echo "PASS  prove /srv/tests/perl"

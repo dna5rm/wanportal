@@ -6,7 +6,7 @@ auth - login, token issuing, and the JWT middleware
 
     # /login is public; the middleware guards the JWT group in the
     # cgi-bin/api dispatcher
-    use auth qw(auth_middleware register_login);
+    use auth qw(auth_middleware register_login register_session);
     register_login($db_config);
     group { under auth_middleware(app->defaults); ... };
 
@@ -16,6 +16,11 @@ Login checks the local users table first (bcrypt) and falls back to
 LDAP when it is enabled in the environment. Success issues a
 one-hour signed JWT carrying the username and an is_admin flag;
 repeated local failures lock the account for half an hour.
+
+The signed claims (username, is_admin, exp) are also returned in
+the /login response so web clients never decode the JWT
+themselves, and C<GET /session> (JWT-protected) echoes the
+caller's claims back.
 
 The middleware guards everything registered inside the route group:
 it requires a Bearer token, verifies the signature and expiry
@@ -41,7 +46,7 @@ eval {
     $LDAP_AVAILABLE = 1;
 };
 
-our @EXPORT_OK = qw(auth_middleware register_login);
+our @EXPORT_OK = qw(auth_middleware register_login register_session);
 
 # ---------------------------------------------------------------------------
 # Read LDAP config from environment
@@ -313,8 +318,8 @@ sub register_login {
                 );
                 $dbh->disconnect;
 
-                my $token = _issue_token($c, $username, $local_user->{is_admin} ? 1 : 0);
-                return $c->render(json => { status => 'success', token => $token });
+                my ($token, $claims) = _issue_token($c, $username, $local_user->{is_admin} ? 1 : 0);
+                return $c->render(json => { status => 'success', token => $token, %$claims });
             }
 
             # ----------------------------------------------------------------
@@ -335,9 +340,9 @@ sub register_login {
                     }
                     $dbh->disconnect;
 
-                    my $is_admin = 1; # all valid LDAP authentications are admins
-                    my $token = _issue_token($c, $username, $is_admin);
-                    return $c->render(json => { status => 'success', token => $token });
+                    # all valid LDAP authentications are admins
+                    my ($token, $claims) = _issue_token($c, $username, 1);
+                    return $c->render(json => { status => 'success', token => $token, %$claims });
                 }
             }
 
@@ -375,8 +380,8 @@ sub register_login {
             }
 
             # LDAP success - issue token as admin (all valid LDAP users are admins)
-            my $token = _issue_token($c, $username, 1);
-            return $c->render(json => { status => 'success', token => $token });
+            my ($token, $claims) = _issue_token($c, $username, 1);
+            return $c->render(json => { status => 'success', token => $token, %$claims });
         }
 
         # ----------------------------------------------------------------
@@ -390,6 +395,29 @@ sub register_login {
 }
 
 # ---------------------------------------------------------------------------
+# Session endpoint - echoes the caller's JWT claims
+# ---------------------------------------------------------------------------
+sub register_session {
+
+    # @summary Get current session claims
+    # @description Returns the username, is_admin flag and expiry timestamp
+    # carried by the caller's bearer token. Clients use it to inspect their
+    # session without decoding the JWT themselves.
+    # @tags Authentication
+    # @security bearerAuth
+    main::get '/session' => sub {
+        my $c = shift;
+        my $payload = $c->stash('jwt_payload');
+        return $c->render(json => {
+            status   => 'success',
+            username => $payload->{username},
+            is_admin => $payload->{is_admin},
+            exp      => $payload->{exp},
+        });
+    };
+}
+
+# ---------------------------------------------------------------------------
 # Internal: build and sign a JWT
 # ---------------------------------------------------------------------------
 sub _issue_token {
@@ -397,15 +425,22 @@ sub _issue_token {
 
     my $jwt_secret = $c->app->defaults('jwt_secret');
 
-    return encode_jwt(
-        payload => {
-            username => $username,
-            is_admin => $is_admin ? JSON::true : JSON::false,
-            exp      => time + 3600,
-        },
-        key => $jwt_secret,
-        alg => 'HS256',
+    my %payload = (
+        username => $username,
+        is_admin => $is_admin ? JSON::true : JSON::false,
+        exp      => time + 3600,
     );
+
+    my $token = encode_jwt(
+        payload => \%payload,
+        key     => $jwt_secret,
+        alg     => 'HS256',
+    );
+
+    # Hand the claims back alongside the signed token so the /login
+    # response can carry them and PHP consumers never decode the JWT
+    # themselves.
+    return ($token, \%payload);
 }
 
 1;
