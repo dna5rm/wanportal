@@ -98,14 +98,14 @@ EOF
 RUN mkdir -p /usr/local/sbin
 RUN cat >/usr/local/sbin/cron-run-agent <<'EOF'
 #!/bin/sh
-# Root reads secrets, then the bind-mount script runs as apache.
+# ICMP via Net::Ping needs raw sockets (root). Notify jobs drop to apache.
 if [ -r /srv/.env ]; then
   set -a
   # shellcheck disable=SC1091
   . /srv/.env
   set +a
 fi
-exec su -p -s /bin/sh apache -c 'exec /srv/run-agent.sh'
+exec /srv/run-agent.sh
 EOF
 RUN cat >/usr/local/sbin/cron-run-notify <<'EOF'
 #!/bin/sh
