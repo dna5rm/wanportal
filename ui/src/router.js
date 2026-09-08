@@ -43,14 +43,17 @@ import LoginView from './components/LoginView.vue'
  * updated.
  */
 function detail(path, name, component, legacy, list, alias) {
-    return {
+    const route = {
         path,
-        alias,
         name,
         component,
         props: true,
         meta: { legacy, list }
     }
+    // vue-router iterates alias; undefined throws "aliases is not iterable"
+    // and the whole app mounts nothing (blank page).
+    if (alias) route.alias = alias
+    return route
 }
 
 const routes = [
