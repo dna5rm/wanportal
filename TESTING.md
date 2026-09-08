@@ -9,6 +9,8 @@ bash tests/run.sh                 # unit tests only (Perl prove + PHP CLI)
 
 Both drivers talk to the running `wanportal` container through `docker exec`, so the tests run with the same interpreters the stack serves with. If the container is down, `tests/run.sh` exits nonzero and the live sections of `tests/validate.sh` fail; there is no host-interpreter fallback. Set `WANPORTAL_CONTAINER` or `WANPORTAL_API` if your container or endpoint differ from the defaults.
 
+The Vue 3 SPA under `ui/` (`npm install && npm run build` there publishes static assets to `htdocs/app/`, served at `/app/`) is outside these suites; the PHP console at `/` remains the system of record until cutover.
+
 What each layer does:
 
 - `tests/validate.sh`: `perl -c` on `cgi-bin/api`, `php -l` on every `htdocs` page, a live pass over `GET /health` plus an admin login (the password is read from the container env, never hardcoded), grep gates for fixed audit regressions (LDAP filter escaping, /rrd path allowlist, credential password stripping, delete path prefixes, escaped page titles, cron wrapper privileges), then `tests/run.sh` as the last section. Exit 0 only when everything passes.
