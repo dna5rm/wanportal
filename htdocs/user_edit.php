@@ -8,13 +8,13 @@ require_once 'check_session.php';
 
 // Check authentication and admin status
 if (!isset($_SESSION['user'])) {
-    header('Location: /login.php');
+    header('Location: /classic/login.php');
     exit;
 }
 
 // Check if user is admin
 if (!isset($_SESSION['is_admin']) || !$_SESSION['is_admin']) {
-    header('Location: /');  // Redirect to home page
+    header('Location: /classic/');  // Redirect to home page
     exit;
 }
 
@@ -120,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($status === 200) {
                     $data = json_decode($response, true);
                     if ($data['status'] === 'success') {
-                        header('Location: /users.php?saved=1');
+                        header('Location: /classic/users.php?saved=1');
                         exit;
                     } else {
                         $error = $data['message'] ?? 'Unknown error occurred';
@@ -226,7 +226,7 @@ wanportal_render_header_row(($id ? 'Edit' : 'New') . ' User', [
                             <button type="submit" class="btn btn-primary btn-sm">
                                 <i class="bi bi-save"></i> Save User
                             </button>
-                            <a href="/users.php" class="btn btn-secondary btn-sm">
+                            <a href="/classic/users.php" class="btn btn-secondary btn-sm">
                                 <i class="bi bi-x"></i> Cancel
                             </a>
                         </div>

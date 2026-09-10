@@ -196,7 +196,7 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
         // Cache-bust base.css with its mtime, matching footer.php's
         // ?v= treatment of local JS — without it browsers can serve a
         // stale copy after a deploy and the user sees broken styling.
-        echo '    <link rel="stylesheet" href="/assets/base.css?v=' . filemtime(__DIR__ . '/../assets/base.css') . '">' . "\n";
+        echo '    <link rel="stylesheet" href="/classic/assets/base.css?v=' . filemtime(__DIR__ . '/../assets/base.css') . '">' . "\n";
 
         // Page-specific extras (custom <meta> tags, additional
         // <link> tags, etc.). The caller is responsible for
@@ -325,7 +325,7 @@ if (!defined('WANPORTAL_PAGE_LIB_LOADED')) {
         }
 
         // Home button — always rendered, goes to /index.php.
-        echo '                <a href="/index.php" class="btn btn-secondary btn-sm">' . "\n";
+        echo '                <a href="/classic/index.php" class="btn btn-secondary btn-sm">' . "\n";
         echo '                    <i class="bi bi-house-door"></i> Home' . "\n";
         echo '                </a>' . "\n";
 

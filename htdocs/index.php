@@ -91,7 +91,7 @@ wanportal_render_head('Console', [
                         }
                     ?>
                     <li class="list-group-item <?= $bgClass ?>">
-                        <a href="/agent.php?id=<?= htmlspecialchars($agent['id']) ?>" 
+                        <a href="/classic/agent.php?id=<?= htmlspecialchars($agent['id']) ?>" 
                            title="<?= htmlspecialchars($agent['description']) ?> (<?= htmlspecialchars($agent['address']) ?>)&#13;Last seen: <?= htmlspecialchars($agent['last_seen']) ?>" 
                            data-bs-toggle="tooltip" 
                            data-html="true">
@@ -107,13 +107,13 @@ wanportal_render_head('Console', [
         <div class="col">
             <div class="row mb-3">
                 <div class="col text-end d-flex justify-content-end align-items-center gap-3">
-                    <a href="/latency.php" class="btn btn-outline-primary btn-sm">
+                    <a href="/classic/latency.php" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-speedometer2"></i> Latency </a> |
                     <a href="/api-docs/swagger.php" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-braces"></i> API </a>
-                    <a href="/server.php" class="btn btn-outline-primary btn-sm">
+                    <a href="/classic/server.php" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-graph-up"></i> Runtime </a>
-                    <form action="/search.php" method="GET" class="d-flex align-items-center">
+                    <form action="/classic/search.php" method="GET" class="d-flex align-items-center">
                         <input type="text" name="q" class="form-control form-control-sm me-2" placeholder="Search monitors...">
                         <button type="submit" class="btn btn-primary btn-sm">
                             <i class="bi bi-search"></i>
@@ -208,7 +208,7 @@ wanportal_render_head('Console', [
                         ?>
                             <tr>
                                 <td>
-                                    <a href="/monitor.php?id=<?= htmlspecialchars($m['id']) ?>"
+                                    <a href="/classic/monitor.php?id=<?= htmlspecialchars($m['id']) ?>"
                                        class="text-decoration-none">
                                         <?= htmlspecialchars($m['description'] ?? $m['id']) ?>
                                     </a>
@@ -274,7 +274,7 @@ wanportal_render_head('Console', [
                                 ?>
                                 <tr class="<?= $rowClass ?>">
                                     <td>
-                                        <a href="/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>"
+                                        <a href="/classic/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>"
                                            class="text-decoration-none">
                                             <?= htmlspecialchars($monitor['description']) ?>
                                         </a>

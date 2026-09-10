@@ -1,7 +1,7 @@
 // assets/js/proxy.js
 //
 // Small helper for making state-changing calls (DELETE, PUT, PATCH,
-// POST) to the API. The browser POSTs to /proxy.php with a CSRF
+// POST) to the API. The browser POSTs to /classic/proxy.php with a CSRF
 // token; proxy.php reads the session's JWT and forwards to the
 // internal cgi-bin/api. This keeps the JWT out of the page source.
 //
@@ -25,7 +25,7 @@
     }
 
     /**
-     * Make an authenticated, CSRF-protected request through /proxy.php.
+     * Make an authenticated, CSRF-protected request through /classic/proxy.php.
      *
      * @param {string} method  HTTP method to forward to the API
      * @param {string} path    API path beginning with /
@@ -46,7 +46,7 @@
             envelope.body = body;
         }
 
-        return fetch('/proxy.php', {
+        return fetch('/classic/proxy.php', {
             method: 'POST',
             credentials: 'same-origin',
             headers: {

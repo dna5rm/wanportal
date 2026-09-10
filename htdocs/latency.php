@@ -64,7 +64,7 @@ wanportal_render_header_row('Latency Report');
                     ?>
                     <tr class="<?= $rowClass ?>">
                         <td>
-                            <a href="/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>" class="text-decoration-none">
+                            <a href="/classic/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>" class="text-decoration-none">
                                 <?= !empty($monitor['description']) ? htmlspecialchars($monitor['description']) : htmlspecialchars($monitor['id']) ?>
                             </a>
                         </td>

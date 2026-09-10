@@ -44,3 +44,47 @@ Header always set Content-Security-Policy "default-src 'self'; script-src 'self'
 # If you want the Server: header to say just "Apache" instead of
 # "Apache/2.4.67 (Unix)", set ServerTokens Prod in httpd.conf.
 ServerSignature Off
+
+# ---------------------------------------------------------------------------
+# Console cutover: the classic PHP pages are served at /classic
+# ---------------------------------------------------------------------------
+# The document root now belongs to the new UI (index.html); the classic
+# PHP console is reached under /classic/ while its files stay physically
+# in this directory. Keeping the files in place means relative includes
+# (require_once 'config.php', __DIR__ paths) and the PHP working
+# directory are untouched by the URL change.
+#
+# "/" must prefer the new UI's index.html over the classic index.php.
+DirectoryIndex index.html index.php
+
+RewriteEngine On
+
+# /classic and /classic/ are the console dashboard (index.php).
+RewriteRule ^classic/?$ index.php [L]
+
+# /classic/<anything> serves <anything> from this same directory via an
+# INTERNAL rewrite: the browser keeps /classic/... in the address bar,
+# REQUEST_URI stays /classic/..., and PHP_SELF keeps pointing at the
+# physical script, so basename($_SERVER['PHP_SELF']) menu highlighting
+# in navbar.php keeps working. index.html is pinned to the dashboard
+# because the docroot copy belongs to the new UI.
+RewriteRule ^classic/index\.html$ index.php [L]
+# cgi-bin is NOT part of the classic namespace: the CGI API is aliased
+# only at /cgi-bin/..., so /classic/cgi-bin/... must fall through to a
+# 404 instead of being rewritten onto the real CGI endpoints.
+RewriteRule ^classic/(?!cgi-bin(?:/|$))(.+)$ $1 [L]
+
+# Old bookmarks from before the /classic rename: /legacy/* URLs redirect
+# (302) to their /classic/* location so existing links keep working.
+RewriteRule ^legacy/?(.*)$ /classic/$1 [R=302,L,NE]
+
+# Pre-cutover bookmarks: root-level *.php requests redirect (302) to
+# their /classic/ location. THE_REQUEST is the ORIGINAL client request
+# line, so this never loops on the internally rewritten /classic/* path
+# and never fires on the mod_dir subrequest for "/".
+# The substitution must be an ABSOLUTE URL path (/classic/$1): with an
+# [R] flag, mod_rewrite resolves a RELATIVE substitution against the
+# per-directory prefix, which leaks the filesystem path
+# (/var/www/localhost/htdocs/...) into the Location header.
+RewriteCond %{THE_REQUEST} "^[A-Z]+\s+/(?!classic/)[^?]*\.php[? ]"
+RewriteRule ^([^/]+\.php)$ /classic/$1 [R=302,L,NE]

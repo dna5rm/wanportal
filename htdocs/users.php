@@ -7,13 +7,13 @@ require_once 'check_session.php';
 
 // Check authentication and admin status
 if (!isset($_SESSION['user'])) {
-    header('Location: /login.php');
+    header('Location: /classic/login.php');
     exit;
 }
 
 // Check if user is admin
 if (!isset($_SESSION['is_admin']) || !$_SESSION['is_admin']) {
-    header('Location: /');  // Redirect to home page
+    header('Location: /classic/');  // Redirect to home page
     exit;
 }
 
@@ -142,7 +142,7 @@ wanportal_render_header_row('Users', [
                         </td>
                         <td>
                             <div class="btn-group">
-                                <a href="/user_edit.php?id=<?= htmlspecialchars($user['id']) ?>" 
+                                <a href="/classic/user_edit.php?id=<?= htmlspecialchars($user['id']) ?>" 
                                    class="btn btn-sm btn-outline-secondary"
                                    title="Edit">
                                     <i class="bi bi-pencil"></i>

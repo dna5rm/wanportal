@@ -22,7 +22,7 @@ if (isset($_POST['logout'])) {
     }
     
     // Redirect to login page
-    header('Location: /login.php');
+    header('Location: /classic/login.php');
     exit;
 }
 
@@ -56,8 +56,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
 <nav class="navbar navbar-expand navbar-dark mb-4" style="background-color: #102444; border-bottom: 0;">
     <div class="container-fluid">
         <!-- Brand and toggler -->
-        <a class="navbar-brand d-flex align-items-center" href="/">
-            <img src="/assets/logo.png" class="d-inline-block align-top me-2" style="height: 35px; width: 125px;" alt="Logo" />
+        <a class="navbar-brand d-flex align-items-center" href="/classic/">
+            <img src="/classic/assets/logo.png" class="d-inline-block align-top me-2" style="height: 35px; width: 125px;" alt="Logo" />
             <!-- <span><?= htmlspecialchars(strtoupper(explode('.', $_SERVER['SERVER_NAME'])[0] ?? 'NETPING')) ?></span> -->
         </a>
 
@@ -152,7 +152,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark" aria-labelledby="userDropdown">
                             <li>
-                                <form method="post" action="/index.php" class="dropdown-item-text">
+                                <form method="post" action="/classic/index.php" class="dropdown-item-text">
                                     <input type="hidden" name="csrf_token" 
                                         value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>" />
                                     <button name="logout" class="btn btn-danger w-100" type="submit">
@@ -167,7 +167,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <!-- Login button for unauthenticated users -->
                 <ul class="navbar-nav ms-3">
                     <li class="nav-item">
-                        <a href="/login.php" class="btn btn-outline-light">
+                        <a href="/classic/login.php" class="btn btn-outline-light">
                             <i class="bi bi-box-arrow-in-right"></i> Login
                         </a>
                     </li>

@@ -137,6 +137,66 @@ sys.exit(0)
 PY
 fi
 
+# ---- URL contract (SPA cutover) ------------------------------------------
+# The Vue SPA is the UI served at /; the classic PHP console stays at
+# /classic (with or without the trailing slash); the old /app alias is
+# retired and must 404; the CGI API
+# base /cgi-bin/api is untouched (covered by the /health check above).
+site_root="${WANPORTAL_BASE:-${API%/cgi-bin/api}}"
+fetch() { curl -sSL -o "$2" -w '%{http_code}' --max-time 8 "$1" || echo 000; }
+is_spa() { grep -q 'id="app"' "$1" && grep -q 'type="module"' "$1"; }
+is_php_console() {
+  grep -q '</html>' "$1" && ! grep -q 'id="app"' "$1" &&
+    grep -q -e 'assets/base\.css' -e 'listings\.js' \
+            -e 'cdn\.datatables' -e 'Cache-Control' "$1"
+}
+
+echo
+echo "== url contract =="
+code=$(fetch "$site_root/" /tmp/wanportal-root.html)
+if [[ "$code" == "200" ]] && is_spa /tmp/wanportal-root.html; then
+  ok "GET / serves the SPA shell (div#app + module script)"
+else
+  bad "GET / http $code is not the SPA shell (want 200 with div#app; PHP console still at /?)"
+fi
+
+spa_src=$(grep -o '<script[^>]*type="module"[^>]*' /tmp/wanportal-root.html 2>/dev/null |
+          grep -o 'src="[^"]*"' | head -1 | cut -d'"' -f2 || true)
+spa_asset_code="000"
+if [[ -n "$spa_src" ]]; then
+  case "$spa_src" in
+    http*) spa_asset_url="$spa_src" ;;
+    *)     spa_asset_url="$site_root$spa_src" ;;
+  esac
+  spa_asset_code=$(fetch "$spa_asset_url" /tmp/wanportal-spa-asset.js)
+fi
+if [[ "$spa_asset_code" == "200" ]]; then
+  ok "SPA module bundle resolves ($spa_src -> 200)"
+else
+  bad "SPA module bundle does not resolve (http $spa_asset_code from ${spa_src:-<no module script>})"
+fi
+
+classic_code=$(fetch "$site_root/classic" /tmp/wanportal-classic.html)
+if [[ "$classic_code" == "200" ]] && is_php_console /tmp/wanportal-classic.html; then
+  ok "GET /classic serves the PHP console (/classic or /classic/)"
+else
+  bad "GET /classic http $classic_code is not the PHP console (want 200 server-rendered console)"
+fi
+
+login_code=$(fetch "$site_root/classic/login.php" /tmp/wanportal-classic-login.html)
+if [[ "$login_code" == "200" ]] && grep -q 'Login' /tmp/wanportal-classic-login.html; then
+  ok "GET /classic/login.php is 200 and contains Login"
+else
+  bad "GET /classic/login.php http $login_code (want 200 PHP Login page)"
+fi
+
+app_code=$(fetch "$site_root/app" /tmp/wanportal-app.html)
+if [[ "$app_code" == "404" ]]; then
+  ok "GET /app is retired (404; the SPA lives at /)"
+else
+  bad "GET /app http $app_code (want 404: /app alias removed, SPA is at /)"
+fi
+
 # Host header must not be used as API URL in netping.php
 if grep -n "https://{\$server_name}" "$ROOT/htdocs/netping.php" >/dev/null; then
   bad "netping.php still interpolates SERVER_NAME into API URL"

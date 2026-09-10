@@ -55,7 +55,7 @@ if ($raw !== false && $raw !== '' && strpos((string)($_SERVER['CONTENT_TYPE'] ??
     }
 } else {
     // Form-encoded fallback (also covers the case where the browser
-    // submitted the proxy form via <form action="/proxy.php" method="post">).
+    // submitted the proxy form via <form action="/classic/proxy.php" method="post">).
     $envelope = $_POST;
 }
 

@@ -6,7 +6,7 @@ require_once 'check_session.php';
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
-    header('Location: /login.php');
+    header('Location: /classic/login.php');
     exit;
 }
 
@@ -55,18 +55,18 @@ wanportal_render_header_row('Monitors', [
                         ?>
                         <tr class="<?= $effectively_active ? '' : 'table-secondary' ?>">
                             <td>
-                                <a href="/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>" class="text-decoration-none"><?= htmlspecialchars($monitor['description']) ?>
+                                <a href="/classic/monitor.php?id=<?= htmlspecialchars($monitor['id']) ?>" class="text-decoration-none"><?= htmlspecialchars($monitor['description']) ?>
                                 </a>
                             </td>
                             <td>
-                                <a href="/agents_edit.php?id=<?= htmlspecialchars($monitor['agent_id']) ?>"
+                                <a href="/classic/agents_edit.php?id=<?= htmlspecialchars($monitor['agent_id']) ?>"
                                    class="<?= $monitor['agent_is_active'] == 1 ? '' : 'text-muted' ?>">
                                     <?= htmlspecialchars($monitor['agent_name']) ?>
                                     <?= $monitor['agent_is_active'] == 1 ? '' : ' (disabled)' ?>
                                 </a>
                             </td>
                             <td>
-                                <a href="/targets_edit.php?id=<?= htmlspecialchars($monitor['target_id']) ?>"
+                                <a href="/classic/targets_edit.php?id=<?= htmlspecialchars($monitor['target_id']) ?>"
                                    class="<?= $monitor['target_is_active'] == 1 ? '' : 'text-muted' ?>">
                                     <?= htmlspecialchars($monitor['target_address']) ?>
                                     <?= $monitor['target_is_active'] == 1 ? '' : ' (disabled)' ?>
@@ -102,7 +102,7 @@ wanportal_render_header_row('Monitors', [
                             </td>
                             <td>
                                 <div class="btn-group">
-                                    <a href="/monitors_edit.php?id=<?= htmlspecialchars($monitor['id']) ?>" 
+                                    <a href="/classic/monitors_edit.php?id=<?= htmlspecialchars($monitor['id']) ?>" 
                                        class="btn btn-sm btn-outline-secondary"
                                        title="Edit">
                                         <i class="bi bi-pencil"></i>

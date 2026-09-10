@@ -8,7 +8,7 @@ require_once 'check_session.php';
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
-    header('Location: /login.php');
+    header('Location: /classic/login.php');
     exit;
 }
 // Initialize variables
@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($status === 200) {
                     $data = json_decode($response, true);
                     if ($data['status'] === 'success') {
-                        header('Location: /credentials.php?saved=1');
+                        header('Location: /classic/credentials.php?saved=1');
                         exit;
                     } else {
                         $error = $data['message'] ?? 'Unknown error occurred';
@@ -273,7 +273,7 @@ wanportal_render_header_row(($id ? 'Edit' : 'New') . ' Credential', [
             <button type="submit" class="btn btn-primary btn-sm">
                 <i class="bi bi-save"></i> Save Credential
             </button>
-            <a href="/credentials.php" class="btn btn-secondary btn-sm">
+            <a href="/classic/credentials.php" class="btn btn-secondary btn-sm">
                 <i class="bi bi-x"></i> Cancel
             </a>
         </div>

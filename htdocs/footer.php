@@ -19,8 +19,8 @@
      user sees confusing behavior that a hard refresh "fixes" --
      e.g. after a JS change, the dropdown preference might look
      site-broken until a hard reload, which is hard to debug. -->
-<script src="/assets/js/proxy.js?v=<?= filemtime(__DIR__ . '/assets/js/proxy.js') ?>"></script>
-<script src="/assets/js/listings.js?v=<?= filemtime(__DIR__ . '/assets/js/listings.js') ?>"></script>
+<script src="/classic/assets/js/proxy.js?v=<?= filemtime(__DIR__ . '/assets/js/proxy.js') ?>"></script>
+<script src="/classic/assets/js/listings.js?v=<?= filemtime(__DIR__ . '/assets/js/listings.js') ?>"></script>
 
 <script>
     // Select2 init for the searchable <select> elements used on

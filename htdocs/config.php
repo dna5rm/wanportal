@@ -110,7 +110,7 @@ function wanportal_csrf_valid(): bool
 // Menu Structure
 $menuItems = [
     'Home' => [
-        'url' => '/',
+        'url' => '/classic/',
         'icon' => 'bi bi-house-door',
         'auth' => false
     ],
@@ -120,22 +120,22 @@ $menuItems = [
         'auth' => true,
         'items' => [
             'Agents' => [
-                'url' => '/agents.php',
+                'url' => '/classic/agents.php',
                 'icon' => 'bi bi-server',
                 'auth' => true
             ],
             'Targets' => [
-                'url' => '/targets.php',
+                'url' => '/classic/targets.php',
                 'icon' => 'bi bi-bullseye',
                 'auth' => true
             ],
             'Monitors' => [
-                'url' => '/monitors.php',
+                'url' => '/classic/monitors.php',
                 'icon' => 'bi bi-graph-up',
                 'auth' => true
             ],
             'Credentials' => [
-                'url' => '/credentials.php',
+                'url' => '/classic/credentials.php',
                 'icon' => 'bi bi-safe',
                 'auth' => true
             ],
@@ -144,7 +144,7 @@ $menuItems = [
 ];
 if (getenv('AUTH_LDAP_ENABLED') !== 'true') {
     $menuItems['Admin']['items']['Users'] = [
-        'url' => '/users.php',
+        'url' => '/classic/users.php',
         'icon' => 'bi bi-people',
         'admin' => true
     ];

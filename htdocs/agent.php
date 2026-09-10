@@ -146,7 +146,7 @@ wanportal_render_header_row(
                                             <del class="text-muted">
                                         <?php endif; ?>
                                         
-                                        <a href="/monitor.php?id=<?= htmlspecialchars($m['id']) ?>" 
+                                        <a href="/classic/monitor.php?id=<?= htmlspecialchars($m['id']) ?>" 
                                            class="<?= $effectively_active ? 'text-decoration-none' : 'text-muted' ?>"
                                            title="<?= htmlspecialchars($m['id']) ?>" 
                                            data-bs-toggle="tooltip">
@@ -167,7 +167,7 @@ wanportal_render_header_row(
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <a href="/target.php?id=<?= htmlspecialchars($m['target_id']) ?>"
+                                        <a href="/classic/target.php?id=<?= htmlspecialchars($m['target_id']) ?>"
                                            class="<?= $effectively_active ? 'text-decoration-none' : 'text-muted' ?>">
                                             <?= htmlspecialchars($m['target_address']) ?>
                                         </a>

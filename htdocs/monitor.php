@@ -118,7 +118,7 @@ wanportal_render_header_row($title, $actions, ['extra_buttons' => $extra_buttons
                         </li>
                         <li class="list-group-item">
                             <strong>Agent:</strong><br/>
-                            <a href="/agent.php?id=<?= htmlspecialchars($monitor['agent_id']) ?>"
+                            <a href="/classic/agent.php?id=<?= htmlspecialchars($monitor['agent_id']) ?>"
                                title="<?= htmlspecialchars($monitor['agent_id']) ?>"
                                data-bs-toggle="tooltip">
                                 <?= htmlspecialchars($monitor['agent_name']) ?>
@@ -126,7 +126,7 @@ wanportal_render_header_row($title, $actions, ['extra_buttons' => $extra_buttons
                         </li>
                         <li class="list-group-item">
                             <strong>Target:</strong><br/>
-                            <a href="/target.php?id=<?= htmlspecialchars($monitor['target_id']) ?>"
+                            <a href="/classic/target.php?id=<?= htmlspecialchars($monitor['target_id']) ?>"
                                title="<?= htmlspecialchars($monitor['target_id']) ?>"
                                data-bs-toggle="tooltip">
                                 <?= htmlspecialchars($monitor['target_address']) ?>

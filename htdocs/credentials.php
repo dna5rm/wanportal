@@ -21,7 +21,7 @@ require_once 'check_session.php';
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
-    header('Location: /login.php');
+    header('Location: /classic/login.php');
     exit;
 }
 
@@ -97,7 +97,7 @@ wanportal_render_header_row('Credentials Management', [
                 <?php foreach ($credentials as $cred): ?>
                     <tr class="<?= $cred['is_active'] ? '' : 'table-secondary' ?>">
                         <td>
-                            <a href="/credential_view.php?id=<?= htmlspecialchars($cred['id']) ?>"
+                            <a href="/classic/credential_view.php?id=<?= htmlspecialchars($cred['id']) ?>"
                                class="text-decoration-none"
                                data-bs-toggle="tooltip"
                                title="<?= htmlspecialchars($cred['comment']) ?>">
@@ -123,12 +123,12 @@ wanportal_render_header_row('Credentials Management', [
                         </td>
                         <td>
                             <div class="btn-group">
-                                <a href="/credential_view.php?id=<?= htmlspecialchars($cred['id']) ?>" 
+                                <a href="/classic/credential_view.php?id=<?= htmlspecialchars($cred['id']) ?>" 
                                    class="btn btn-sm btn-outline-primary"
                                    title="View">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                <a href="/credential_edit.php?id=<?= htmlspecialchars($cred['id']) ?>" 
+                                <a href="/classic/credential_edit.php?id=<?= htmlspecialchars($cred['id']) ?>" 
                                    class="btn btn-sm btn-outline-secondary"
                                    title="Edit">
                                     <i class="bi bi-pencil"></i>

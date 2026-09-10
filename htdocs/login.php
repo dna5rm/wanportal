@@ -4,7 +4,7 @@ require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
 // Check if user already logged in
 if (isset($_SESSION['user'])) {
-    header('Location: /index.php');
+    header('Location: /classic/index.php');
     exit;
 }
 
@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     $_SESSION['last_activity'] = time();
                     
-                    header('Location: /index.php');
+                    header('Location: /classic/index.php');
                     exit;
                 }
             }

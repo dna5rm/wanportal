@@ -6,7 +6,7 @@ require_once 'check_session.php';
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
-    header('Location: /login.php');
+    header('Location: /classic/login.php');
     exit;
 }
 
@@ -45,7 +45,7 @@ wanportal_render_header_row('Targets', [
         <?php foreach ($targets as $target): ?>
                         <tr class="<?= $target['is_active'] ? '' : 'table-secondary' ?>">
                             <td>
-                                <a href="/target.php?id=<?= htmlspecialchars($target['id']) ?>" class="text-decoration-none">
+                                <a href="/classic/target.php?id=<?= htmlspecialchars($target['id']) ?>" class="text-decoration-none">
                                     <?= htmlspecialchars($target['address']) ?>
                                 </a>
                             </td>
@@ -57,7 +57,7 @@ wanportal_render_header_row('Targets', [
                             </td>
                             <td>
                                 <div class="btn-group">
-                                    <a href="/targets_edit.php?id=<?= htmlspecialchars($target['id']) ?>" 
+                                    <a href="/classic/targets_edit.php?id=<?= htmlspecialchars($target['id']) ?>" 
                                        class="btn btn-sm btn-outline-secondary"
                                        title="Edit">
                                         <i class="bi bi-pencil"></i>

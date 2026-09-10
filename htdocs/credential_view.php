@@ -37,13 +37,13 @@ require_once 'check_session.php';
 
 // Check authentication
 if (!isset($_SESSION['user'])) {
-    header('Location: /login.php');
+    header('Location: /classic/login.php');
     exit;
 }
 
 $id = $_GET['id'] ?? '';
 if (!$id) {
-    header('Location: /credentials.php');
+    header('Location: /classic/credentials.php');
     exit;
 }
 
@@ -63,13 +63,13 @@ $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
 if ($status !== 200) {
-    header('Location: /credentials.php');
+    header('Location: /classic/credentials.php');
     exit;
 }
 
 $data = json_decode($response, true);
 if ($data['status'] !== 'success' || !isset($data['credential'])) {
-    header('Location: /credentials.php');
+    header('Location: /classic/credentials.php');
     exit;
 }
 

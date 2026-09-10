@@ -71,7 +71,7 @@ function check_session() {
         session_destroy();
         
         // Redirect to login page
-        header('Location: /login.php');
+        header('Location: /classic/login.php');
         exit;
     }
 }

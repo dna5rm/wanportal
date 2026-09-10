@@ -4,7 +4,7 @@ require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
 $search = trim($_GET['q'] ?? '');
 if (empty($search)) {
-    header('Location: /index.php');
+    header('Location: /classic/index.php');
     exit;
 }
 
@@ -60,7 +60,7 @@ wanportal_render_header_row('Search: ' . $search, [], [
      so the user can re-run a search without scrolling back up to
      the page title. The form is a thin row (mb-2) so it doesn't
      compete with the page title visually. -->
-<form action="/search.php" method="GET" class="row mb-2 justify-content-end">
+<form action="/classic/search.php" method="GET" class="row mb-2 justify-content-end">
     <div class="col-md-4 col-lg-3">
         <div class="input-group input-group-sm">
             <input type="text"
@@ -139,7 +139,7 @@ wanportal_render_header_row('Search: ' . $search, [], [
                                 ?>
                                 <tr class="<?= $m['effectively_active'] ? '' : 'table-secondary' ?>">
                                     <td>
-                                        <a href="/monitor.php?id=<?= htmlspecialchars($m['id']) ?>"
+                                        <a href="/classic/monitor.php?id=<?= htmlspecialchars($m['id']) ?>"
                                            class="<?= $m['effectively_active'] ? 'text-decoration-none' : 'text-muted' ?>"
                                            title="<?= htmlspecialchars($m['id']) ?>"
                                            data-bs-toggle="tooltip">
@@ -147,13 +147,13 @@ wanportal_render_header_row('Search: ' . $search, [], [
                                         </a>
                                     </td>
                                     <td>
-                                        <a href="/agent.php?id=<?= htmlspecialchars($m['agent_id']) ?>"
+                                        <a href="/classic/agent.php?id=<?= htmlspecialchars($m['agent_id']) ?>"
                                            class="<?= $m['effectively_active'] ? 'text-decoration-none' : 'text-muted' ?>">
                                             <?= htmlspecialchars($m['agent_name']) ?>
                                         </a>
                                     </td>
                                     <td>
-                                        <a href="/target.php?id=<?= htmlspecialchars($m['target_id']) ?>"
+                                        <a href="/classic/target.php?id=<?= htmlspecialchars($m['target_id']) ?>"
                                            class="<?= $m['effectively_active'] ? 'text-decoration-none' : 'text-muted' ?>">
                                             <?= htmlspecialchars($m['target_address']) ?>
                                         </a>

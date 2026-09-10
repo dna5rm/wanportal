@@ -114,7 +114,7 @@ wanportal_render_header_row('Script: ' . basename($filename));
                     <div class="card-body">
                         <h5 class="card-title">Docker Image</h5>
                         <p class="mb-3">
-                            <a href="/assets/netping_latest.tar.gz" class="btn btn-primary btn-sm">
+                            <a href="/classic/assets/netping_latest.tar.gz" class="btn btn-primary btn-sm">
                                 <i class="bi bi-download"></i> Download 
                             </a>
                         </p>
