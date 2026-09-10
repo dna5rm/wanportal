@@ -6,11 +6,16 @@
   only. Sign-in is SPA-only: there is no classic login.php door here.
 -->
 <script setup>
-import { ref } from 'vue'
+import { inject, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { login } from '../session'
 
 const router = useRouter()
+/* App provides its session probe; re-running it right after a
+ * successful sign-in is what flips the account menu on. When the
+ * form is mounted outside the shell (specs, classic embeds) there is
+ * nothing to inject and the redirect alone carries the update. */
+const sessionProbe = inject('sessionProbe', null)
 
 const username = ref('')
 const password = ref('')
@@ -24,6 +29,9 @@ async function submit() {
     try {
         await login(username.value.trim(), password.value)
         password.value = '' // keep the secret out of the form state
+        // Light the account menu before the redirect: the probe reads
+        // the token login() just parked, so the chip shows the user.
+        if (sessionProbe) await sessionProbe()
         router.push('/')
     } catch (err) {
         error.value = err && err.message === 'HTTP 401'

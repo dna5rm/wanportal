@@ -1,8 +1,10 @@
 /*
  * LoginView specs: the form posts to the JSON login endpoint, parks
- * the token in sessionStorage (never localStorage), flips to the
- * dashboard on success, and shows a clean message on bad credentials.
- * A memory-history router backs the push, so no real navigation runs.
+ * the token in sessionStorage (never localStorage), re-probes the
+ * session through the probe App provides (so the account menu lights
+ * before the redirect), flips to the dashboard on success, and shows
+ * a clean message on bad credentials. A memory-history router backs
+ * the push, so no real navigation runs.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -72,6 +74,36 @@ describe('LoginView', () => {
         // Success flips to the dashboard, no error line left behind.
         expect(router.currentRoute.value.path).toBe('/')
         expect(wrapper.find('.err-note').exists()).toBe(false)
+    })
+
+    it('re-probes the session on success, before the redirect', async () => {
+        const fetchMock = vi.fn(async () => ({
+            ok: true,
+            status: 200,
+            json: async () => ({ status: 'success', token: 'jwt-lv', username: 'ops', is_admin: 1, exp: 1781 })
+        }))
+        vi.stubGlobal('fetch', fetchMock)
+
+        // The probe runs while the form still sits on /login — that is
+        // the call that lights the account menu without a reload, even
+        // when the redirect itself does not move the route.
+        let probedAt = null
+        const probe = vi.fn(() => { probedAt = router.currentRoute.value.path })
+        const router = makeRouter()
+        await router.push('/login')
+        await router.isReady()
+        const wrapper = mount(LoginView, {
+            global: { plugins: [router], provide: { sessionProbe: probe } }
+        })
+
+        await wrapper.find('#login-user').setValue('ops')
+        await wrapper.find('#login-pass').setValue('secret')
+        await wrapper.find('form').trigger('submit')
+        await flushPromises()
+
+        expect(probe).toHaveBeenCalledTimes(1)
+        expect(probedAt).toBe('/login')
+        expect(router.currentRoute.value.path).toBe('/')
     })
 
     it('shows the wrong-credentials message on 401 and stores nothing', async () => {

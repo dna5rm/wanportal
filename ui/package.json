@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "swagger-ui-dist": "^5.32.15",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },

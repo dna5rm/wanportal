@@ -34,6 +34,16 @@ describe('router boot', () => {
         expect(router.resolve('/agent/abc').name).toBe('agent')
         expect(router.resolve('/target/abc').name).toBe('target')
     })
+
+    it('resolves the runtime and api doors as in-app hash hrefs', () => {
+        // SessionChip links these with router-link now — under hash
+        // history the href must come out as '#/runtime' / '#/api',
+        // never the old /classic/server.php or a bare doc-root /api-docs.
+        expect(router.resolve('/runtime').name).toBe('runtime')
+        expect(router.resolve('/runtime').href).toBe('#/runtime')
+        expect(router.resolve('/api').name).toBe('api')
+        expect(router.resolve('/api').href).toBe('#/api')
+    })
 })
 
 describe('auth gate', () => {
@@ -53,7 +63,10 @@ describe('auth gate', () => {
         ]
         // Dashboard, tools and the drill-down details stay public —
         // the dashboard links those records for anonymous visitors.
-        const open = ['dashboard', 'search', 'latency', 'login', 'monitor', 'agent', 'target', 'agent-netping']
+        // /runtime and /api are public too: the runtime page and
+        // the swagger the classic console served outside check_session.
+        const open = ['dashboard', 'search', 'latency', 'runtime', 'api', 'login',
+            'monitor', 'agent', 'target', 'agent-netping']
 
         for (const name of gated) {
             expect(byName.get(name), name).toBeDefined()
@@ -107,6 +120,13 @@ describe('auth gate', () => {
         // The dashboard's drill-down detail stays reachable signed out.
         await router.push('/monitors/abc')
         expect(router.currentRoute.value.name).toBe('monitor')
+
+        // The new doors are public as well — the runtime page and the
+        // swagger render for a visitor the session API never sees.
+        await router.push('/runtime')
+        expect(router.currentRoute.value.name).toBe('runtime')
+        await router.push('/api')
+        expect(router.currentRoute.value.name).toBe('api')
 
         expect(fetchMock).not.toHaveBeenCalled()
     })

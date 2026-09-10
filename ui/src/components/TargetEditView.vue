@@ -158,7 +158,6 @@ async function submit() {
     <header class="bar">
         <div class="bar-title">
             <h1>{{ editing ? 'edit target' : 'new target' }}</h1>
-            <span class="muted">bundled vue · writes go straight to the json api</span>
         </div>
         <div class="bar-right">
             <span v-if="!sessionReady" class="muted">checking session…</span>

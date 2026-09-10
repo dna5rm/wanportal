@@ -32,6 +32,8 @@ import TargetDetailView from './components/TargetDetailView.vue'
 import TargetEditView from './components/TargetEditView.vue'
 import CredentialDetailView from './components/CredentialDetailView.vue'
 import CredentialEditView from './components/CredentialEditView.vue'
+import ServerView from './components/ServerView.vue'
+import ApiDocsView from './components/ApiDocsView.vue'
 import LoginView from './components/LoginView.vue'
 import { getSession } from './session'
 
@@ -178,6 +180,24 @@ const routes = [
         component: CredentialEditView,
         props: true,
         meta: { auth: true }
+    },
+    /* route:server */
+    {
+        // Runtime page, in the app now. Public like the classic
+        // /classic/server.php it replaces — no meta.auth.
+        name: 'runtime',
+        path: '/runtime',
+        component: ServerView
+    },
+    /* route:api-docs */
+    {
+        // Swagger UI lives in the app now, replacing the plain /api-docs
+        // doc root. Public — the API reference is readable signed out.
+        // The hash path /api (#/api) is scheme-distinct from the
+        // /cgi-bin/api data endpoints, so the short path is safe.
+        name: 'api',
+        path: '/api',
+        component: ApiDocsView
     },
     /* route:login */
     {

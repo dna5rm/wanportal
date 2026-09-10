@@ -80,15 +80,24 @@ a { color: var(--up); }
     align-items: center;
 }
 
+/* A bare <button> falls back to the UA's near-black text colour and
+ * zero padding — invisible and barely clickable on the dark bar — so
+ * the label is pinned to the palette and given a real hit area. */
 .account-btn {
     display: inline-flex;
     align-items: center;
     gap: 5px;
     background: none;
     border: none;
-    padding: 0;
+    padding: 2px 6px;
     font: inherit;
+    color: var(--text);
     cursor: pointer;
+}
+
+.account-btn:hover {
+    background: rgba(255, 255, 255, .04);
+    color: var(--text);
 }
 
 .account-menu {

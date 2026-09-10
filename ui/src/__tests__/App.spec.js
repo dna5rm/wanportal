@@ -1,17 +1,21 @@
 /*
  * App shell specs: the bar shows the public pages on the left and the
- * account cluster on the right. The gated listing pages never sit in
+ * account cluster on the right — search is not one of them, it lives
+ * on the dashboard itself. The gated listing pages never sit in
  * the bar itself — they live in the account dropdown, so a signed-out
  * visitor sees none of them anywhere in the chrome, and the classic
  * /classic door exists exactly once, inside that dropdown, only while
- * signed in. The probe is answered by one fetch stub keyed by url —
- * same as the other specs — so the real session.js decides what the
- * answer means.
+ * signed in. The two utility doors — API and Runtime — sit
+ * beside the log-in link while signed out and inside the dropdown
+ * once signed in, never in both places at once. The probe is
+ * answered by one fetch stub keyed by url — same as the other specs —
+ * so the real session.js decides what the answer means.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import App from '../App.vue'
+import LoginView from '../components/LoginView.vue'
 import { jsonReply } from './stubs'
 
 enableAutoUnmount(afterEach)
@@ -22,7 +26,8 @@ afterEach(() => {
     localStorage.clear()
 })
 
-const PUBLIC = ['Dashboard', 'Search', 'Latency']
+/* Search is gone from the chrome entirely: it lives on the dashboard. */
+const PUBLIC = ['Dashboard', 'Latency']
 const GATED = ['Monitors', 'Agents', 'Targets', 'Credentials']
 
 function adminSession() {
@@ -38,15 +43,21 @@ function nonAdminSession() {
  * is read live on every call so a test can flip the answer between
  * route changes (options is the same object the test holds). Every
  * nav target is registered so the router-links resolve, mirroring the
- * production route table's paths.
+ * production route table's paths — /login carries the real LoginView
+ * so a sign-in can run for real inside the shell, answered by
+ * options.loginBody.
  */
 async function mountApp(options = {}) {
     const router = createRouter({
         history: createMemoryHistory(),
         routes: [
             '/', '/monitors', '/agents', '/targets', '/users',
-            '/search', '/latency', '/credentials', '/login'
-        ].map((path) => ({ path, component: { render: () => null } }))
+            '/search', '/latency', '/credentials', '/api', '/runtime',
+            '/login'
+        ].map((path) => ({
+            path,
+            component: path === '/login' ? LoginView : { render: () => null }
+        }))
     })
     await router.push('/')
     await router.isReady()
@@ -58,6 +69,10 @@ async function mountApp(options = {}) {
                 return { ok: false, status: 401, json: async () => ({}) }
             }
             return jsonReply(options.sessionBody || nonAdminSession())
+        }
+        if (url === '/cgi-bin/api/login') {
+            if (!options.loginBody) throw new Error('unexpected login call')
+            return jsonReply(options.loginBody)
         }
         throw new Error('unexpected url: ' + url)
     })
@@ -82,11 +97,22 @@ describe('App chrome for a signed-out visitor', () => {
         // The gated pages live in the account dropdown, not the bar.
         for (const label of [...GATED, 'Users']) expect(wrapper.text()).not.toContain(label)
 
+        // Search left the chrome entirely — the dashboard owns it now;
+        // only the /search deep-link route survives.
+        expect(wrapper.text()).not.toContain('Search')
+        expect(wrapper.findAll('a[href="/search"]')).toHaveLength(0)
+
         // One log-in door on the right; nothing account-ish beyond it.
         expect(wrapper.findAll('a[href="/login"]')).toHaveLength(1)
         expect(wrapper.find('.account-btn').exists()).toBe(false)
         expect(wrapper.findAll('a[href="/classic"]')).toHaveLength(0)
         expect(wrapper.findAll('a[href="/login.php"]')).toHaveLength(0)
+
+        // The two utility doors stay reachable next to log in, so a
+        // signed-out operator can still reach swagger and the runtime
+        // page — in-app now, no /classic/server.php anywhere.
+        expect(wrapper.findAll('a[href="/api"]')).toHaveLength(1)
+        expect(wrapper.findAll('a[href="/runtime"]')).toHaveLength(1)
     })
 })
 
@@ -108,9 +134,14 @@ describe('App chrome for a signed-in admin', () => {
 
         // The gated pages appear once the dropdown is opened.
         await openAccountMenu(wrapper)
-        for (const label of [...PUBLIC, ...GATED, 'Users']) {
+        for (const label of [...PUBLIC, ...GATED, 'Users', 'API', 'Runtime']) {
             expect(wrapper.text()).toContain(label)
         }
+
+        // The utility doors live here and only here once signed in —
+        // no nav-end duplicates beside the account button.
+        expect(wrapper.findAll('a[href="/api"]')).toHaveLength(1)
+        expect(wrapper.findAll('a[href="/runtime"]')).toHaveLength(1)
 
         // Exactly one classic console door in the whole chrome, muted.
         const classic = wrapper.findAll('a[href="/classic"]')
@@ -132,6 +163,7 @@ describe('App chrome for a signed-in non-admin', () => {
         for (const label of GATED) expect(wrapper.text()).toContain(label)
         expect(wrapper.text()).not.toContain('Users')
         expect(wrapper.findAll('a[href="/classic"]')).toHaveLength(1)
+        expect(wrapper.findAll('a[href="/api"]')).toHaveLength(1)
     })
 })
 
@@ -178,5 +210,51 @@ describe('App chrome follows route changes', () => {
         await flushPromises()
 
         expect(wrapper.find('.account-menu').exists()).toBe(false)
+    })
+})
+
+describe('App chrome re-probes on the sign-in flow', () => {
+    it('re-probes when only the hash moves, not just the path', async () => {
+        const options = { sessionStatus: 401 }
+        const { wrapper, router } = await mountApp(options)
+        await router.push('/search')
+        await flushPromises()
+        await flushPromises()
+        expect(wrapper.find('.account-btn').exists()).toBe(false)
+
+        // Same path, different hash: a path-only watch never fires
+        // here, so this is exactly the navigation the login page can
+        // leave behind. The probe must still run.
+        options.sessionStatus = 200
+        options.sessionBody = adminSession()
+        await router.push('/search#recheck')
+        await flushPromises()
+        await flushPromises()
+
+        expect(wrapper.find('.account-btn').text()).toContain('ops-admin')
+    })
+
+    it('lights the account menu when the bundled login form signs in', async () => {
+        const options = { sessionStatus: 401 }
+        const { wrapper, router } = await mountApp(options)
+        await router.push('/login')
+        await flushPromises()
+        expect(wrapper.find('.account-btn').exists()).toBe(false)
+
+        // The login POST answers, and the session probe now sees the
+        // token login() parked — the re-probe LoginView runs turns the
+        // chip into the account menu even before the redirect.
+        options.loginBody = { status: 'success', token: 'jwt-spec', username: 'ops-admin', is_admin: 1, exp: null }
+        options.sessionStatus = 200
+        options.sessionBody = adminSession()
+        await wrapper.find('#login-user').setValue('ops-admin')
+        await wrapper.find('#login-pass').setValue('secret')
+        await wrapper.find('form').trigger('submit')
+        await flushPromises()
+        await flushPromises()
+
+        expect(sessionStorage.getItem('wanportal.jwt')).toBe('jwt-spec')
+        expect(wrapper.find('.account-btn').text()).toContain('ops-admin')
+        expect(router.currentRoute.value.path).toBe('/')
     })
 })

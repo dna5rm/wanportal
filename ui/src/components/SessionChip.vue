@@ -7,8 +7,12 @@
   button — one plain label, no nested chip; the admin claim and the
   token expiry live in its tooltip — that toggles the account
   dropdown: the gated listing pages — Agents, Targets, Monitors,
-  Credentials, plus Users for admins — the muted classic /classic
-  door, and log out. Signing out forgets the tab's token and asks App
+  Credentials, plus Users for admins — then the two in-app doors —
+  API (#/api, the swagger) and Runtime (#/runtime) —
+  above the muted /classic door, and log out. Signed out, the same
+  two doors sit beside the log-in link as compact text so an operator
+  can reach swagger and the runtime page before signing in. Signing
+  out forgets the tab's token and asks App
   to re-probe via the change event. The menu closes on any route
   change and on clicks outside the cluster.
 -->
@@ -69,12 +73,18 @@ async function signOut() {
                 <router-link class="menu-link" to="/monitors">Monitors</router-link>
                 <router-link class="menu-link" to="/credentials">Credentials</router-link>
                 <router-link v-if="session.isAdmin" class="menu-link" to="/users">Users</router-link>
+                <router-link class="menu-link menu-muted" to="/api">API</router-link>
+                <router-link class="menu-link menu-muted" to="/runtime">Runtime</router-link>
                 <a class="menu-link menu-muted" href="/classic">Classic console</a>
                 <button class="menu-link" type="button" title="forget this tab's token" @click="signOut">Log out</button>
             </span>
         </template>
 
-        <router-link v-else-if="session.reason === 'signed-out'" class="nav-link" to="/login">Log in</router-link>
+        <template v-else-if="session.reason === 'signed-out'">
+            <router-link class="nav-link nav-utility" to="/api">API</router-link>
+            <router-link class="nav-link nav-utility" to="/runtime">Runtime</router-link>
+            <router-link class="nav-link" to="/login">Log in</router-link>
+        </template>
 
         <span v-else class="muted" :title="session.error || 'session check failed'">session?</span>
     </span>
@@ -88,4 +98,8 @@ async function signOut() {
     gap: 5px;
     font-size: 11.5px;
 }
+
+/* The signed-out utility doors: the same muted nav-link voice as the
+ * log-in link but smaller, a quiet step below it. */
+.nav-utility { font-size: 11.5px; }
 </style>

@@ -66,7 +66,6 @@ onBeforeUnmount(() => {
     <header class="bar">
         <div class="bar-title">
             <h1>latency report</h1>
-            <span class="muted">public cgi api · auto-refresh 5m</span>
         </div>
         <div class="bar-right">
             <span v-if="fetchedAt" class="muted">updated {{ fmtClock(fetchedAt) }}</span>

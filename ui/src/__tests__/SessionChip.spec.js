@@ -1,10 +1,12 @@
 /*
  * Session chip specs: the chip renders the right-hand account cluster
  * from the probe result App hands it — no fetch of its own. Signed-out
- * shows one log-in door; signed-in shows the username button — one
- * plain label, no nested chip, admin and expiry claimed in the
- * tooltip — whose dropdown carries the gated pages (Users only for
- * admins), the muted classic console link, and log out. The menu
+ * shows one log-in door with the two utility links — API and
+ * Runtime — as compact text beside it; signed-in shows the
+ * username button — one plain label, no nested chip, admin and expiry
+ * claimed in the tooltip — whose dropdown carries the gated pages
+ * (Users only for admins), the API and Runtime doors above
+ * the muted classic console link, and log out. The menu
  * closes on route changes and on clicks outside the cluster, and log
  * out forgets the tab's token and asks App to re-probe via the change
  * event.
@@ -35,7 +37,8 @@ const userClaims = { authenticated: true, reason: 'ok', username: 'read-only', i
 async function mountChip(session) {
     const router = createRouter({
         history: createMemoryHistory(),
-        routes: ['/agents', '/targets', '/monitors', '/credentials', '/users', '/login']
+        routes: ['/agents', '/targets', '/monitors', '/credentials', '/users',
+            '/api', '/runtime', '/login']
             .map((path) => ({ path, component: { render: () => null } }))
     })
     await router.push('/')
@@ -56,6 +59,24 @@ describe('SessionChip while signed out', () => {
         expect(wrapper.find('.account-btn').exists()).toBe(false)
         expect(wrapper.findAll('a[href="/classic"]')).toHaveLength(0)
         expect(wrapper.findAll('a[href="/login.php"]')).toHaveLength(0)
+    })
+
+    it('keeps the swagger and runtime doors reachable beside log in', async () => {
+        const { wrapper } = await mountChip(signedOut)
+
+        // The utility doors sit next to the log-in door as compact
+        // in-app links — both render inside the SPA now, no new tab
+        // and no /classic/server.php hop.
+        const docs = wrapper.findAll('a[href="/api"]')
+        expect(docs).toHaveLength(1)
+        expect(docs[0].text()).toBe('API')
+        expect(docs[0].classes()).toContain('nav-utility')
+
+        const runtime = wrapper.findAll('a[href="/runtime"]')
+        expect(runtime).toHaveLength(1)
+        expect(runtime[0].text()).toBe('Runtime')
+        expect(runtime[0].classes()).toContain('nav-utility')
+        expect(runtime[0].attributes('target')).toBeUndefined()
     })
 })
 
@@ -114,6 +135,17 @@ describe('SessionChip for a signed-in admin', () => {
         expect(classic).toHaveLength(1)
         expect(classic[0].classes()).toContain('menu-muted')
 
+        // The two in-app doors sit above it, muted too.
+        const docs = menu.findAll('a[href="/api"]')
+        expect(docs).toHaveLength(1)
+        expect(docs[0].classes()).toContain('menu-muted')
+
+        expect(menu.findAll('a[href="/runtime"]')).toHaveLength(1)
+        const labels = menu.findAll('a').map((a) => a.text())
+        expect(labels.indexOf('API')).toBeGreaterThan(-1)
+        expect(labels.indexOf('Runtime')).toBeGreaterThan(labels.indexOf('API'))
+        expect(labels.indexOf('Classic console')).toBeGreaterThan(labels.indexOf('Runtime'))
+
         // A second click folds it back up.
         await wrapper.find('.account-btn').trigger('click')
         expect(wrapper.find('.account-menu').exists()).toBe(false)
@@ -132,6 +164,11 @@ describe('SessionChip for a signed-in non-admin', () => {
         const menu = wrapper.find('.account-menu')
         for (const label of GATED) expect(menu.text()).toContain(label)
         expect(menu.text()).not.toContain('Users')
+
+        // The info doors are not admin-gated — a plain operator
+        // reaches swagger and the runtime page too.
+        expect(menu.findAll('a[href="/api"]')).toHaveLength(1)
+        expect(menu.findAll('a[href="/runtime"]')).toHaveLength(1)
     })
 })
 
