@@ -109,6 +109,9 @@ describe('CredentialsView for a signed-in user', () => {
         // No secret anywhere: the list carries no password column and
         // no inputs to reveal one.
         expect(wrapper.find('input[type=password]').exists()).toBe(false)
+
+        // Signed in: the bar's New door is up alongside the table's.
+        expect(wrapper.find('a[href="/credentials/new"]').exists()).toBe(true)
     })
 
     it('refetches server-side when inactive is picked', async () => {
@@ -163,6 +166,8 @@ describe('CredentialsView behind the login wall', () => {
         expect(credUrls).toEqual([])
         expect(router.currentRoute.value.name).toBe('login')
         expect(wrapper.find('table').exists()).toBe(false)
+        // The bar's New door waits for the probe, so it never shows signed-out.
+        expect(wrapper.find('a[href="/credentials/new"]').exists()).toBe(false)
     })
 
     it('walks to /login when the listing answers 401 mid-flight', async () => {
@@ -180,5 +185,7 @@ describe('CredentialsView behind the login wall', () => {
         expect(gate.text()).toContain('session check failed (connection refused)')
         expect(gate.text()).toContain('stays hidden rather than guessed')
         expect(wrapper.find('table').exists()).toBe(false)
+        // A dead probe is not an authenticated session: New stays hidden.
+        expect(wrapper.find('a[href="/credentials/new"]').exists()).toBe(false)
     })
 })

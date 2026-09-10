@@ -12,11 +12,11 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { getJson } from '../api'
+import { getSession } from '../session'
 import { fmtClock, lossClass } from '../format'
 import {
     activeChipCls,
     detailLink,
-    editLink,
     humanErr,
     idFromLocation,
     inactiveReasons,
@@ -36,6 +36,12 @@ const mons = ref(null)          // null = not loaded / failed; [] = genuinely no
 const errors = reactive({ detail: null, mons: null })
 const loading = ref(false)
 const lastOk = ref(null)
+const session = ref(null)
+
+/* The edit door opens the in-app form, but the offer itself waits for
+ * a signed-in SPA session — the classic page's login wall, in probe
+ * form. Nothing on this page mutates anything. */
+const canEdit = computed(() => !!(session.value && session.value.authenticated))
 
 /* The classic page hides effectively-inactive rows behind a toggle;
  * defaulting to showing everything keeps the read-only page honest. */
@@ -78,7 +84,10 @@ async function fetchAll() {
     loading.value = false
 }
 
-onMounted(fetchAll)
+onMounted(async () => {
+    session.value = await getSession()
+    await fetchAll()
+})
 
 /* Same counter rules as target.php: a row is active only when the
  * combined flag is on and this target is itself active; the own-flag
@@ -129,13 +138,13 @@ const visibleMons = computed(() =>
             <span v-if="loading" class="muted">loading…</span>
             <span v-if="lastOk" class="muted">updated {{ fmtClock(lastOk) }}</span>
             <button class="btn" type="button" :disabled="loading" @click="fetchAll">refresh</button>
-            <router-link v-if="targetId" class="btn" :to="{ name: 'target-edit', params: { id: targetId } }">edit</router-link>
+            <router-link v-if="targetId && canEdit" class="btn"
+                         :to="{ name: 'target-edit', params: { id: targetId } }">edit</router-link>
         </div>
     </header>
 
     <div v-if="errors.detail" class="banner banner-error">
         target api: {{ errors.detail }} — nothing below is live data.
-        Classic page: <a :href="'/target.php?id=' + encodeURIComponent(targetId)">target.php</a>
     </div>
 
     <div v-if="target" class="cols">
@@ -236,10 +245,6 @@ const visibleMons = computed(() =>
         </div>
     </div>
 
-    <footer class="muted">
-        vue target detail; classic page at
-        <a :href="'/target.php?id=' + encodeURIComponent(targetId)">target.php</a>
-    </footer>
 </template>
 
 <style scoped>

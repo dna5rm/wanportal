@@ -189,9 +189,6 @@ async function submit() {
         </p>
         <p>
             back to the targets list: <router-link :to="{ name: 'targets' }">/targets</router-link>
-            <template v-if="session && session.reason === 'signed-out'">
-                &nbsp;·&nbsp; sign in on the classic console: <a href="/login.php">/login.php</a>
-            </template>
         </p>
     </div>
 
@@ -227,10 +224,6 @@ async function submit() {
         </form>
     </section>
 
-    <footer class="muted">
-        the classic form still lives at <a href="/targets_edit.php">targets_edit.php</a> —
-        both write to the same api
-    </footer>
 </template>
 
 <style scoped>

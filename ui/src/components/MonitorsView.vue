@@ -3,17 +3,25 @@
   status wording: a row only counts as active when the monitor, its
   agent, and its target are all enabled, and the badge names whichever
   side is disabled. The row title opens the Vue detail route; editing
-  and deleting stay on the classic console forms.
+  opens the in-app monitor form, and deleting is not offered here at all.
 -->
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { getJson } from '../api'
+import { getSession } from '../session'
 import { fmtClock } from '../format'
-import { activeChipCls, editLink } from './detailShared'
+import { activeChipCls } from './detailShared'
 
 const rows = ref([])
 const error = ref(null)
 const loadedAt = ref(null)
+const session = ref(null)
+
+/* Write doors need the SPA session: the classic console enforces its
+ * login server-side, but this listing should not even offer New/Edit
+ * to a signed-out visitor. Reads stay public, so the data loads for
+ * everyone; only the buttons wait for the probe. */
+const canEdit = computed(() => !!(session.value && session.value.authenticated))
 
 /* A monitor is up only when monitor, agent, and target are all enabled —
  * the exact triple check the classic page runs. */
@@ -76,19 +84,21 @@ async function fetchRows() {
     }
 }
 
-onMounted(fetchRows)
+onMounted(async () => {
+    session.value = await getSession()
+    await fetchRows()
+})
 </script>
 
 <template>
     <header class="bar">
         <div class="bar-title">
             <h1>monitors</h1>
-            <span class="muted">bundled vue · edits stay on the classic console</span>
         </div>
         <div class="bar-right">
             <span v-if="loadedAt" class="muted">updated {{ fmtClock(loadedAt) }}</span>
             <button class="btn" type="button" @click="fetchRows">refresh now</button>
-            <router-link class="btn" :to="{ name: 'monitor-new' }">New Monitor</router-link>
+            <router-link v-if="canEdit" class="btn" :to="{ name: 'monitor-new' }">New Monitor</router-link>
         </div>
     </header>
 
@@ -121,16 +131,18 @@ onMounted(fetchRows)
                     </router-link>
                 </td>
                 <td>
-                    <a :href="editLink('agent', m.agent_id)"
-                       :class="{ muted: Number(m.agent_is_active) !== 1 }">
+                    <router-link v-if="m.agent_id" :to="{ name: 'agent', params: { id: m.agent_id } }"
+                                 :class="{ muted: Number(m.agent_is_active) !== 1 }">
                         {{ m.agent_name }}<template v-if="Number(m.agent_is_active) !== 1"> (disabled)</template>
-                    </a>
+                    </router-link>
+                    <template v-else>{{ m.agent_name }}</template>
                 </td>
                 <td>
-                    <a :href="editLink('target', m.target_id)"
-                       :class="{ muted: Number(m.target_is_active) !== 1 }">
+                    <router-link v-if="m.target_id" :to="{ name: 'target', params: { id: m.target_id } }"
+                                 :class="{ muted: Number(m.target_is_active) !== 1 }">
                         {{ m.target_address }}<template v-if="Number(m.target_is_active) !== 1"> (disabled)</template>
-                    </a>
+                    </router-link>
+                    <template v-else>{{ m.target_address }}</template>
                 </td>
                 <td>{{ m.protocol }}</td>
                 <td class="num">{{ portText(m) }}</td>
@@ -142,16 +154,13 @@ onMounted(fetchRows)
                     {{ m.last_update ? fmtStamp(m.last_update) : 'Never' }}
                 </td>
                 <td>
-                    <a class="btn" :href="editLink('monitor', m.id)" title="Edit">edit</a>
+                    <router-link v-if="canEdit" class="btn" :to="{ name: 'monitor-edit', params: { id: m.id } }" title="Edit">edit</router-link>
                 </td>
             </tr>
             </tbody>
         </table>
     </section>
 
-    <footer class="muted">
-        vue listing; deletes and edits live on the classic console
-    </footer>
 </template>
 
 <style scoped>

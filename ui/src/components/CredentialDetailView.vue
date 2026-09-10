@@ -159,7 +159,11 @@ onBeforeUnmount(() => {
         <div class="bar-right">
             <span v-if="loading" class="muted">loading&hellip;</span>
             <router-link class="btn" :to="{ name: 'credentials' }">back to list</router-link>
-            <router-link v-if="cred" class="btn" :to="{ name: 'credential-edit', params: { id: credentialId } }">
+            <!-- cred only ever loads after the probe says signed-in, so
+                 the session clause is declarative — it keeps the edit
+                 door pinned to the gate even if the fetch order changes. -->
+            <router-link v-if="cred && session && session.authenticated" class="btn"
+                         :to="{ name: 'credential-edit', params: { id: credentialId } }">
                 edit
             </router-link>
         </div>
@@ -281,9 +285,6 @@ onBeforeUnmount(() => {
         </section>
     </template>
 
-    <footer class="muted">
-        vue detail · editing lives in the app, deletes on the classic console
-    </footer>
 </template>
 
 <style scoped>

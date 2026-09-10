@@ -52,7 +52,7 @@ export async function postJson(url, body, opts = {}) {
             'Content-Type': 'application/json',
             ...authHeaders()
         },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body == null ? {} : body)
     }, opts);
 }
 

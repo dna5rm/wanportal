@@ -244,9 +244,6 @@ async function save() {
 
 const showForm = computed(() =>
     !redirecting.value && !fillLoading.value && !fillError.value)
-
-const classicUrl = computed(() =>
-    '/monitors_edit.php' + (isEdit.value ? '?id=' + encodeURIComponent(props.id) : ''))
 </script>
 
 <template>
@@ -261,11 +258,9 @@ const classicUrl = computed(() =>
 
     <div v-if="forbidden" class="banner banner-error" role="alert">
         {{ saveError }} — sign in as an admin to save.
-        Classic page: <a :href="classicUrl">monitors_edit.php</a>
     </div>
     <div v-else-if="saveError" class="banner banner-error" role="alert">
         {{ saveError }} — nothing was saved.
-        Classic page: <a :href="classicUrl">monitors_edit.php</a>
     </div>
     <div v-else-if="listError" class="banner banner-warn">{{ listError }}</div>
 
@@ -369,10 +364,6 @@ const classicUrl = computed(() =>
         </form>
     </section>
 
-    <footer class="muted">
-        vue monitor form; the classic page stays at
-        <a :href="classicUrl">monitors_edit.php</a>
-    </footer>
 </template>
 
 <style scoped>

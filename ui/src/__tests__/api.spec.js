@@ -159,6 +159,15 @@ describe('postJson', () => {
         expect(opts.body).toBe(JSON.stringify({ username: 'ops', password: 'secret' }))
     })
 
+    it('posts an empty json object when the caller omits the body', async () => {
+        const fetchMock = vi.fn(async () => ({
+            ok: true, status: 200, json: async () => ({ status: 'success' })
+        }))
+        vi.stubGlobal('fetch', fetchMock)
+        await postJson('/cgi-bin/api/monitor/x/reset')
+        expect(fetchMock.mock.calls[0][1].body).toBe('{}')
+    })
+
     it('sends the bearer header when a token is already stored', async () => {
         setToken('jwt-z')
         const fetchMock = vi.fn(async () => ({

@@ -357,9 +357,6 @@ onMounted(async () => {
         </form>
     </template>
 
-    <footer class="muted">
-        vue form · deletes stay on the classic console at <a href="/credentials.php">/credentials.php</a>
-    </footer>
 </template>
 
 <style scoped>

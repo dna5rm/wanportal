@@ -1,18 +1,26 @@
 <!--
   Targets listing, ported from htdocs/targets.php. The classic table is
   intentionally shorter than the others — address, description, status,
-  and the edit hand-off — so this one stays that way too. Row titles
-  open the Vue detail route; editing goes back to the classic form.
+  and the edit button — so this one stays that way too. Row titles
+  open the Vue detail route; editing opens the in-app target form.
 -->
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { getJson } from '../api'
+import { getSession } from '../session'
 import { fmtClock } from '../format'
-import { activeChipCls, editLink } from './detailShared'
+import { activeChipCls } from './detailShared'
 
 const rows = ref([])
 const error = ref(null)
 const loadedAt = ref(null)
+const session = ref(null)
+
+/* Write doors need the SPA session: the classic console enforces its
+ * login server-side, but this listing should not even offer New/Edit
+ * to a signed-out visitor. Reads stay public, so the data loads for
+ * everyone; only the buttons wait for the probe. */
+const canEdit = computed(() => !!(session.value && session.value.authenticated))
 
 function isActive(t) {
     return Number(t.is_active) === 1
@@ -48,19 +56,21 @@ async function fetchRows() {
     }
 }
 
-onMounted(fetchRows)
+onMounted(async () => {
+    session.value = await getSession()
+    await fetchRows()
+})
 </script>
 
 <template>
     <header class="bar">
         <div class="bar-title">
             <h1>targets</h1>
-            <span class="muted">bundled vue · edits stay on the classic console</span>
         </div>
         <div class="bar-right">
             <span v-if="loadedAt" class="muted">updated {{ fmtClock(loadedAt) }}</span>
             <button class="btn" type="button" @click="fetchRows">refresh now</button>
-            <router-link class="btn" :to="{ name: 'target-new' }">New Target</router-link>
+            <router-link v-if="canEdit" class="btn" :to="{ name: 'target-new' }">New Target</router-link>
         </div>
     </header>
 
@@ -94,16 +104,13 @@ onMounted(fetchRows)
                     </span>
                 </td>
                 <td>
-                    <a class="btn" :href="editLink('target', t.id)" title="Edit">edit</a>
+                    <router-link v-if="canEdit" class="btn" :to="{ name: 'target-edit', params: { id: t.id } }" title="Edit">edit</router-link>
                 </td>
             </tr>
             </tbody>
         </table>
     </section>
 
-    <footer class="muted">
-        vue listing; deletes and edits live on the classic console
-    </footer>
 </template>
 
 <style scoped>

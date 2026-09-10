@@ -142,10 +142,12 @@ describe('CredentialDetailView for an admin', () => {
 
 describe('CredentialDetailView behind the login wall', () => {
     it('walks a signed-out visitor to /login before any fetch', async () => {
-        const { router, wasFetched } = await mountDetail({ sessionStatus: 401 })
+        const { wrapper, router, wasFetched } = await mountDetail({ sessionStatus: 401 })
 
         expect(router.currentRoute.value.name).toBe('login')
         expect(wasFetched()).toBe(false)
+        // Nothing loaded, so no edit door either.
+        expect(wrapper.find('a[href="/credentials/' + C1 + '/edit"]').exists()).toBe(false)
     })
 
     it('keeps the gate up when the session probe dies', async () => {
@@ -153,5 +155,7 @@ describe('CredentialDetailView behind the login wall', () => {
 
         expect(wasFetched()).toBe(false)
         expect(wrapper.find('.gate').text()).toContain('session check failed (connection refused)')
+        // A dead probe is not an authenticated session: edit stays hidden.
+        expect(wrapper.find('a[href="/credentials/' + C1 + '/edit"]').exists()).toBe(false)
     })
 })

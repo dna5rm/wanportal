@@ -256,9 +256,6 @@ onBeforeUnmount(() => {
         </table>
     </section>
 
-    <footer class="muted">
-        vue dashboard; classic console still at <a href="/">/</a>
-    </footer>
 </template>
 
 <style scoped>

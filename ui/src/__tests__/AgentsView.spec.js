@@ -1,20 +1,36 @@
 /*
  * AgentsView is the ported agents.php listing: one GET to
  * /cgi-bin/api/agents, inactive rows floated to the top like the
- * classic table's default order, edit links staying on the classic
- * console. Same stubbed-fetch shape as the monitors spec, with a
- * memory router so the per-row <router-link> resolves for real.
+ * classic table's default order, row edits opening the in-app edit
+ * form. Same stubbed-fetch shape as the monitors spec, with a memory
+ * router so the per-row <router-link> resolves for real.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import AgentsView from '../components/AgentsView.vue'
+import { getSession } from '../session'
 import { jsonReply } from './stubs'
+
+/* The session module is mocked at its door, but api.js rides the real
+ * authHeaders/clearToken/getToken exports, so the original stays loaded
+ * and only the probe is replaced. */
+vi.mock('../session', async (importOriginal) => ({
+    ...await importOriginal(),
+    getSession: vi.fn()
+}))
 
 enableAutoUnmount(afterEach)
 
+beforeEach(() => {
+    // Write doors are signed-in only, so the default probe says admin
+    // signed-in; the gate describe below flips it per case.
+    getSession.mockResolvedValue({ authenticated: true, isAdmin: true })
+})
+
 afterEach(() => {
     vi.unstubAllGlobals()
+    getSession.mockReset()
 })
 
 /* Agent ids are uuids, same as every other detail id in the api. */
@@ -42,7 +58,8 @@ async function mountListing(options = {}) {
             { path: '/', name: 'dashboard', component: { render: () => null } },
             { path: '/agents', name: 'agents', component: { render: () => null } },
             { path: '/agents/new', name: 'agent-new', component: { render: () => null } },
-            { path: '/agents/:id', name: 'agent', component: { render: () => null }, props: true }
+            { path: '/agents/:id', name: 'agent', component: { render: () => null }, props: true },
+            { path: '/agents/:id/edit', name: 'agent-edit', component: { render: () => null }, props: true }
         ]
     })
     await router.push('/')
@@ -98,9 +115,9 @@ describe('AgentsView', () => {
         expect(rows[1].findAll('td')[4].attributes('title')).toBe('2026-09-07 18:30:00')
         expect(rows[0].findAll('td')[4].text()).toBe('Never')
 
-        // Editing stays on the classic console, per row and in the bar.
-        expect(rows[0].find('td:last-child a').attributes('href')).toBe('/agents_edit.php?id=' + A2)
-        expect(rows[1].find('td:last-child a').attributes('href')).toBe('/agents_edit.php?id=' + A1)
+        // Editing opens the in-app agent form, per row and in the bar.
+        expect(rows[0].find('td:last-child a').attributes('href')).toBe('/agents/' + A2 + '/edit')
+        expect(rows[1].find('td:last-child a').attributes('href')).toBe('/agents/' + A1 + '/edit')
         expect(wrapper.find('.bar-right a.btn').attributes('href')).toBe('/agents/new')
 
         // A finished load stamps the bar with the refresh clock.
@@ -141,5 +158,24 @@ describe('AgentsView', () => {
         // The older rows stay visible — no blanking on a failed refresh.
         expect(wrapper.findAll('tbody tr')).toHaveLength(2)
         expect(wrapper.text()).toContain('sleepy')
+    })
+})
+
+describe('AgentsView write doors', () => {
+    it('hides New Agent and the per-row edit while signed out', async () => {
+        getSession.mockResolvedValue({ authenticated: false, reason: 'signed-out' })
+        const { wrapper } = await mountListing()
+
+        // Reads stay public — the rows render, but no write door does.
+        expect(wrapper.findAll('tbody tr')).toHaveLength(2)
+        expect(wrapper.find('tbody tr td:last-child a').exists()).toBe(false)
+        expect(wrapper.find('.bar-right a[href="/agents/new"]').exists()).toBe(false)
+    })
+
+    it('shows New Agent and the per-row edit once signed in', async () => {
+        const { wrapper } = await mountListing()
+
+        expect(wrapper.find('.bar-right a[href="/agents/new"]').exists()).toBe(true)
+        expect(wrapper.find('tbody tr td:last-child a').exists()).toBe(true)
     })
 })

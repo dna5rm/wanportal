@@ -145,7 +145,11 @@ onMounted(async () => {
             <span v-if="loading" class="muted">loading&hellip;</span>
             <span v-else-if="loadedAt" class="muted">updated {{ fmtClock(loadedAt) }}</span>
             <button class="btn" type="button" @click="refetch">refresh now</button>
-            <router-link class="btn" :to="{ name: 'credential-new' }">new credential</router-link>
+            <!-- The bar renders before the probe lands, so New is gated
+                 on the session itself; the table below is already inside
+                 the signed-in template. -->
+            <router-link v-if="session && session.authenticated" class="btn"
+                         :to="{ name: 'credential-new' }">new credential</router-link>
         </div>
     </header>
 
@@ -223,10 +227,6 @@ onMounted(async () => {
         </section>
     </template>
 
-    <footer class="muted">
-        vue listing · view and edit live in the app · deletes stay on the classic console at
-        <a href="/credentials.php">/credentials.php</a>
-    </footer>
 </template>
 
 <style scoped>

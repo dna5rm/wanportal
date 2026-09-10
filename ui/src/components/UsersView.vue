@@ -158,9 +158,6 @@ onBeforeUnmount(() => {
         </p>
         <p>
             back to the dashboard: <a href="#/">/</a>
-            <template v-if="session && session.reason === 'signed-out'">
-                &nbsp;·&nbsp; sign in on the classic console: <a href="/login.php">/login.php</a>
-            </template>
         </p>
     </div>
 
@@ -223,9 +220,6 @@ onBeforeUnmount(() => {
         </section>
     </template>
 
-    <footer class="muted">
-        vue users listing; classic console still at <a href="/users.php">/users.php</a>
-    </footer>
 </template>
 
 <style scoped>

@@ -7,18 +7,25 @@
  * spec — these tests only pin the urls, the payload on the page, and
  * the honesty rules when a request comes back empty or broken.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { getJson, postJson } from '../api'
+import { getSession } from '../session'
 import MonitorDetailView from '../components/MonitorDetailView.vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 vi.mock('../api', () => ({ getJson: vi.fn(), postJson: vi.fn() }))
+vi.mock('../session', () => ({ getSession: vi.fn() }))
 
 enableAutoUnmount(afterEach)
 
+beforeEach(() => {
+    getSession.mockResolvedValue({ authenticated: true, isAdmin: true })
+})
+
 afterEach(() => {
     vi.unstubAllGlobals()
+    getSession.mockReset()
 })
 
 /* Every detail id is a uuid (char(36)) and the api rejects anything
@@ -134,7 +141,7 @@ describe('MonitorDetailView reset', () => {
         await flushPromises()
         await flushPromises()
 
-        expect(postJson).toHaveBeenCalledWith('/cgi-bin/api/monitor/' + MONITOR_ID + '/reset')
+        expect(postJson).toHaveBeenCalledWith('/cgi-bin/api/monitor/' + MONITOR_ID + '/reset', {})
         // The detail door ran again after the reset: two calls on mount,
         // one more for the refetch.
         expect(getJson).toHaveBeenCalledTimes(3)
@@ -157,6 +164,50 @@ describe('MonitorDetailView reset', () => {
         expect(postJson).not.toHaveBeenCalled()
         expect(getJson).toHaveBeenCalledTimes(2)
     })
+
+    it('hides reset when the spa session is not an admin', async () => {
+        getSession.mockResolvedValue({ authenticated: false, isAdmin: false })
+        getJson.mockImplementation(async (url) => {
+            if (url === '/cgi-bin/api/monitors/' + MONITOR_ID) return monitorReply()
+            if (url.startsWith('/cgi-bin/api/rrd?id=' + MONITOR_ID)) return chartReply()
+            throw new Error('unexpected url: ' + url)
+        })
+        const wrapper = await mountDetail()
+        const labels = wrapper.findAll('.bar-right button.btn').map((n) => n.text())
+        expect(labels).not.toContain('reset')
+        expect(postJson).not.toHaveBeenCalled()
+    })
+})
+
+describe('MonitorDetailView edit door', () => {
+    it('hides the edit link while the spa session is signed out', async () => {
+        getSession.mockResolvedValue({ authenticated: false, isAdmin: false })
+        getJson.mockImplementation(async (url) => {
+            if (url === '/cgi-bin/api/monitors/' + MONITOR_ID) return monitorReply()
+            if (url.startsWith('/cgi-bin/api/rrd?id=' + MONITOR_ID)) return chartReply()
+            throw new Error('unexpected url: ' + url)
+        })
+        const wrapper = await mountDetail()
+
+        expect(wrapper.find('a[href="/monitors/' + MONITOR_ID + '/edit"]').exists()).toBe(false)
+        // Reset shares the gate and then some (admin), so it hides too.
+        const labels = wrapper.findAll('.bar-right button.btn').map((n) => n.text())
+        expect(labels).not.toContain('reset')
+    })
+
+    it('shows edit for a signed-in non-admin but keeps reset admin-only', async () => {
+        getSession.mockResolvedValue({ authenticated: true, isAdmin: false })
+        getJson.mockImplementation(async (url) => {
+            if (url === '/cgi-bin/api/monitors/' + MONITOR_ID) return monitorReply()
+            if (url.startsWith('/cgi-bin/api/rrd?id=' + MONITOR_ID)) return chartReply()
+            throw new Error('unexpected url: ' + url)
+        })
+        const wrapper = await mountDetail()
+
+        expect(wrapper.find('a[href="/monitors/' + MONITOR_ID + '/edit"]').exists()).toBe(true)
+        const labels = wrapper.findAll('.bar-right button.btn').map((n) => n.text())
+        expect(labels).not.toContain('reset')
+    })
 })
 
 describe('MonitorDetailView when a request misbehaves', () => {
@@ -177,7 +228,6 @@ describe('MonitorDetailView when a request misbehaves', () => {
         expect(banner.text()).toContain('nothing below is live data')
         // No payload means no cards, no latency table, no graph at all.
         expect(wrapper.find('.cols').exists()).toBe(false)
-        expect(wrapper.text()).toContain('monitor.php')
     })
 
     it('keeps the monitor details when the rrd side fails on its own', async () => {

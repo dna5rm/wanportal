@@ -37,8 +37,9 @@ a { color: var(--up); }
 
 .muted { color: var(--muted); font-weight: 400; }
 
-/* Top navigation. Only the dashboard link resolves to real content;
- * the rest are stubs until those pages are migrated. */
+/* Top navigation. Public pages sit on the left of the bar; the gated
+ * listings and the account cluster live on the right, the gated ones
+ * inside the account dropdown. */
 .topnav {
     display: flex;
     align-items: center;
@@ -71,10 +72,60 @@ a { color: var(--up); }
     border-bottom-color: var(--up);
 }
 
-.nav-note {
+/* Right-hand account cluster: signed-out it holds the single log-in
+ * door; signed-in it holds the account button and its dropdown. */
+.nav-end {
     margin-left: auto;
-    font-size: 11.5px;
+    display: flex;
+    align-items: center;
 }
+
+.account-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+}
+
+.account-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 30;
+    min-width: 150px;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 8px;
+    padding: 5px 0;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+}
+
+.menu-link {
+    display: block;
+    background: none;
+    border: none;
+    text-align: left;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text);
+    text-decoration: none;
+    padding: 5px 14px;
+    cursor: pointer;
+}
+
+.menu-link:hover {
+    background: rgba(255, 255, 255, .04);
+    color: var(--text);
+}
+
+.menu-muted,
+.menu-muted:hover { color: var(--muted); }
 
 /* Header bar */
 .bar {

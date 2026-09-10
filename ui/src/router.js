@@ -33,6 +33,7 @@ import TargetEditView from './components/TargetEditView.vue'
 import CredentialDetailView from './components/CredentialDetailView.vue'
 import CredentialEditView from './components/CredentialEditView.vue'
 import LoginView from './components/LoginView.vue'
+import { getSession } from './session'
 
 /*
  * Detail pages take the record id as a prop and keep their list route
@@ -41,8 +42,14 @@ import LoginView from './components/LoginView.vue'
  * stays as an alias because detailShared.detailLink still builds
  * '#/monitor/<uuid>' hrefs; drop the alias once that builder is
  * updated.
+ *
+ * auth flags a detail route as sign-in only (credential: the classic
+ * credential_view.php sits behind check_session.php). Leave it off for
+ * the public drill-down details — the dashboard links monitor/agent/
+ * target records for visitors who never sign in. The opts object keeps
+ * call sites from ever passing a bare undefined in alias's slot.
  */
-function detail(path, name, component, legacy, list, alias) {
+function detail(path, name, component, legacy, list, opts = {}) {
     const route = {
         path,
         name,
@@ -52,15 +59,16 @@ function detail(path, name, component, legacy, list, alias) {
     }
     // vue-router iterates alias; undefined throws "aliases is not iterable"
     // and the whole app mounts nothing (blank page).
-    if (alias) route.alias = alias
+    if (opts.alias) route.alias = opts.alias
+    if (opts.auth) route.meta.auth = true
     return route
 }
 
 const routes = [
     { path: '/', name: 'dashboard', component: DashboardView },
-    /* route:monitors */ { path: '/monitors', name: 'monitors', component: MonitorsView },
-    /* route:agents */ { path: '/agents', name: 'agents', component: AgentsView },
-    /* route:targets */ { path: '/targets', name: 'targets', component: TargetsView },
+    /* route:monitors */ { path: '/monitors', name: 'monitors', component: MonitorsView, meta: { auth: true } },
+    /* route:agents */ { path: '/agents', name: 'agents', component: AgentsView, meta: { auth: true } },
+    /* route:targets */ { path: '/targets', name: 'targets', component: TargetsView, meta: { auth: true } },
     /* route:users */
     {
         // Admin-gated listing backed by GET /cgi-bin/api/users; the
@@ -68,7 +76,8 @@ const routes = [
         // edit live in the app on the routes just below.
         name: 'users',
         path: '/users',
-        component: UsersView
+        component: UsersView,
+        meta: { auth: true }
     },
     /* route:user-edit */
     {
@@ -79,17 +88,19 @@ const routes = [
         // the static "new" segment is never read as an id.
         name: 'user-new',
         path: '/users/new',
-        component: UserEditView
+        component: UserEditView,
+        meta: { auth: true }
     },
     {
         name: 'user-edit',
         path: '/users/:id/edit',
         component: UserEditView,
-        props: true
+        props: true,
+        meta: { auth: true }
     },
-    /* route:monitor-new */ { path: '/monitors/new', name: 'monitor-new', component: MonitorEditView },
-    /* route:monitor-edit */ { path: '/monitors/:id/edit', name: 'monitor-edit', component: MonitorEditView, props: true },
-    /* route:monitor */ detail('/monitors/:id', 'monitor', MonitorDetailView, '/monitor.php', 'monitors', '/monitor/:id'),
+    /* route:monitor-new */ { path: '/monitors/new', name: 'monitor-new', component: MonitorEditView, meta: { auth: true } },
+    /* route:monitor-edit */ { path: '/monitors/:id/edit', name: 'monitor-edit', component: MonitorEditView, props: true, meta: { auth: true } },
+    /* route:monitor */ detail('/monitors/:id', 'monitor', MonitorDetailView, '/monitor.php', 'monitors', { alias: '/monitor/:id' }),
     /* route:agent-new */
     {
         // Agent create/edit lives in the app now, one component for
@@ -100,15 +111,17 @@ const routes = [
         // never read as an id.
         name: 'agent-new',
         path: '/agents/new',
-        component: AgentEditView
+        component: AgentEditView,
+        meta: { auth: true }
     },
     {
         name: 'agent-edit',
         path: '/agents/:id/edit',
         component: AgentEditView,
-        props: true
+        props: true,
+        meta: { auth: true }
     },
-    /* route:agent */ detail('/agents/:id', 'agent', AgentDetailView, '/agent.php', 'agents', '/agent/:id'),
+    /* route:agent */ detail('/agents/:id', 'agent', AgentDetailView, '/agent.php', 'agents', { alias: '/agent/:id' }),
     /* route:agent-netping */
     {
         // Install page for one agent: explains the docker image and
@@ -124,15 +137,17 @@ const routes = [
     {
         name: 'target-new',
         path: '/targets/new',
-        component: TargetEditView
+        component: TargetEditView,
+        meta: { auth: true }
     },
     {
         name: 'target-edit',
         path: '/targets/:id/edit',
         component: TargetEditView,
-        props: true
+        props: true,
+        meta: { auth: true }
     },
-    /* route:target */ detail('/targets/:id', 'target', TargetDetailView, '/target.php', 'targets', '/target/:id'),
+    /* route:target */ detail('/targets/:id', 'target', TargetDetailView, '/target.php', 'targets', { alias: '/target/:id' }),
     /* route:search */ { path: '/search', name: 'search', component: SearchView },
     /* route:latency */ { path: '/latency', name: 'latency', component: LatencyView },
     /* route:credentials */
@@ -141,7 +156,8 @@ const routes = [
         // passwords out of list responses and gates the writes itself.
         name: 'credentials',
         path: '/credentials',
-        component: CredentialsView
+        component: CredentialsView,
+        meta: { auth: true }
     },
     {
         // Create/edit lives in the app, one component for both doors:
@@ -150,14 +166,18 @@ const routes = [
         // then PUT). Same split as the user editor above.
         name: 'credential-new',
         path: '/credentials/new',
-        component: CredentialEditView
+        component: CredentialEditView,
+        meta: { auth: true }
     },
-    detail('/credentials/:id', 'credential', CredentialDetailView, '/credential_view.php', 'credentials'),
+    // The vault record itself needs a signed-in tab, same as the
+    // classic credential_view.php behind check_session.php.
+    detail('/credentials/:id', 'credential', CredentialDetailView, '/credential_view.php', 'credentials', { auth: true }),
     {
         name: 'credential-edit',
         path: '/credentials/:id/edit',
         component: CredentialEditView,
-        props: true
+        props: true,
+        meta: { auth: true }
     },
     /* route:login */
     {
@@ -173,6 +193,28 @@ const routes = [
 export const router = createRouter({
     history: createWebHashHistory(),
     routes
+})
+
+/*
+ * Sign-in gate. Routes flagged meta.auth resolve the session before
+ * they hand over: a signed-out (or expired) tab is bounced to /login
+ * with the intended path parked in ?redirect= for the sign-in page to
+ * pick up. Public routes never wait on the session API — the
+ * dashboard and its monitor/agent/target drill-down stay reachable
+ * even when the API is down, matching the classic console where
+ * agent.php/monitor.php/target.php sit outside check_session.php.
+ */
+router.beforeEach(async (to, from, next) => {
+    if (!to.meta.auth) {
+        next()
+        return
+    }
+    const session = await getSession()
+    if (session.authenticated) {
+        next()
+        return
+    }
+    next({ name: 'login', query: { redirect: to.fullPath } })
 })
 
 export default router

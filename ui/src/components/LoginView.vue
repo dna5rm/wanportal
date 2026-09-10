@@ -3,8 +3,7 @@
   keeps the returned JWT in sessionStorage (tab-scoped) via session.js;
   no CSRF token is needed because the API takes plain JSON, and the
   token itself never reaches the DOM — the session chip shows claims
-  only. The classic /login.php keeps working alongside for the
-  PHP-session pages.
+  only. Sign-in is SPA-only: there is no classic login.php door here.
 -->
 <script setup>
 import { ref } from 'vue'
@@ -40,10 +39,6 @@ async function submit() {
     <div class="login-wrap">
         <form class="login-card" @submit.prevent="submit">
             <h2>sign in</h2>
-            <p class="muted login-note">
-                Bundled-app sign in. The classic console keeps its own door at
-                <a href="/login.php">/login.php</a>.
-            </p>
             <p v-if="error" class="err-note block" role="alert">{{ error }}</p>
             <label class="login-label" for="login-user">username</label>
             <input id="login-user" v-model="username" class="login-input" type="text"
@@ -80,11 +75,6 @@ async function submit() {
     letter-spacing: .8px;
     margin: 0 0 8px;
     text-transform: uppercase;
-}
-
-.login-note {
-    font-size: 11.5px;
-    margin: 0 0 12px;
 }
 
 .login-label {

@@ -11,6 +11,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { getJson } from '../api'
+import { getSession } from '../session'
 import { agentClass, fmtClock, lossClass } from '../format'
 import {
     activeChipCls,
@@ -34,6 +35,12 @@ const mons = ref(null)          // null = not loaded / failed; [] = genuinely no
 const errors = reactive({ detail: null, mons: null })
 const loading = ref(false)
 const lastOk = ref(null)
+const session = ref(null)
+
+/* The edit door opens the in-app form, but the offer itself waits for
+ * a signed-in SPA session — the classic page's login wall, in probe
+ * form. Nothing on this page mutates anything. */
+const canEdit = computed(() => !!(session.value && session.value.authenticated))
 
 /* The classic page hides effectively-inactive rows behind a toggle;
  * defaulting to showing everything keeps the read-only page honest. */
@@ -76,7 +83,10 @@ async function fetchAll() {
     loading.value = false
 }
 
-onMounted(fetchAll)
+onMounted(async () => {
+    session.value = await getSession()
+    await fetchAll()
+})
 
 /* Same counter rules as agent.php: a row is active only when the
  * combined flag is on and this agent is itself active; the own-flag
@@ -136,13 +146,13 @@ const heartbeatStale = computed(() =>
                  the serving itself stays with the classic console -->
             <a v-if="agentId" class="btn" :href="'#/agents/' + encodeURIComponent(agentId) + '/netping'"
                title="agent script + docker image install">netping</a>
-            <router-link v-if="agentId" class="btn" :to="{ name: 'agent-edit', params: { id: agentId } }">edit</router-link>
+            <router-link v-if="agentId && canEdit" class="btn"
+                         :to="{ name: 'agent-edit', params: { id: agentId } }">edit</router-link>
         </div>
     </header>
 
     <div v-if="errors.detail" class="banner banner-error">
         agent api: {{ errors.detail }} — nothing below is live data.
-        Classic page: <a :href="'/agent.php?id=' + encodeURIComponent(agentId)">agent.php</a>
     </div>
 
     <div v-if="agent" class="cols">
@@ -239,10 +249,6 @@ const heartbeatStale = computed(() =>
         </div>
     </div>
 
-    <footer class="muted">
-        vue agent detail; classic page at
-        <a :href="'/agent.php?id=' + encodeURIComponent(agentId)">agent.php</a>
-    </footer>
 </template>
 
 <style scoped>

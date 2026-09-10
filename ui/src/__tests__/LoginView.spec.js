@@ -34,13 +34,16 @@ async function mountLogin() {
 }
 
 describe('LoginView', () => {
-    it('renders the fields and keeps the classic log-in door linked', async () => {
+    it('renders the fields with no classic log-in door linked', async () => {
         const { wrapper } = await mountLogin()
 
         expect(wrapper.find('#login-user').exists()).toBe(true)
         expect(wrapper.find('#login-pass').attributes('type')).toBe('password')
-        const classic = wrapper.findAll('a').find(a => a.attributes('href') === '/login.php')
-        expect(classic).toBeTruthy()
+        // Sign-in is SPA-only: neither classic door (/login.php or
+        // /classic/login.php) is linked from here.
+        const classic = wrapper.findAll('a').find(a =>
+            /^\/?(classic\/)?login\.php$/.test(a.attributes('href') || ''))
+        expect(classic).toBeUndefined()
     })
 
     it('signs in: token lands in sessionStorage and the dashboard takes over', async () => {

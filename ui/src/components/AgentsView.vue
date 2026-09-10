@@ -1,19 +1,28 @@
 <!--
   Agents listing, ported from htdocs/agents.php. Same columns and
   status wording; the row title opens the Vue detail route. Creating
-  happens in the app now — New opens the agent form — while per-row
-  edits still go to the classic console, and there is simply no
-  delete button here at all.
+  happens in the app now — New opens the agent form — and per-row
+  edits open the same in-app form. There is simply no delete button
+  here at all. New and edit wait for a signed-in SPA session
+  (getSession probe), like the classic page's login wall.
 -->
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { getJson } from '../api'
+import { getSession } from '../session'
 import { fmtClock } from '../format'
-import { activeChipCls, editLink } from './detailShared'
+import { activeChipCls } from './detailShared'
 
 const rows = ref([])
 const error = ref(null)
 const loadedAt = ref(null)
+const session = ref(null)
+
+/* Write doors need the SPA session: the classic console enforces its
+ * login server-side, but this listing should not even offer New/Edit
+ * to a signed-out visitor. Reads stay public, so the data loads for
+ * everyone; only the buttons wait for the probe. */
+const canEdit = computed(() => !!(session.value && session.value.authenticated))
 
 function isActive(a) {
     return Number(a.is_active) === 1
@@ -55,19 +64,21 @@ async function fetchRows() {
     }
 }
 
-onMounted(fetchRows)
+onMounted(async () => {
+    session.value = await getSession()
+    await fetchRows()
+})
 </script>
 
 <template>
     <header class="bar">
         <div class="bar-title">
             <h1>agents</h1>
-            <span class="muted">bundled vue · row edits stay on the classic console</span>
         </div>
         <div class="bar-right">
             <span v-if="loadedAt" class="muted">updated {{ fmtClock(loadedAt) }}</span>
             <button class="btn" type="button" @click="fetchRows">refresh now</button>
-            <router-link class="btn" :to="{ name: 'agent-new' }">New Agent</router-link>
+            <router-link v-if="canEdit" class="btn" :to="{ name: 'agent-new' }">New Agent</router-link>
         </div>
     </header>
 
@@ -107,16 +118,13 @@ onMounted(fetchRows)
                     {{ a.last_seen ? fmtStamp(a.last_seen) : 'Never' }}
                 </td>
                 <td>
-                    <a class="btn" :href="editLink('agent', a.id)" title="Edit">edit</a>
+                    <router-link v-if="canEdit" class="btn" :to="{ name: 'agent-edit', params: { id: a.id } }" title="Edit">edit</router-link>
                 </td>
             </tr>
             </tbody>
         </table>
     </section>
 
-    <footer class="muted">
-        vue listing; deletes and edits live on the classic console
-    </footer>
 </template>
 
 <style scoped>

@@ -1,27 +1,42 @@
 <!--
-  App shell. Every nav entry rides the router; a nav link stays lit
-  while its detail pages are open. The route table is flat, so
-  router-link-active cannot do that grouping for us — the first path
-  segment does instead. The session chip asks /cgi-bin/api/session
-  about the visitor; sign-in lives in the app at #/login now, with the
-  classic console one hop away.
+  App shell, SaaS-style: the top bar splits into public nav on the
+  left — brand plus Dashboard/Search/Latency, the pages that work
+  signed-out — and the account cluster on the right. The gated listing
+  pages never sit in the bar: they live in the account dropdown
+  SessionChip renders (Users only for an admin claim), so a signed-out
+  visitor sees no links that would only dead-end on the API's 401.
+  Sign-in lives in the app at #/login; the classic console is one hop
+  away at /classic from the dropdown, the only classic door in the
+  chrome.
+
+  The shell runs the session probe itself — on mount and on every
+  route change, so signing in on /login lights the account menu
+  without a reload — and hands the answer down to SessionChip.
 -->
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import SessionChip from './components/SessionChip.vue'
+import { getSession } from './session'
 
 const route = useRoute()
 
-const items = [
+/* Session probe: null while asking, then the claims. */
+const state = ref(null)
+
+async function probe() {
+    state.value = await getSession()
+}
+
+onMounted(probe)
+watch(() => route.path, probe)
+
+/* The public pages stay in the bar for everyone; the gated listings
+ * render from the account dropdown instead. */
+const publicItems = [
     { label: 'Dashboard', to: '/' },
-    { label: 'Monitors', to: '/monitors' },
-    { label: 'Agents', to: '/agents' },
-    { label: 'Targets', to: '/targets' },
-    { label: 'Users', to: '/users' },
     { label: 'Search', to: '/search' },
-    { label: 'Latency', to: '/latency' },
-    { label: 'Credentials', to: '/credentials' }
+    { label: 'Latency', to: '/latency' }
 ]
 
 /* '/' + first segment groups a listing with its detail pages
@@ -32,13 +47,13 @@ const section = computed(() => '/' + (route.path.split('/')[1] || ''))
 <template>
     <nav class="topnav">
         <span class="brand">wanportal</span>
-        <router-link v-for="it in items" :key="it.to" class="nav-link" :to="it.to"
+        <router-link v-for="it in publicItems" :key="it.to" class="nav-link" :to="it.to"
                      :class="{ active: it.to === '/' ? route.path === '/' : section === it.to }">
             {{ it.label }}
         </router-link>
-        <router-link class="nav-link" to="/login">log in</router-link>
-        <SessionChip />
-        <span class="nav-note muted">classic console still at <a href="/">/</a></span>
+        <span class="nav-end">
+            <SessionChip :session="state" @change="probe" />
+        </span>
     </nav>
 
     <router-view />

@@ -214,9 +214,6 @@ const showForm = computed(() =>
     !redirecting.value && !fillLoading.value && !fillError.value)
 
 const banner = computed(() => fillError.value || saveError.value)
-
-const classicUrl = computed(() =>
-    '/agents_edit.php' + (isEdit.value ? '?id=' + encodeURIComponent(props.id) : ''))
 </script>
 
 <template>
@@ -232,7 +229,6 @@ const classicUrl = computed(() =>
 
     <div v-if="banner" class="banner banner-error" role="alert">
         {{ banner }} — nothing was saved.
-        Classic page: <a :href="classicUrl">agents_edit.php</a>
     </div>
 
     <p v-if="redirecting" class="muted block-note">
@@ -300,10 +296,6 @@ const classicUrl = computed(() =>
         </form>
     </section>
 
-    <footer class="muted">
-        vue agent form; the classic page stays at
-        <a :href="classicUrl">agents_edit.php</a>
-    </footer>
 </template>
 
 <style scoped>

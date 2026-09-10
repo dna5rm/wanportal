@@ -1,78 +1,91 @@
 <!--
-  Tiny nav chip for the sign-in state. Asks the session probe what
-  GET /cgi-bin/api/session says about the caller — the SPA attaches its
-  Bearer token when it holds one — and renders claims only, never the
-  token itself: a signed-in visitor gets their username (plus an admin
-  chip when the claim says so and a log out button), a signed-out one
-  gets a link to the SPA /login plus the classic /login.php kept around
-  in muted grey. A dead API shows "session?" rather than pretending the
-  visitor is signed out. The chip mounts once for the whole app, so it
-  re-probes when the route changes and stays current with sign-ins
-  happening on /login.
+  The right-hand account cluster of the top bar. Renders from the
+  session probe App hands down — no fetch of its own — and shows
+  claims only, never the token: a signed-out visitor gets a single
+  log-in link, a dead API shows "session?" rather than pretending the
+  visitor is signed out, and a signed-in one gets a single username
+  button — one plain label, no nested chip; the admin claim and the
+  token expiry live in its tooltip — that toggles the account
+  dropdown: the gated listing pages — Agents, Targets, Monitors,
+  Credentials, plus Users for admins — the muted classic /classic
+  door, and log out. Signing out forgets the tab's token and asks App
+  to re-probe via the change event. The menu closes on any route
+  change and on clicks outside the cluster.
 -->
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { getSession, logout } from '../session'
+import { logout } from '../session'
+
+defineProps({
+    /* Probe result from App: null while the probe is in flight. */
+    session: { type: Object, default: null }
+})
+const emit = defineEmits(['change'])
 
 const route = useRoute()
 
-const state = ref(null) // session probe result, null while probing
+const open = ref(false)
 
-async function probe() {
-    state.value = await getSession()
+/* Tooltip for the account button: who, the admin claim, the expiry.
+ * The claim and the deadline are status, not UI — they say nothing the
+ * label needs a chip for. */
+function accountTitle(session) {
+    const bits = ['signed in']
+    if (session.isAdmin) bits.push('admin')
+    if (session.exp) bits.push('token expires ' + new Date(session.exp * 1000).toLocaleTimeString())
+    return bits.join(', ')
 }
 
-/* Signing out just forgets the tab's token; the probe afterwards flips
- * the chip back to the signed-out links. */
+/* Any navigation collapses the menu — picking a page from it included. */
+watch(() => route.path, () => { open.value = false })
+
+/* So do clicks that land outside the cluster. */
+const root = ref(null)
+function onDocClick(e) {
+    if (open.value && root.value && !root.value.contains(e.target)) open.value = false
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
+
+/* Signing out just forgets the tab's token; the change event tells
+ * App to re-probe, which flips the cluster to the log-in door. */
 async function signOut() {
+    open.value = false
     await logout()
-    await probe()
+    emit('change')
 }
-
-onMounted(probe)
-watch(() => route.path, probe)
 </script>
 
 <template>
-    <span v-if="state === null" class="session-chip muted">session&hellip;</span>
-    <span v-else-if="state.authenticated" class="session-chip">
-        <span class="chip chip-ok" :title="'signed in' + (state.exp ? ', token expires ' + new Date(state.exp * 1000).toLocaleTimeString() : '')">{{ state.username }}</span>
-        <span v-if="state.isAdmin" class="chip chip-danger">admin</span>
-        <button class="chip-logout" type="button" title="forget this tab's token" @click="signOut">log out</button>
+    <span ref="root" class="session-chip">
+        <span v-if="!session" class="muted">session&hellip;</span>
+
+        <template v-else-if="session.authenticated">
+            <button class="account-btn" type="button" :title="accountTitle(session)" @click="open = !open">{{ session.username }}</button>
+            <span v-if="open" class="account-menu">
+                <router-link class="menu-link" to="/agents">Agents</router-link>
+                <router-link class="menu-link" to="/targets">Targets</router-link>
+                <router-link class="menu-link" to="/monitors">Monitors</router-link>
+                <router-link class="menu-link" to="/credentials">Credentials</router-link>
+                <router-link v-if="session.isAdmin" class="menu-link" to="/users">Users</router-link>
+                <a class="menu-link menu-muted" href="/classic">Classic console</a>
+                <button class="menu-link" type="button" title="forget this tab's token" @click="signOut">Log out</button>
+            </span>
+        </template>
+
+        <router-link v-else-if="session.reason === 'signed-out'" class="nav-link" to="/login">Log in</router-link>
+
+        <span v-else class="muted" :title="session.error || 'session check failed'">session?</span>
     </span>
-    <span v-else-if="state.reason === 'signed-out'" class="session-chip muted" title="not signed in">
-        signed out
-        <router-link class="chip-login" to="/login">log in</router-link>
-        <a class="muted" href="/login.php">classic</a>
-    </span>
-    <span v-else class="session-chip muted" :title="state.error || 'session check failed'">session?</span>
 </template>
 
 <style scoped>
 .session-chip {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 5px;
     font-size: 11.5px;
 }
-
-.chip-logout {
-    background: none;
-    border: none;
-    color: var(--muted);
-    cursor: pointer;
-    font: inherit;
-    font-size: 11.5px;
-    padding: 0;
-}
-
-.chip-logout:hover { color: var(--text); }
-
-.chip-login {
-    color: var(--up);
-    text-decoration: none;
-}
-
-.chip-login:hover { text-decoration: underline; }
 </style>

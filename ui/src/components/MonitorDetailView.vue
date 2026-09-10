@@ -17,6 +17,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { getJson, postJson } from '../api'
+import { getSession } from '../session'
 import { fmtClock, lossClass } from '../format'
 import { buildChartView } from '../rrdChart'
 import {
@@ -46,19 +47,29 @@ const errors = reactive({ detail: null, chart: null })
 const loadingDetail = ref(false)
 const loadingChart = ref(false)
 const lastOk = ref(null)
+const session = ref(null)
 
 /* Counter reset: confirm first (it wipes samples, not the config),
- * then re-fetch so the numbers on screen match what the API keeps. */
+ * then re-fetch so the numbers on screen match what the API keeps.
+ * The route is JWT + admin; classic PHP login is a different session. */
 const resetBusy = ref(false)
 const resetError = ref('')
+const canReset = computed(() => !!(session.value && session.value.authenticated && session.value.isAdmin))
+/* Edit opens the in-app form for any signed-in spa session; reset
+ * stays admin-only (canReset) because the api refuses non-admins. */
+const canEdit = computed(() => !!(session.value && session.value.authenticated))
 
 async function resetMonitor() {
     if (resetBusy.value || !monitorId.value) return
+    if (!canReset.value) {
+        resetError.value = 'sign in as admin in this UI first (classic login is a different session)'
+        return
+    }
     if (!window.confirm('Reset this monitor? Counters and latency history are cleared.')) return
     resetBusy.value = true
     resetError.value = ''
     try {
-        await postJson('/cgi-bin/api/monitor/' + encodeURIComponent(monitorId.value) + '/reset')
+        await postJson('/cgi-bin/api/monitor/' + encodeURIComponent(monitorId.value) + '/reset', {})
         await fetchDetail()
     } catch (err) {
         resetError.value = humanErr(err, 'reset failed')
@@ -116,7 +127,10 @@ function fetchAll() {
     fetchChart()
 }
 
-onMounted(fetchAll)
+onMounted(async () => {
+    session.value = await getSession()
+    await fetchAll()
+})
 
 /* Presets mirror the classic page: last 1h / 6h / 24h / 3d. */
 function setRangeHours(hours) {
@@ -185,9 +199,9 @@ const protocolText = computed(() =>
             <span v-if="loadingDetail" class="muted">loading…</span>
             <span v-if="lastOk" class="muted">updated {{ fmtClock(lastOk) }}</span>
             <button class="btn" type="button" :disabled="loadingDetail" @click="fetchAll">refresh</button>
-            <router-link v-if="monitorId" class="btn"
+            <router-link v-if="monitorId && canEdit" class="btn"
                          :to="{ name: 'monitor-edit', params: { id: monitorId } }">edit</router-link>
-            <button v-if="monitorId" class="btn" type="button" :disabled="resetBusy"
+            <button v-if="monitorId && canReset" class="btn" type="button" :disabled="resetBusy"
                     @click="resetMonitor">{{ resetBusy ? 'resetting…' : 'reset' }}</button>
             <a v-if="monitorId" class="btn" :href="rrdRawUrl(monitorId)" target="_blank" rel="noopener">raw data</a>
         </div>
@@ -195,7 +209,6 @@ const protocolText = computed(() =>
 
     <div v-if="errors.detail" class="banner banner-error">
         monitor api: {{ errors.detail }} — nothing below is live data.
-        Classic page: <a :href="'/monitor.php?id=' + encodeURIComponent(monitorId)">monitor.php</a>
     </div>
     <div v-if="resetError" class="banner banner-warn">
         reset failed: {{ resetError }} — counters were not cleared.
@@ -356,10 +369,6 @@ const protocolText = computed(() =>
         </div>
     </div>
 
-    <footer class="muted">
-        vue monitor detail; classic page at
-        <a :href="'/monitor.php?id=' + encodeURIComponent(monitorId)">monitor.php</a>
-    </footer>
 </template>
 
 <style scoped>

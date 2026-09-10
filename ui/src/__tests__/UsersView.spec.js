@@ -176,7 +176,10 @@ describe('UsersView behind the gate', () => {
         expect(gate.exists()).toBe(true)
         expect(gate.text()).toContain('admin only')
         expect(gate.text()).toContain('this listing needs a signed-in admin')
-        expect(gate.find('a[href="/login.php"]').exists()).toBe(true)
+        // Sign-in moved into the app: the gate links back to the
+        // dashboard, never out to the classic login.php page.
+        expect(gate.find('a[href="/login.php"]').exists()).toBe(false)
+        expect(gate.find('a[href="#/"]').exists()).toBe(true)
         expect(wrapper.find('table').exists()).toBe(false)
     })
 

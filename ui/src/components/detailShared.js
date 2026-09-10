@@ -53,20 +53,6 @@ export function detailLink(kind, id) {
     return '#/' + kind + '/' + encodeURIComponent(id)
 }
 
-/*
- * Editing stays on the classic console: the Vue app is read-only by
- * design for these pages, so the edit button just deep-links the PHP
- * editor the way the classic pages did.
- */
-export function editLink(kind, id) {
-    const page = {
-        monitor: 'monitors_edit.php',
-        agent: 'agents_edit.php',
-        target: 'targets_edit.php'
-    }[kind]
-    return page ? '/' + page + '?id=' + encodeURIComponent(id) : '/'
-}
-
 /* The RRD endpoint also serves the raw sample dump; the classic page
  * offered it as a "Raw Data" button that opens in a new tab. */
 export function rrdRawUrl(id) {

@@ -75,8 +75,7 @@ function protocolLabel(m) {
 
         <p v-if="!searched" class="muted search-hint">
             Sweeps monitor descriptions, agent names and addresses, and target
-            addresses — the same sweep the classic page runs. The classic form
-            is still at <a href="/search.php">/search.php</a>.
+            addresses.
         </p>
 
         <table v-if="searched && !error">

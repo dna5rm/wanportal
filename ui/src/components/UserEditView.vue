@@ -339,9 +339,6 @@ onMounted(async () => {
         </section>
     </template>
 
-    <footer class="muted">
-        vue user editor; classic console still at <a href="/user_edit.php">/user_edit.php</a>
-    </footer>
 </template>
 
 <style scoped>
