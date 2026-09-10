@@ -74,10 +74,6 @@ RewriteRule ^classic/index\.html$ index.php [L]
 # 404 instead of being rewritten onto the real CGI endpoints.
 RewriteRule ^classic/(?!cgi-bin(?:/|$))(.+)$ $1 [L]
 
-# Old bookmarks from before the /classic rename: /legacy/* URLs redirect
-# (302) to their /classic/* location so existing links keep working.
-RewriteRule ^legacy/?(.*)$ /classic/$1 [R=302,L,NE]
-
 # Pre-cutover bookmarks: root-level *.php requests redirect (302) to
 # their /classic/ location. THE_REQUEST is the ORIGINAL client request
 # line, so this never loops on the internally rewritten /classic/* path
