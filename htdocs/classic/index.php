@@ -105,10 +105,6 @@ wanportal_render_head('Console', [
         <div class="col">
             <div class="row mb-3">
                 <div class="col text-end d-flex justify-content-end align-items-center gap-3">
-                    <a href="/classic/latency.php" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-speedometer2"></i> Latency </a> |
-                    <a href="/api-docs/swagger.php" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-braces"></i> API </a>
                     <a href="/classic/server.php" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-graph-up"></i> Runtime </a>
                     <form action="/classic/search.php" method="GET" class="d-flex align-items-center">
