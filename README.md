@@ -135,7 +135,7 @@ faces a network.
 ## config.json
 
 `htdocs/config.json` is the operator site config: the brand logo and the nav
-menu. `logo` points at `assets/logo.png` (a gitignored operator file) and
+menu. `logo` points at `assets/logo.png` and
 `menu` drives the SPA navigation. It is read by two parsers —
 `ui/src/siteConfig.js` and `htdocs/classic/lib/site_config.php` — so extend
 both when you add a config key.

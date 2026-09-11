@@ -23,6 +23,5 @@ __pycache__/
 
 # Build / scratch
 htdocs/assets/netping_latest.tar.gz
-htdocs/assets/logo.png
 tmp/
 *.rrd
