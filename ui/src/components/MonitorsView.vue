@@ -3,13 +3,14 @@
   status wording: a row only counts as active when the monitor, its
   agent, and its target are all enabled, and the badge names whichever
   side is disabled. The row title opens the Vue detail route; editing
-  opens the in-app monitor form, and deleting is not offered here at
-  all. The text filter above the table is client-side and persistent
+  opens the in-app monitor form, and admins get a delete door beside
+  edit (confirm first, then the singular api path, then a refetch). The
+  text filter above the table is client-side and persistent
   (listingFilter) until its clear button wipes it.
 -->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { getJson } from '../api'
+import { delJson, getJson } from '../api'
 import { getSession } from '../session'
 import { fmtClock } from '../format'
 import { activeChipCls } from './detailShared'
@@ -30,8 +31,13 @@ const q = ref(loadFilter(FILTER_PAGE).q)
 /* Write doors need the SPA session: the classic console enforces its
  * login server-side, but this listing should not even offer New/Edit
  * to a signed-out visitor. Reads stay public, so the data loads for
- * everyone; only the buttons wait for the probe. */
+ * everyone; only the buttons wait for the probe. Delete goes further —
+ * the api answers it for admin tokens only, so its button asks for the
+ * admin claim on top of the probe, exactly like the detail page's
+ * delete door. */
 const canEdit = computed(() => !!(session.value && session.value.authenticated))
+const canAdmin = computed(() =>
+    !!(session.value && session.value.authenticated && session.value.isAdmin))
 
 /* A monitor is up only when monitor, agent, and target are all enabled —
  * the exact triple check the classic page runs. */
@@ -128,6 +134,33 @@ async function fetchRows() {
     }
 }
 
+/* Delete door: confirm first (the rrd history goes with the monitor),
+ * then the singular api path the detail page also deletes through,
+ * then the listing refetches so the row actually leaves. A failure
+ * keeps the rows as they are and says so; delJson throws the bare
+ * status ('HTTP 403') on a refusal, and that is what the banner shows
+ * — the api's message text never survives it. Descriptions can be
+ * null, so the confirm falls back to the id rather than naming
+ * nothing. */
+const deleting = ref(false)
+const deleteError = ref(null)
+
+async function deleteMonitorRow(m) {
+    if (deleting.value || !canAdmin.value) return
+    const label = m.description || m.id
+    if (!window.confirm('Delete monitor "' + label + '"? Its rrd history is removed too.')) return
+    deleting.value = true
+    deleteError.value = null
+    try {
+        await delJson('/cgi-bin/api/monitor/' + encodeURIComponent(m.id))
+        await fetchRows()
+    } catch (err) {
+        deleteError.value = (err && err.message) || 'unknown error'
+    } finally {
+        deleting.value = false
+    }
+}
+
 onMounted(async () => {
     session.value = await getSession()
     await fetchRows()
@@ -147,6 +180,9 @@ onMounted(async () => {
     </header>
 
     <div v-if="banner" :class="banner.kind">{{ banner.text }}</div>
+    <div v-if="deleteError" class="banner banner-warn">
+        delete failed: {{ deleteError }} — the monitor is still listed.
+    </div>
 
     <section class="panel">
         <h2>monitors</h2>
@@ -203,6 +239,8 @@ onMounted(async () => {
                 </td>
                 <td>
                     <router-link v-if="canEdit" class="btn" :to="{ name: 'monitor-edit', params: { id: m.id } }" title="Edit">edit</router-link>
+                    <button v-if="canAdmin" class="btn" type="button" :disabled="deleting"
+                            @click="deleteMonitorRow(m)">delete</button>
                 </td>
             </tr>
             </tbody>

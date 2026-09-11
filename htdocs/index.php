@@ -13,16 +13,18 @@ $activeAgents = array_filter($agentsResponse['agents'] ?? [], function($agent) {
 $monitorsResponse = api_get('/monitors?current_loss=100&is_active=1');
 $downHosts = $monitorsResponse['monitors'] ?? [];
 
-// Dashboard rollup (counts, percents, top-5 slowest) comes from the
-// public /dashboard endpoint, so this page and any other consumer
-// share one definition of up / degraded / down instead of the page
-// re-sorting /monitors rows by hand.
+// Dashboard rollup (counts, percents) comes from the public
+// /dashboard endpoint, so this page and any other consumer share one
+// definition of up / degraded / down instead of the page re-sorting
+// /monitors rows by hand. The rollup still carries top_slow, but the
+// top-5 widget is gone from this page — nothing here reads it.
 $dashboardResponse = api_get('/dashboard');
 $dashboard = $dashboardResponse['dashboard'] ?? null;
 
-// True when a fetch failed: api_get() returns null on transport
-// errors, non-200 responses, and undecodable JSON. The summary cards
-// must not render their all-zero stats in that case.
+// True when the /dashboard rollup is unusable: api_get() returns
+// null on transport errors, non-200 responses, and undecodable JSON.
+// The summary cards must not render their all-zero stats in that
+// case.
 $monitorsFetchFailed = ($dashboardResponse === null || !is_array($dashboard));
 
 $monitor_stats = [
@@ -35,15 +37,11 @@ $pct_up        = $dashboard['percent_up']       ?? 0;
 $pct_degraded  = $dashboard['percent_degraded'] ?? 0;
 $pct_down      = $dashboard['percent_down']     ?? 0;
 
-// Top 5 slowest links straight from the rollup (down monitors are
-// already excluded server-side — they sit in the down table below).
-$topSlow = $dashboard['top_slow'] ?? [];
-
 // Initialize error message
 $error_message = null;
 
-// Check for API errors. The all-monitors fetch drives the summary
-// cards and the Top 5 widget; a failure there must surface as the
+// Check for API errors: a failure in any of the three fetches
+// (agents, down monitors, dashboard rollup) must surface as the
 // error banner rather than a dashboard full of zeros.
 if ($agentsResponse === null || $monitorsResponse === null || $monitorsFetchFailed) {
     $error_message = "Unable to fetch data from API";
@@ -123,12 +121,9 @@ wanportal_render_head('Console', [
             </div>
 
             <!-- Dashboard summary cards: total monitors split by
-                 status. Sits directly above the Top 5 slowest
-                 widget so the two summary tables read together as a
-                 pair: cards give the high-level breakdown, slowest
-                 table gives the per-link detail. When the /monitors
-                 fetch fails the cards are skipped entirely — a wall
-                 of zeros would read as "everything healthy". -->
+                 status. When the /dashboard rollup fetch fails the
+                 cards are skipped entirely — a wall of zeros would
+                 read as "everything healthy". -->
             <?php if (!$monitorsFetchFailed): ?>
             <div class="row g-3 mb-4">
                 <div class="col-md-3">
@@ -172,70 +167,7 @@ wanportal_render_head('Console', [
             </div>
             <?php endif; ?>
 
-            <!-- Top 5 slowest monitors (excluding down — those
-                 are in the down table below) -->
-            <?php if (!empty($topSlow)): ?>
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-speedometer2"></i> Top 5 slowest links (by current median)
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-sm mb-0">
-                        <thead>
-                            <tr>
-                                <th>Monitor</th>
-                                <th>Agent</th>
-                                <th>Target</th>
-                                <th class="text-end">Median</th>
-                                <th class="text-end">Loss</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        <?php foreach ($topSlow as $m):
-                            $loss = (float)($m['current_loss'] ?? 0);
-                            // Use Bootstrap 5.3 "subtle" color tokens so the
-                            // badge adapts to dark mode. The saturated
-                            // bg-success / bg-warning / bg-danger variants
-                            // stay bright in both themes and look out of
-                            // place on a dark surface.
-                            if ($loss >= 100) {
-                                $badge = 'bg-danger-subtle text-danger-emphasis border border-danger-subtle';
-                            } elseif ($loss >= 1) {
-                                $badge = 'bg-warning-subtle text-warning-emphasis border border-warning-subtle';
-                            } else {
-                                $badge = 'bg-success-subtle text-success-emphasis border border-success-subtle';
-                            }
-                        ?>
-                            <tr>
-                                <td>
-                                    <a href="/classic/monitor.php?id=<?= htmlspecialchars($m['id']) ?>"
-                                       class="text-decoration-none">
-                                        <?= htmlspecialchars($m['description'] ?? $m['id']) ?>
-                                    </a>
-                                </td>
-                                <td><?= htmlspecialchars($m['agent_name'] ?? '-') ?></td>
-                                <td><?= htmlspecialchars($m['target_address'] ?? '-') ?></td>
-                                <td class="text-end"><?= htmlspecialchars($m['current_median'] ?? '-') ?> ms</td>
-                                <td class="text-end">
-                                    <span class="badge <?= $badge ?>">
-                                        <?= number_format($loss, 1) ?>%
-                                    </span>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <?php endif; ?>
-
-            <!-- Down Monitors
-                 Re-styled to match the Top 5 slowest widget: a card
-                 wrapper with a card-header showing the icon and
-                 title, and a compact `table table-sm mb-0` body. The
-                 row-level severity classes (table-danger / -warning /
-                 -info) are preserved so the time-since-down coloring
-                 still works. -->
+            <!-- Down Monitors -->
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-exclamation-triangle"></i> Down Monitors</span>

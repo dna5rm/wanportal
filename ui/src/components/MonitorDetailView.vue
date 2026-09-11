@@ -16,7 +16,8 @@
 -->
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { getJson, postJson } from '../api'
+import { useRouter } from 'vue-router'
+import { delJson, getJson, postJson } from '../api'
 import { getSession } from '../session'
 import { fmtClock, lossClass } from '../format'
 import { buildChartView } from '../rrdChart'
@@ -49,6 +50,8 @@ const loadingChart = ref(false)
 const lastOk = ref(null)
 const session = ref(null)
 
+const router = useRouter()
+
 /* Counter reset: confirm first (it wipes samples, not the config),
  * then re-fetch so the numbers on screen match what the API keeps.
  * The route is JWT + admin; classic PHP login is a different session. */
@@ -58,6 +61,30 @@ const canReset = computed(() => !!(session.value && session.value.authenticated 
 /* Edit opens the in-app form for any signed-in spa session; reset
  * stays admin-only (canReset) because the api refuses non-admins. */
 const canEdit = computed(() => !!(session.value && session.value.authenticated))
+
+/* Delete door: admin-only like the reset and like the api, confirmed
+ * first (the rrd history goes with the row and cannot be undone), then
+ * the same singular endpoint the classic console's row delete proxies.
+ * Success leaves for the monitors listing; a failure keeps the record
+ * on screen and says so. */
+const deleting = ref(false)
+const deleteError = ref(null)
+const canDelete = computed(() => !!(session.value && session.value.authenticated && session.value.isAdmin))
+
+async function deleteMonitor() {
+    if (deleting.value || !monitorId.value || !canDelete.value) return
+    if (!window.confirm('Delete this monitor? Its rrd history is removed too.')) return
+    deleting.value = true
+    deleteError.value = null
+    try {
+        await delJson('/cgi-bin/api/monitor/' + encodeURIComponent(monitorId.value))
+        router.push({ name: 'monitors' })
+    } catch (err) {
+        deleteError.value = humanErr(err, 'monitor delete failed')
+    } finally {
+        deleting.value = false
+    }
+}
 
 async function resetMonitor() {
     if (resetBusy.value || !monitorId.value) return
@@ -201,6 +228,8 @@ const protocolText = computed(() =>
             <button class="btn" type="button" :disabled="loadingDetail" @click="fetchAll">refresh</button>
             <router-link v-if="monitorId && canEdit" class="btn"
                          :to="{ name: 'monitor-edit', params: { id: monitorId } }">edit</router-link>
+            <button v-if="monitorId && canDelete" class="btn" type="button" :disabled="deleting"
+                    @click="deleteMonitor">{{ deleting ? 'deleting…' : 'delete' }}</button>
             <button v-if="monitorId && canReset" class="btn" type="button" :disabled="resetBusy"
                     @click="resetMonitor">{{ resetBusy ? 'resetting…' : 'reset' }}</button>
             <a v-if="monitorId" class="btn" :href="rrdRawUrl(monitorId)" target="_blank" rel="noopener">raw data</a>
@@ -212,6 +241,9 @@ const protocolText = computed(() =>
     </div>
     <div v-if="resetError" class="banner banner-warn">
         reset failed: {{ resetError }} — counters were not cleared.
+    </div>
+    <div v-if="deleteError" class="banner banner-warn">
+        delete failed: {{ deleteError }} — the monitor is still there.
     </div>
 
     <div v-if="monitor" class="cols">

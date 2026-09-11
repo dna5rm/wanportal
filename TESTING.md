@@ -9,7 +9,7 @@ bash tests/run.sh                 # unit tests only (Perl prove + PHP CLI)
 
 Both drivers talk to the running `wanportal` container through `docker exec`, so the tests run with the same interpreters the stack serves with. If the container is down, `tests/run.sh` exits nonzero and the live sections of `tests/validate.sh` fail; there is no host-interpreter fallback. Set `WANPORTAL_CONTAINER` or `WANPORTAL_API` if your container or endpoint differ from the defaults.
 
-The Vue 3 SPA under `ui/` (`npm install && npm run build` there publishes `htdocs/index.html` plus hashed bundles into `htdocs/assets/`, served at the site root `/`; vite `base: '/'`, `emptyOutDir: false` — the docroot holds the PHP console) is outside these suites. It is the primary UI at `/`; the classic PHP console remains reachable at `/classic` and its per-page paths (login at `/classic/login.php`).
+The Vue 3 SPA under `ui/` (`npm install && npm run build` there publishes `htdocs/index.html` plus hashed bundles into `htdocs/spa/`, served at the site root `/`; vite `base: '/'`, `emptyOutDir: false` — the docroot holds the classic PHP console) is outside these suites. It is the primary UI at `/`; the classic PHP console remains reachable at `/classic` and its per-page paths (login at `/classic/login.php`). The SPA has its own vitest suite — `npm test` in `ui/` runs the specs under `ui/src/__tests__/`; it needs node on the host and is not part of the container drivers above.
 
 What each layer does:
 

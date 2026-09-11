@@ -1,8 +1,9 @@
 <!--
-  Agent detail page, ported read-only from agent.php: identity card,
+  Agent detail page, ported from agent.php: identity card,
   the four monitor counters, and the agent's monitor table with current
-  median/loss per row. The edit button opens the in-app agent form —
-  this page never mutates anything itself.
+  median/loss per row. The edit button opens the in-app agent form;
+  the delete button (admin tokens only, like the api) is the one
+  mutation offered here.
 
   The detail lookup and the monitor listing are fetched independently:
   if the listing fails the identity card still shows, and the table
@@ -10,7 +11,8 @@
 -->
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { getJson } from '../api'
+import { useRouter } from 'vue-router'
+import { delJson, getJson } from '../api'
 import { getSession } from '../session'
 import { resolveShowInactive, setShowInactive } from '../prefs'
 import { agentClass, fmtClock, lossClass } from '../format'
@@ -38,10 +40,16 @@ const loading = ref(false)
 const lastOk = ref(null)
 const session = ref(null)
 
+const router = useRouter()
+
 /* The edit door opens the in-app form, but the offer itself waits for
  * a signed-in SPA session — the classic page's login wall, in probe
- * form. Nothing on this page mutates anything. */
+ * form. Delete is the one mutation this page offers, and the api
+ * answers it for admin tokens only, so its button asks for the admin
+ * claim on top of the probe. */
 const canEdit = computed(() => !!(session.value && session.value.authenticated))
+const canDelete = computed(() =>
+    !!(session.value && session.value.authenticated && session.value.isAdmin))
 
 /* The classic page hides effectively-inactive rows behind a toggle;
  * the choice is the shared show-inactive flag (prefs.js), resolved
@@ -93,6 +101,29 @@ onMounted(async () => {
     session.value = await getSession()
     await fetchAll()
 })
+
+/* Delete door: confirm first (the api cascades — the agent's monitors
+ * and their rrd files go with it), then call the same singular
+ * endpoint the classic console's row delete proxies. Success leaves
+ * for the agents listing; a failure keeps the record on screen and
+ * says so, like every other failed request here. */
+const deleting = ref(false)
+const deleteError = ref(null)
+
+async function deleteAgent() {
+    if (deleting.value || !agentId.value || !canDelete.value) return
+    if (!window.confirm('Delete this agent? Its monitors and their rrd files are removed too.')) return
+    deleting.value = true
+    deleteError.value = null
+    try {
+        await delJson('/cgi-bin/api/agent/' + encodeURIComponent(agentId.value))
+        router.push({ name: 'agents' })
+    } catch (err) {
+        deleteError.value = humanErr(err, 'agent delete failed')
+    } finally {
+        deleting.value = false
+    }
+}
 
 /* Same counter rules as agent.php: a row is active only when the
  * combined flag is on and this agent is itself active; the own-flag
@@ -154,11 +185,16 @@ const heartbeatStale = computed(() =>
                title="agent script + docker image install">netping</a>
             <router-link v-if="agentId && canEdit" class="btn"
                          :to="{ name: 'agent-edit', params: { id: agentId } }">edit</router-link>
+            <button v-if="agentId && canDelete" class="btn" type="button" :disabled="deleting"
+                    @click="deleteAgent">{{ deleting ? 'deleting…' : 'delete' }}</button>
         </div>
     </header>
 
     <div v-if="errors.detail" class="banner banner-error">
         agent api: {{ errors.detail }} — nothing below is live data.
+    </div>
+    <div v-if="deleteError" class="banner banner-warn">
+        delete failed: {{ deleteError }} — the agent is still there.
     </div>
 
     <div v-if="agent" class="cols">

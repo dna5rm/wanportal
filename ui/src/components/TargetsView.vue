@@ -2,13 +2,15 @@
   Targets listing, ported from htdocs/targets.php. The classic table is
   intentionally shorter than the others — address, description, status,
   and the edit button — so this one stays that way too. Row titles
-  open the Vue detail route; editing opens the in-app target form. The
-  text filter above the table is client-side and persistent
-  (listingFilter) until its clear button wipes it.
+  open the Vue detail route; editing opens the in-app target form, and
+  admins get a delete door beside edit (confirm first, then the
+  singular api path, then a refetch). The text filter above the table
+  is client-side and persistent (listingFilter) until its clear button
+  wipes it.
 -->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { getJson } from '../api'
+import { delJson, getJson } from '../api'
 import { getSession } from '../session'
 import { fmtClock } from '../format'
 import { activeChipCls } from './detailShared'
@@ -29,8 +31,13 @@ const q = ref(loadFilter(FILTER_PAGE).q)
 /* Write doors need the SPA session: the classic console enforces its
  * login server-side, but this listing should not even offer New/Edit
  * to a signed-out visitor. Reads stay public, so the data loads for
- * everyone; only the buttons wait for the probe. */
+ * everyone; only the buttons wait for the probe. Delete goes further —
+ * the api answers it for admin tokens only, so its button asks for the
+ * admin claim on top of the probe, exactly like the detail page's
+ * delete door. */
 const canEdit = computed(() => !!(session.value && session.value.authenticated))
+const canAdmin = computed(() =>
+    !!(session.value && session.value.authenticated && session.value.isAdmin))
 
 function isActive(t) {
     return Number(t.is_active) === 1
@@ -100,6 +107,31 @@ async function fetchRows() {
     }
 }
 
+/* Delete door: confirm first (the api cascades — the target's monitors
+ * and their rrd files go with it), then the singular api path the
+ * detail page also deletes through, then the listing refetches so the
+ * row actually leaves. A failure keeps the rows as they are and says
+ * so; delJson throws the bare status ('HTTP 403') on a refusal, and
+ * that is what the banner shows — the api's message text never
+ * survives it. */
+const deleting = ref(false)
+const deleteError = ref(null)
+
+async function deleteTargetRow(t) {
+    if (deleting.value || !canAdmin.value) return
+    if (!window.confirm('Delete target "' + t.address + '"? Its monitors and their rrd files are removed too.')) return
+    deleting.value = true
+    deleteError.value = null
+    try {
+        await delJson('/cgi-bin/api/target/' + encodeURIComponent(t.id))
+        await fetchRows()
+    } catch (err) {
+        deleteError.value = (err && err.message) || 'unknown error'
+    } finally {
+        deleting.value = false
+    }
+}
+
 onMounted(async () => {
     session.value = await getSession()
     await fetchRows()
@@ -119,6 +151,9 @@ onMounted(async () => {
     </header>
 
     <div v-if="banner" :class="banner.kind">{{ banner.text }}</div>
+    <div v-if="deleteError" class="banner banner-warn">
+        delete failed: {{ deleteError }} — the target is still listed.
+    </div>
 
     <section class="panel">
         <h2>targets</h2>
@@ -153,6 +188,8 @@ onMounted(async () => {
                 </td>
                 <td>
                     <router-link v-if="canEdit" class="btn" :to="{ name: 'target-edit', params: { id: t.id } }" title="Edit">edit</router-link>
+                    <button v-if="canAdmin" class="btn" type="button" :disabled="deleting"
+                            @click="deleteTargetRow(t)">delete</button>
                 </td>
             </tr>
             </tbody>

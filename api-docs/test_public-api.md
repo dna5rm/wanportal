@@ -115,3 +115,31 @@ curl -s "http://localhost/cgi-bin/api/monitors?is_active=1" | jq '.'
 ```
 
 `/agents` and `/targets` accept no filters.
+
+## List the API documentation files
+
+`GET /docs` is the public catalog of the operator guides: every `*.md`
+in the docs directory, sorted by name, each entry carrying the title
+taken from the file's first `# ` heading.
+
+```bash
+curl -s http://localhost/cgi-bin/api/docs | jq '.'
+```
+
+### Expected response
+
+```json
+{
+  "status": "success",
+  "files": [
+    {
+      "name": "agent-image.md",
+      "title": "Agent image"
+    },
+    {
+      "name": "test_users.md",
+      "title": "Test: Users API"
+    }
+  ]
+}
+```

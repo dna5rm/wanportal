@@ -9,12 +9,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { getJson, postJson } from '../api'
+import { delJson, getJson, postJson } from '../api'
 import { getSession } from '../session'
 import MonitorDetailView from '../components/MonitorDetailView.vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
-vi.mock('../api', () => ({ getJson: vi.fn(), postJson: vi.fn() }))
+vi.mock('../api', () => ({ getJson: vi.fn(), postJson: vi.fn(), delJson: vi.fn() }))
 vi.mock('../session', () => ({ getSession: vi.fn() }))
 
 enableAutoUnmount(afterEach)
@@ -72,6 +72,7 @@ async function mountDetail(id = MONITOR_ID) {
     const router = createRouter({
         history: createMemoryHistory(),
         routes: [
+            { path: '/monitors', name: 'monitors', component: { render: () => null } },
             { path: '/monitors/:id/edit', name: 'monitor-edit', component: { render: () => null }, props: true }
         ]
     })
@@ -79,6 +80,21 @@ async function mountDetail(id = MONITOR_ID) {
     await flushPromises()
     await flushPromises()
     return wrapper
+}
+
+/* Click a bar button by label ('delete' also matches the busy
+ * 'deleting…' state) — index-based picks broke when delete joined the
+ * bar between refresh and reset. */
+function clickBarButton(wrapper, label) {
+    const btn = wrapper.findAll('.bar-right button.btn')
+        .find((b) => b.text().startsWith(label))
+    if (!btn) throw new Error('bar button not found: ' + label)
+    return btn.trigger('click')
+}
+
+/* The router the view was mounted with, for navigation assertions. */
+function routerOf(wrapper) {
+    return wrapper.vm.$.appContext.config.globalProperties.$router
 }
 
 describe('MonitorDetailView with both doors answering', () => {
@@ -136,8 +152,8 @@ describe('MonitorDetailView reset', () => {
         vi.stubGlobal('confirm', () => true)
         const wrapper = await mountDetail()
 
-        // The reset button is the second button in the bar.
-        await wrapper.findAll('.bar-right button.btn')[1].trigger('click')
+        // The reset button rides in the bar next to edit and delete.
+        await clickBarButton(wrapper, 'reset')
         await flushPromises()
         await flushPromises()
 
@@ -157,7 +173,7 @@ describe('MonitorDetailView reset', () => {
         vi.stubGlobal('confirm', () => false)
         const wrapper = await mountDetail()
 
-        await wrapper.findAll('.bar-right button.btn')[1].trigger('click')
+        await clickBarButton(wrapper, 'reset')
         await flushPromises()
         await flushPromises()
 
@@ -176,6 +192,82 @@ describe('MonitorDetailView reset', () => {
         const labels = wrapper.findAll('.bar-right button.btn').map((n) => n.text())
         expect(labels).not.toContain('reset')
         expect(postJson).not.toHaveBeenCalled()
+    })
+})
+
+describe('MonitorDetailView delete', () => {
+    function stubDoors() {
+        getJson.mockImplementation(async (url) => {
+            if (url === '/cgi-bin/api/monitors/' + MONITOR_ID) return monitorReply()
+            if (url.startsWith('/cgi-bin/api/rrd?id=' + MONITOR_ID)) return chartReply()
+            throw new Error('unexpected url: ' + url)
+        })
+    }
+
+    it('shows the button for admins but not for a plain signed-in user', async () => {
+        stubDoors()
+        getSession.mockResolvedValue({ authenticated: true, isAdmin: false })
+        const wrapper = await mountDetail()
+
+        // Edit stays for any signed-in session; delete wants the claim.
+        expect(wrapper.find('a[href="/monitors/' + MONITOR_ID + '/edit"]').exists()).toBe(true)
+        const labels = wrapper.findAll('.bar-right button.btn').map((n) => n.text())
+        expect(labels).not.toContain('delete')
+        expect(delJson).not.toHaveBeenCalled()
+    })
+
+    it('confirms, DELETEs the singular api path, and walks to the listing', async () => {
+        stubDoors()
+        delJson.mockResolvedValue({ status: 'success', message: 'Monitor deleted successfully' })
+        vi.stubGlobal('confirm', () => true)
+        const wrapper = await mountDetail()
+        const router = routerOf(wrapper)
+        expect(router.currentRoute.value.path).toBe('/')
+
+        await clickBarButton(wrapper, 'delete')
+        await flushPromises()
+        await flushPromises()
+
+        expect(delJson).toHaveBeenCalledTimes(1)
+        expect(delJson).toHaveBeenCalledWith('/cgi-bin/api/monitor/' + MONITOR_ID)
+        // Success leaves for the monitors listing, like the classic row
+        // delete fell back to the table.
+        expect(router.currentRoute.value.path).toBe('/monitors')
+    })
+
+    it('leaves the record alone when confirm is declined', async () => {
+        stubDoors()
+        delJson.mockResolvedValue({ status: 'success' })
+        vi.stubGlobal('confirm', () => false)
+        const wrapper = await mountDetail()
+
+        await clickBarButton(wrapper, 'delete')
+        await flushPromises()
+        await flushPromises()
+
+        expect(delJson).not.toHaveBeenCalled()
+        expect(routerOf(wrapper).currentRoute.value.path).toBe('/')
+    })
+
+    it('keeps the record on screen and says so when the api refuses', async () => {
+        stubDoors()
+        delJson.mockRejectedValue(new Error('HTTP 403'))
+        vi.stubGlobal('confirm', () => true)
+        const wrapper = await mountDetail()
+
+        await clickBarButton(wrapper, 'delete')
+        await flushPromises()
+        await flushPromises()
+
+        const warn = wrapper.find('.banner.banner-warn')
+        expect(warn.exists()).toBe(true)
+        expect(warn.text()).toContain('delete failed')
+        expect(warn.text()).toContain('HTTP 403')
+        expect(warn.text()).toContain('the monitor is still there')
+        // The failed delete navigates nowhere and the button comes back
+        // out of its busy state.
+        expect(routerOf(wrapper).currentRoute.value.path).toBe('/')
+        expect(wrapper.findAll('.bar-right button.btn').map((n) => n.text())).toContain('delete')
     })
 })
 

@@ -11,12 +11,14 @@
   signed-out visitor sees no links that would only dead-end on the
   API's 401. Runtime is a tool door, not a public page: it stays in
   the account dropdown, so it is reachable only once signed in.
-  Sign-in lives in the app at #/login; the classic console is one hop
-  away at /classic from the dropdown, the only classic door in the
-  chrome. The theme toggle also lives in the right cluster — between
-  the API door and the account chip, sharing the .btn chrome — and
-  writes the same localStorage key the classic console's dark-mode
-  toggle uses, so one preference serves both consoles.
+  Sign-in lives in the app at #/login. The chrome carries no classic
+  console door of its own — the account dropdown lists none — and the
+  classic console at /classic is reachable only where the operator's
+  config.json menu places a link to it. The theme toggle also lives
+  in the right cluster — between the API door and the account chip,
+  sharing the .btn chrome — and writes the same localStorage key the
+  classic console's dark-mode toggle uses, so one preference serves
+  both consoles.
 
   The shell runs the session probe itself — on mount and on every
   route change, so signing in on /login lights the account menu
@@ -68,8 +70,8 @@ const publicItems = [
     { label: 'Latency', to: '/latency' }
 ]
 
-/* '/' + first segment groups a listing with its detail pages
- * ('/monitors/xyz' lights the Monitors link). */
+/* '/' + first segment groups a bar page with its sub-paths
+ * ('/latency' and anything under it light the Latency link). */
 const section = computed(() => '/' + (route.path.split('/')[1] || ''))
 
 /* Operator site config (htdocs/config.json, read outside every

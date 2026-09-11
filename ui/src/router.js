@@ -1,16 +1,17 @@
 /*
  * Router for the bundled app. Hash history keeps every link working
  * behind plain Apache — no rewrite rules for deep paths, nothing to
- * remember on the server. Every page in the nav renders in the app
- * now; sign-in moved into the app too as the /login route, and the
- * work that still belongs to the classic console (edits) is linked
- * out to it rather than stubbed here.
+ * remember on the server. The new UI is the site root: every listing,
+ * detail and edit page renders in the app now, and sign-in moved into
+ * the app too as the /login route. The classic console stays up
+ * alongside at /classic but carries no built-in door from this app —
+ * it is reachable only where the operator's config.json menu links it.
  *
  * Route lines carry route markers as the agreed anchor points: new
  * pages get added next to their marker as small patches, the table is
- * not rewritten wholesale. Listing routes carry their name and legacy
- * page in meta so detail pages can link back without knowing which
- * entity they belong to.
+ * not rewritten wholesale. Listing routes still carry their name and
+ * the classic page in meta (meta.list, meta.legacy) — only the stub
+ * views read them today; the live detail views navigate by name.
  */
 
 import { createRouter, createWebHashHistory } from 'vue-router'
@@ -39,12 +40,12 @@ import LoginView from './components/LoginView.vue'
 import { getSession } from './session'
 
 /*
- * Detail pages take the record id as a prop and keep their list route
- * in meta, so the back-to-list links stay one-liners. The canonical
- * path rides the plural listing (/monitors/:id) and the singular form
- * stays as an alias because detailShared.detailLink still builds
- * '#/monitor/<uuid>' hrefs; drop the alias once that builder is
- * updated.
+ * Detail pages take the record id as a prop; meta keeps the list
+ * route name and the classic page for the stub views, while the live
+ * views navigate by route name. The canonical path rides the plural
+ * listing (/monitors/:id) and the singular form stays as an alias
+ * because detailShared.detailLink still builds '#/monitor/<uuid>'
+ * hrefs; drop the alias once that builder is updated.
  *
  * auth flags a detail route as sign-in only (credential: the classic
  * credential_view.php sits behind check_session.php). Leave it off for
@@ -128,9 +129,9 @@ const routes = [
     /* route:agent-netping */
     {
         // Install page for one agent: explains the docker image and
-        // run command, and links the classic /netping.php?id=<uuid>
-        // for the script itself — serving the perl stays with the
-        // classic console, not the bundle.
+        // run command, and serves the perl probe script itself from
+        // the jwt-gated /cgi-bin/api/netping-script endpoint — the
+        // api counterpart of the classic /classic/netping.php dump.
         name: 'agent-netping',
         path: '/agents/:id/netping',
         component: NetpingView,
@@ -205,7 +206,7 @@ const routes = [
         // Markdown guides from the /cgi-bin/api/docs glob render in the
         // app now: GuideView fetches the file sitting next to
         // openapi.yaml and renders it itself — the classic Parsedown
-        // page is out of the loop. Public, like the docs it replaces;
+        // page is gone. Public, like the docs it replaced;
         // the basename rides in as a prop. A plain object route, so
         // there is no alias slot to pass a bare undefined into.
         name: 'guide',
@@ -217,7 +218,7 @@ const routes = [
     {
         // Sign-in lives in the app now: the form posts JSON to the
         // login API and the JWT rides sessionStorage for this tab
-        // only. The classic /login.php stays up alongside.
+        // only. The classic /classic/login.php stays up alongside.
         name: 'login',
         path: '/login',
         component: LoginView

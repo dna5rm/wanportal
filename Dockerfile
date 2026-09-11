@@ -1,12 +1,10 @@
-# Dockerfile
+# Dockerfile — lab image: Apache + PHP + Perl CGI + MariaDB client + RRD + cron.
+# No work-plugin toolchain (no ansible, no CryFS, no WebDAV).
 FROM alpine:3.21
 
-ENV CRYFS_NO_UPDATE_CHECK=TRUE
-ENV CRYFS_FRONTEND=noninteractive
 ENV MOJO_MODE=development
 ENV NONINTERACTIVE_TESTING=1
 ENV PERL_MM_USE_DEFAULT=1
-ENV PYTHONUNBUFFERED 1
 
 WORKDIR /srv
 COPY . .
@@ -15,12 +13,7 @@ COPY . .
 RUN apk -q update && apk -q upgrade
 
 ## Core Packages
-RUN apk add --no-cache bash cronie font-freefont mariadb-client nano py3-pip rrdtool rrdtool-dev curl jq tzdata
-
-## Build deps for CryFS (work plugins). Keep even when the clone/cmake
-## block below is commented — that site uncomments it. Do not strip.
-RUN apk add --no-cache build-base boost-dev cmake curl-dev \
-    fuse fuse-dev git libc-dev range-v3-dev spdlog-dev
+RUN apk add --no-cache bash cronie mariadb-client rrdtool curl jq tzdata
 
 ## Perl Lang
 RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-regexp-common perl-email-mime \
@@ -28,18 +21,8 @@ RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-rege
     perl-lwp-useragent-determined perl-io-socket-ssl perl-rrd perl-parallel-forkmanager perl-sys-cpu \
     perl-net-ldap perl-crypt-eksblowfish
 
-## Python / Ansible — required for work plugins (vault, netcommon, etc.).
-## Do not remove this venv to "slim" the image.
-RUN python3 -m venv /opt/venv && \
-    /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
-    /opt/venv/bin/pip install --no-cache-dir ansible ansible-vault dnspython fqdn && \
-    /opt/venv/bin/ansible-galaxy collection install ansible.netcommon && \
-    /opt/venv/bin/ansible-galaxy collection install community.general
-
-ENV PATH="/opt/venv/bin:$PATH"
-
 ## Web Server + PHP
-RUN apk add --no-cache apache2 apache2-utils apache2-webdav php84 \
+RUN apk add --no-cache apache2 apache2-utils php84 \
     php84-apache2 php84-curl php84-mysqli php84-session php84-simplexml php84-xml
 
 # AllowOverride within DocumentRoot
@@ -85,7 +68,7 @@ RUN cat <<EOF >>/etc/apache2/conf.d/api-docs.conf
     Options Indexes FollowSymLinks
     AllowOverride None
     Require all granted
-    
+
     # Add YAML mime type if not already defined
     AddType application/yaml yml
     AddType application/yaml yaml
@@ -126,21 +109,9 @@ RUN cat <<EOF >>/etc/crontabs/root
 * * */1 * * su -s /bin/sh apache -c 'find /tmp -name "sess_*" -type f -mmin +180 -delete'
 EOF
 
-# CryFS: leave commented in this lab image. Work builds uncomment the
-# RUN so plugins that need cryfs get the binary. Toolchain stays above.
-# RUN git clone --depth 1 https://github.com/cryfs/cryfs.git /usr/local/src/cryfs && \
-#     mkdir -p /usr/local/src/cryfs/build && \
-#     cd /usr/local/src/cryfs/build && \
-#     cmake -Wno-dev .. && \
-#     make -j$(nproc) && \
-#     make install && \
-#     cd / && \
-#     rm -rf /usr/local/src/cryfs
-
 # Fix Permissions & Cleanup
 RUN install -d -o root -g root -m 775 /etc/cron.d
 RUN install -d -o apache -g apache -m 775 /var/rrd
-RUN install -d -o apache -g apache -m 775 /var/run/lock/dav
 RUN find . -type f -exec chmod 644 {} \;
 RUN find . -type d -exec chmod 755 {} \;
 RUN rm -rf htdocs/index.html /var/www/localhost /var/cache/apk/*

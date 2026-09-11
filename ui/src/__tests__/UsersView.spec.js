@@ -21,8 +21,6 @@ import UsersView from '../components/UsersView.vue'
 import { SHOW_INACTIVE_KEY } from '../prefs'
 import { jsonReply } from './stubs'
 
-enableAutoUnmount(afterEach)
-
 afterEach(() => {
     vi.unstubAllGlobals()
     // The shared flag is localStorage-backed and the toggle
@@ -30,6 +28,12 @@ afterEach(() => {
     localStorage.clear()
     window.history.replaceState(null, '', window.location.pathname)
 })
+
+// Registered after the clear above on purpose: afterEach hooks run in
+// reverse order, so the auto-unmount — whose onBeforeUnmount flushes a
+// pending filter write — must run BEFORE the storage clear, or the
+// flushed write leaks into the next case.
+enableAutoUnmount(afterEach)
 
 /* An admin row and a half-registered one: blank name/email cells and
  * no last login, so the dash and "never" fallbacks get exercised. */
@@ -51,12 +55,10 @@ function adminSession() {
  * error) and the listing breaking via failUsers. userUrls collects
  * every listing url the page asked for, in order. The memory router
  * mirrors the production table for the routes this page links to, so
- * the router-links resolve for real. localStorage is wiped at entry
- * as well as in afterEach: a previous test's unmount can flush a
- * pending filter save after the hook ran, and a restored filter would
- * silently re-narrow the listing under test. */
+ * the router-links resolve for real. Storage between tests is the
+ * afterEach clear's job (hook order below) — no entry wipe here, or
+ * the seeds a test writes just before mounting would vanish. */
 async function mountUsers(options = {}) {
-    localStorage.clear()
     const userUrls = []
     const router = createRouter({
         history: createMemoryHistory(),
@@ -74,6 +76,13 @@ async function mountUsers(options = {}) {
         if (url === '/cgi-bin/api/session') {
             if (options.sessionFails) throw options.sessionFails
             return jsonReply(options.sessionBody || {}, true, options.sessionStatus ?? 200)
+        }
+        if (url.startsWith('/cgi-bin/api/users/')) {
+            // The singular delete path: a success envelope unless the
+            // test asks for a refusal. It stays out of userUrls — that
+            // ledger only records listing fetches.
+            if (options.failDelete) throw options.failDelete
+            return jsonReply({ status: 'success' })
         }
         if (url.startsWith('/cgi-bin/api/users')) {
             userUrls.push(url)
@@ -352,5 +361,72 @@ describe('UsersView behind the gate', () => {
         expect(wrapper.find('table').exists()).toBe(false)
         // A refusal is not a fetch failure — no error banner on top.
         expect(wrapper.find('.banner').exists()).toBe(false)
+    })
+})
+
+describe('UsersView delete door', () => {
+    it('shows the delete button beside edit and DELETEs the singular path after confirm', async () => {
+        const { wrapper, stub, userUrls } = await mountUsers({ sessionBody: adminSession() })
+
+        // The door rides in the actions cell next to edit, enabled for
+        // an admin like the other listings' delete buttons.
+        const row = wrapper.findAll('tbody tr')[0]
+        const del = row.find('button')
+        expect(del.text()).toBe('delete')
+        expect(del.attributes('disabled')).toBeUndefined()
+        expect(row.find('a[href="/users/1/edit"]').exists()).toBe(true)
+
+        vi.stubGlobal('confirm', () => true)
+        await del.trigger('click')
+        await flushPromises()
+        await flushPromises()
+
+        // The singular api path with the DELETE method, then the
+        // listing refetch so the row actually leaves.
+        const deleteCall = stub.mock.calls.find((c) => c[1] && c[1].method === 'DELETE')
+        expect(deleteCall).toBeTruthy()
+        expect(deleteCall[0]).toBe('/cgi-bin/api/users/1')
+        expect(userUrls).toEqual([
+            '/cgi-bin/api/users?is_active=1',
+            '/cgi-bin/api/users?is_active=1'
+        ])
+    })
+
+    it('leaves the record alone when confirm is declined', async () => {
+        const { wrapper, stub, userUrls } = await mountUsers({ sessionBody: adminSession() })
+
+        vi.stubGlobal('confirm', () => false)
+        await wrapper.findAll('tbody tr')[0].find('button').trigger('click')
+        await flushPromises()
+
+        expect(stub.mock.calls.some((c) => c[1] && c[1].method === 'DELETE')).toBe(false)
+        expect(userUrls).toHaveLength(1)
+        expect(wrapper.find('.banner-warn').exists()).toBe(false)
+    })
+
+    it('keeps the row and shows the banner when the api refuses the delete', async () => {
+        const { wrapper, userUrls } = await mountUsers({
+            sessionBody: adminSession(),
+            failDelete: new Error('HTTP 403')
+        })
+
+        // The built-in admin account draws a 403: the rows stay and
+        // the banner says so instead of faking a success.
+        vi.stubGlobal('confirm', () => true)
+        await wrapper.findAll('tbody tr')[0].find('button').trigger('click')
+        await flushPromises()
+        await flushPromises()
+
+        const warn = wrapper.find('.banner-warn')
+        expect(warn.exists()).toBe(true)
+        expect(warn.text()).toContain('delete failed')
+        expect(warn.text()).toContain('HTTP 403')
+        expect(warn.text()).toContain('the user is still listed')
+        expect(wrapper.findAll('tbody tr')).toHaveLength(2)
+        expect(userUrls).toHaveLength(1) // no refetch behind a refusal
+
+        // The door re-enables once the attempt settles.
+        expect(wrapper.findAll('tbody tr')[0].find('button').attributes('disabled'))
+            .toBeUndefined()
     })
 })

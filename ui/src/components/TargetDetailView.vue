@@ -1,9 +1,10 @@
 <!--
-  Target detail page, ported read-only from target.php: identity card,
+  Target detail page, ported from target.php: identity card,
   the four monitor counters, and the target's monitor table with
   lifetime-average latency columns (the classic page shows averages
   here, not current values, and that is kept). Editing stays on the
-  classic console — this page never mutates anything.
+  in-app form; the delete button (admin tokens only, like the api) is
+  the one mutation offered here.
 
   The detail lookup and the monitor listing are fetched independently:
   if the listing fails the identity card still shows, and the table
@@ -11,7 +12,8 @@
 -->
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { getJson } from '../api'
+import { useRouter } from 'vue-router'
+import { delJson, getJson } from '../api'
 import { getSession } from '../session'
 import { resolveShowInactive, setShowInactive } from '../prefs'
 import { fmtClock, lossClass } from '../format'
@@ -39,10 +41,16 @@ const loading = ref(false)
 const lastOk = ref(null)
 const session = ref(null)
 
+const router = useRouter()
+
 /* The edit door opens the in-app form, but the offer itself waits for
  * a signed-in SPA session — the classic page's login wall, in probe
- * form. Nothing on this page mutates anything. */
+ * form. Delete is the one mutation this page offers, and the api
+ * answers it for admin tokens only, so its button asks for the admin
+ * claim on top of the probe. */
 const canEdit = computed(() => !!(session.value && session.value.authenticated))
+const canDelete = computed(() =>
+    !!(session.value && session.value.authenticated && session.value.isAdmin))
 
 /* The classic page hides effectively-inactive rows behind a toggle;
  * the choice is the shared show-inactive flag (prefs.js), resolved
@@ -95,6 +103,29 @@ onMounted(async () => {
     await fetchAll()
 })
 
+/* Delete door: confirm first (the api cascades — the target's monitors
+ * and their rrd files go with it), then call the same singular
+ * endpoint the classic console's row delete proxies. Success leaves
+ * for the targets listing; a failure keeps the record on screen and
+ * says so, like every other failed request here. */
+const deleting = ref(false)
+const deleteError = ref(null)
+
+async function deleteTarget() {
+    if (deleting.value || !targetId.value || !canDelete.value) return
+    if (!window.confirm('Delete this target? Its monitors and their rrd files are removed too.')) return
+    deleting.value = true
+    deleteError.value = null
+    try {
+        await delJson('/cgi-bin/api/target/' + encodeURIComponent(targetId.value))
+        router.push({ name: 'targets' })
+    } catch (err) {
+        deleteError.value = humanErr(err, 'target delete failed')
+    } finally {
+        deleting.value = false
+    }
+}
+
 /* Same counter rules as target.php: a row is active only when the
  * combined flag is on and this target is itself active; the own-flag
  * count tracks monitors that are individually disabled. */
@@ -146,11 +177,16 @@ const visibleMons = computed(() =>
             <button class="btn" type="button" :disabled="loading" @click="fetchAll">refresh</button>
             <router-link v-if="targetId && canEdit" class="btn"
                          :to="{ name: 'target-edit', params: { id: targetId } }">edit</router-link>
+            <button v-if="targetId && canDelete" class="btn" type="button" :disabled="deleting"
+                    @click="deleteTarget">{{ deleting ? 'deleting…' : 'delete' }}</button>
         </div>
     </header>
 
     <div v-if="errors.detail" class="banner banner-error">
         target api: {{ errors.detail }} — nothing below is live data.
+    </div>
+    <div v-if="deleteError" class="banner banner-warn">
+        delete failed: {{ deleteError }} — the target is still there.
     </div>
 
     <div v-if="target" class="cols">

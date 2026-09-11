@@ -186,8 +186,9 @@ curl -s -X POST http://localhost/cgi-bin/api/monitor/$MONITOR_ID/reset \
 
 ## Delete a monitor
 
-Deleting a monitor also deletes its RRD data files. The operation
-cannot be undone.
+Deleting a monitor removes its configuration row. The RRD data file is
+left in place; it is removed together with the monitor when the
+monitor's agent or target is deleted. The operation cannot be undone.
 
 ```bash
 curl -s -X DELETE http://localhost/cgi-bin/api/monitor/$MONITOR_ID \

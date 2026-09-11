@@ -9,13 +9,14 @@
 
   The secret renders into a readonly input with reveal and copy
   buttons, the same interaction as the classic page. It is never
-  logged and never printed anywhere else — and since this page is
-  read-only, nothing here sends it anywhere either.
+  logged and never printed anywhere else — and the one write this page
+  offers is the admin delete (soft the first time, permanent the
+  second), confirmed before it goes anywhere.
 -->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getJson } from '../api'
+import { delJson, getJson } from '../api'
 import { getSession } from '../session'
 import { humanErr, idFromLocation } from './detailShared'
 
@@ -100,6 +101,30 @@ function stampRow(s, by) {
     return String(s) + (by ? ' by ' + by : '')
 }
 
+/* The vault's write doors are admin territory server-side; the delete
+ * button follows the api and only offers itself to admin tokens. The
+ * endpoint is the same plural path the listing proxies: the first
+ * delete soft-hides the entry, a second one removes the row. */
+const deleting = ref(false)
+const deleteError = ref(null)
+const canDelete = computed(() =>
+    !!(session.value && session.value.authenticated && session.value.isAdmin))
+
+async function deleteCredential() {
+    if (deleting.value || !credentialId.value || !canDelete.value) return
+    if (!window.confirm('Delete this credential? The first delete only hides the entry; deleting it again removes it permanently.')) return
+    deleting.value = true
+    deleteError.value = null
+    try {
+        await delJson('/cgi-bin/api/credentials/' + encodeURIComponent(credentialId.value))
+        router.push({ name: 'credentials' })
+    } catch (err) {
+        deleteError.value = humanErr(err, 'credential delete failed')
+    } finally {
+        deleting.value = false
+    }
+}
+
 function toLogin() {
     redirected.value = true
     router.replace({ name: 'login' })
@@ -166,6 +191,8 @@ onBeforeUnmount(() => {
                          :to="{ name: 'credential-edit', params: { id: credentialId } }">
                 edit
             </router-link>
+            <button v-if="cred && canDelete" class="btn" type="button" :disabled="deleting"
+                    @click="deleteCredential">{{ deleting ? 'deleting…' : 'delete' }}</button>
         </div>
     </header>
 
@@ -179,6 +206,9 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="error" class="banner banner-error">{{ error }}</div>
+    <div v-if="deleteError" class="banner banner-warn">
+        delete failed: {{ deleteError }} — the record is still there.
+    </div>
 
     <template v-if="cred">
         <section class="panel">

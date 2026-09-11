@@ -107,45 +107,45 @@ function wanportal_csrf_valid(): bool
 // opening a connection here; tests/php/no_direct_db.php keeps it
 // that way.
 
-// Menu Structure
+// Menu chrome (brand logo, public links, operator menu tree) is
+// operator config in htdocs/config.json, read by lib/site_config.php
+// and rendered by navbar.php — the same document the SPA reads for its
+// own chrome. $menuItems now feeds only the account dropdown's classic
+// listing doors (Agents, Targets, Monitors, Credentials, plus Users
+// when LDAP auth is off, admin-only), mirroring the SPA account menu;
+// navbar.php accepts both this flat shape and the old Admin dropdown
+// wrapper. The old Home entry and the bar-level Admin dropdown are
+// gone: the navbar renders the SPA's public set (Dashboard, Latency)
+// plus the operator tree instead. The per-entry 'icon' keys are
+// legacy: the dropdown renders text-only, exactly like the SPA
+// account menu, and ignores them.
 $menuItems = [
-    'Home' => [
-        'url' => '/classic/',
-        'icon' => 'bi bi-house-door',
-        'auth' => false
+    'Agents' => [
+        'url' => '/classic/agents.php',
+        'icon' => 'bi bi-server',
+        'auth' => true
     ],
-    'Admin' => [
-        'type' => 'dropdown',
-        'icon' => 'bi bi-shield-lock',
-        'auth' => true,
-        'items' => [
-            'Agents' => [
-                'url' => '/classic/agents.php',
-                'icon' => 'bi bi-server',
-                'auth' => true
-            ],
-            'Targets' => [
-                'url' => '/classic/targets.php',
-                'icon' => 'bi bi-bullseye',
-                'auth' => true
-            ],
-            'Monitors' => [
-                'url' => '/classic/monitors.php',
-                'icon' => 'bi bi-graph-up',
-                'auth' => true
-            ],
-            'Credentials' => [
-                'url' => '/classic/credentials.php',
-                'icon' => 'bi bi-safe',
-                'auth' => true
-            ],
-        ]
+    'Targets' => [
+        'url' => '/classic/targets.php',
+        'icon' => 'bi bi-bullseye',
+        'auth' => true
+    ],
+    'Monitors' => [
+        'url' => '/classic/monitors.php',
+        'icon' => 'bi bi-graph-up',
+        'auth' => true
+    ],
+    'Credentials' => [
+        'url' => '/classic/credentials.php',
+        'icon' => 'bi bi-safe',
+        'auth' => true
     ],
 ];
 if (getenv('AUTH_LDAP_ENABLED') !== 'true') {
-    $menuItems['Admin']['items']['Users'] = [
+    $menuItems['Users'] = [
         'url' => '/classic/users.php',
         'icon' => 'bi bi-people',
+        'auth' => true,
         'admin' => true
     ];
 }

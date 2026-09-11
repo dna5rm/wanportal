@@ -23,11 +23,14 @@
   session probe first and shows an "admin only" note instead of a
   table for anyone the API will not answer. Create and edit moved
   into the app: New/Edit open the /users/new and /users/:id/edit
-  routes, and nothing here POSTs.
+  routes, and nothing here POSTs. Each row also carries the admin
+  delete door (confirm first, then the singular api path, then a
+  refetch) — the api refuses the built-in admin account with a 403,
+  and that refusal shows as a banner instead of a fake success.
 -->
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { getJson } from '../api'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { delJson, getJson } from '../api'
 import { getSession } from '../session'
 import { resolveShowInactive, setShowInactive } from '../prefs'
 import { clearFilter, loadFilter, saveFilter } from '../listingFilter'
@@ -167,6 +170,38 @@ function roleClass(u) {
     return Number(u.is_admin) ? 'chip chip-danger' : 'chip'
 }
 
+/* The delete button keeps the same explicit admin claim as the other
+ * listings' delete doors (canAdmin, like TargetsView and friends) —
+ * the table template is already admin-gated, so the gate never bites
+ * in practice, but it stays named and uniform across the listings. */
+const canAdmin = computed(() =>
+    !!(session.value && session.value.authenticated && session.value.isAdmin))
+
+/* Delete door: confirm with the username first (the classic users.php
+ * wording), then the singular api path, then the listing refetches so
+ * the row actually leaves. A failure keeps the rows as they
+ * are and says so. The api refuses the built-in admin account with a
+ * 403; delJson throws the bare status ('HTTP 403') on a refusal, and
+ * that is what the banner shows — the api's message text never
+ * survives it. */
+const deleting = ref(false)
+const deleteError = ref(null)
+
+async function deleteUserRow(u) {
+    if (deleting.value) return
+    if (!window.confirm('Are you sure you want to delete user "' + u.username + '"?')) return
+    deleting.value = true
+    deleteError.value = null
+    try {
+        await delJson('/cgi-bin/api/users/' + encodeURIComponent(u.id))
+        await loadUsers()
+    } catch (err) {
+        deleteError.value = (err && err.message) || 'unknown error'
+    } finally {
+        deleting.value = false
+    }
+}
+
 function statusClass(u) {
     return Number(u.is_active) ? 'chip chip-ok' : 'chip chip-warn'
 }
@@ -237,6 +272,12 @@ onBeforeUnmount(() => {
 
     <div v-if="error" class="banner banner-error">users fetch failed — {{ error }}</div>
 
+    <!-- Delete refusals (the built-in admin account's 403 among them)
+         keep the rows and say so, exactly like the targets listing. -->
+    <div v-if="deleteError" class="banner banner-warn">
+        delete failed: {{ deleteError }} — the user is still listed.
+    </div>
+
     <template v-if="session && session.authenticated && session.isAdmin && !adminOnly">
         <section class="panel">
             <div class="filters">
@@ -287,8 +328,11 @@ onBeforeUnmount(() => {
                     <td><span :class="statusClass(u)">{{ Number(u.is_active) ? 'active' : 'inactive' }}</span></td>
                     <td class="num muted">{{ lastLogin(u.last_login) }}</td>
                     <td>
-                        <!-- Edit opens the in-app editor for this row. -->
+                        <!-- Edit opens the in-app editor for this row;
+                             delete mirrors the other listings' door. -->
                         <router-link :to="{ name: 'user-edit', params: { id: u.id } }">edit</router-link>
+                        <button v-if="canAdmin" class="btn" type="button" :disabled="deleting"
+                                @click="deleteUserRow(u)">delete</button>
                     </td>
                 </tr>
                 </tbody>

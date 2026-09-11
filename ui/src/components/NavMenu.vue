@@ -1,6 +1,6 @@
 <!--
-  NavMenu: renders the site-config menu in the top bar, after the
-  built-in public pages. A flat item is a router-link when it carries
+  NavMenu: renders the operator's config.json menu in the top bar,
+  after the built-in public pages. A flat item is a router-link when it carries
   `to`, an external door (target=_blank rel=noopener) when it carries
   `href`, and an inert label when it carries neither. An item with
   children renders its label as a hover/click dropdown and recurses

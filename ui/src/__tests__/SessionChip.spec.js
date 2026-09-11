@@ -6,8 +6,7 @@
  * neither renders beside the log-in link; signed-in shows the
  * username button — one plain label, no nested chip, admin and expiry
  * claimed in the tooltip — whose dropdown carries the gated pages
- * (Users only for admins), the Runtime door above
- * the muted classic console link, and log out. The menu
+ * (Users only for admins), the muted Runtime door, and log out. The menu
  * closes on route changes and on clicks outside the cluster, and log
  * out forgets the tab's token and asks App to re-probe via the change
  * event.
@@ -126,21 +125,19 @@ describe('SessionChip for a signed-in admin', () => {
         expect(menu.text()).toContain('Users')
         expect(wrapper.findAll('a[href="/login"]')).toHaveLength(0)
 
-        // The classic console door lives here and only here, muted.
-        const classic = wrapper.findAll('a[href="/classic"]')
-        expect(classic).toHaveLength(1)
-        expect(classic[0].classes()).toContain('menu-muted')
+        // The classic console is gone from the chip entirely: no
+        // /classic anchor renders, open or closed, and no Classic
+        // console label anywhere on it.
+        expect(wrapper.findAll('a[href="/classic"]')).toHaveLength(0)
+        expect(menu.text()).not.toContain('Classic console')
 
-        // The Runtime door sits above it, muted — and API is not a
+        // The Runtime door is the only muted item — and API is not a
         // dropdown item: App's public bar owns the swagger link.
         expect(menu.findAll('a[href="/api"]')).toHaveLength(0)
         const runtime = menu.findAll('a[href="/runtime"]')
         expect(runtime).toHaveLength(1)
         expect(runtime[0].text()).toBe('Runtime')
         expect(runtime[0].classes()).toContain('menu-muted')
-        const labels = menu.findAll('a').map((a) => a.text())
-        expect(labels.indexOf('Runtime')).toBeGreaterThan(-1)
-        expect(labels.indexOf('Classic console')).toBeGreaterThan(labels.indexOf('Runtime'))
 
         // A second click folds it back up.
         await wrapper.find('.account-btn').trigger('click')
@@ -163,9 +160,11 @@ describe('SessionChip for a signed-in non-admin', () => {
 
         // The tool door is not admin-gated — a plain operator reaches
         // the runtime page too; the swagger link stays bar furniture
-        // from App, not a dropdown item.
+        // from App, not a dropdown item, and no classic console door
+        // renders here either.
         expect(menu.findAll('a[href="/api"]')).toHaveLength(0)
         expect(menu.findAll('a[href="/runtime"]')).toHaveLength(1)
+        expect(menu.findAll('a[href="/classic"]')).toHaveLength(0)
     })
 })
 

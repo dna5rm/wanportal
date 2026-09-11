@@ -1,6 +1,6 @@
 <?php
 /**
- * Smoke tests for the shared PHP libs: htdocs/lib/{page,api_proxy,monitor_metrics}.php
+ * Smoke tests for the shared PHP libs: htdocs/lib/{page,api_proxy,monitor_metrics,site_config}.php
  * plus source-level checks on htdocs/config.php and htdocs/assets/js/listings.js.
  *
  * Run via tests/run.sh (docker exec wanportal /usr/bin/php84 /srv/tests/php/lib_smoke.php)
@@ -109,6 +109,7 @@ $docTargets = [
     ],
     $HTDOCS . '/lib/api_proxy.php'       => ['api_request', 'api_get'],
     $HTDOCS . '/lib/monitor_metrics.php' => ['monitor_color_classes', 'wanportal_is_latency_issue', 'wanportal_latency_threshold'],
+    $HTDOCS . '/lib/site_config.php'     => ['wanportal_site_config'],
     $HTDOCS . '/config.php'              => ['wanportal_session_start', 'wanportal_csrf_valid'],
 ];
 foreach ($docTargets as $file => $funcs) {
@@ -383,6 +384,64 @@ if (function_exists('curl_init')) {
 } else {
     echo "SKIP  curl extension missing; transport degradation checks skipped\n";
 }
+
+/* ------------------------------------------------------------------ */
+section('lib/site_config.php');
+
+require_once $HTDOCS . '/lib/site_config.php';
+check(function_exists('wanportal_site_config'), 'site_config: wanportal_site_config() defined');
+
+// Every failure path lands on the default, never throws.
+check(
+    wanportal_site_config('/nonexistent/site-config.json') === ['logo' => '', 'menu' => []],
+    'site_config: missing file -> default'
+);
+$bad = tempnam(sys_get_temp_dir(), 'wpsite') . '.json';
+file_put_contents($bad, '<html>not json</html>');
+check(wanportal_site_config($bad) === ['logo' => '', 'menu' => []], 'site_config: non-JSON body -> default');
+file_put_contents($bad, '[1,2,3]');
+check(wanportal_site_config($bad) === ['logo' => '', 'menu' => []], 'site_config: JSON list body -> default');
+file_put_contents($bad, '{"logo": 42, "menu": "nope"}');
+check(wanportal_site_config($bad) === ['logo' => '', 'menu' => []], 'site_config: wrong-typed fields -> default');
+file_put_contents($bad, '{"menu": [{"children": [{"label": "Orphan"}]}]}');
+check(wanportal_site_config($bad) === ['logo' => '', 'menu' => []], 'site_config: label-less entry is ignored (SPA parity)');
+
+file_put_contents($bad, json_encode([
+    'logo' => '  /assets/logo.png  ',
+    'menu' => [
+        ['label' => ' Guides ', 'children' => [
+            ['label' => 'Agent image', 'to' => '/guides/agent-image.md'],
+            ['label' => 'Inert door'],
+            ['to' => '/x'],
+            'junk',
+        ]],
+        ['label' => 'Docs', 'href' => ' /api-docs/swagger.php '],
+        ['label' => 'Junk', 'children' => 'nope'],
+    ],
+]));
+$cfg = wanportal_site_config($bad);
+check($cfg['logo'] === '/assets/logo.png', 'site_config: logo trimmed');
+check(count($cfg['menu']) === 3, 'site_config: menu keeps well-formed entries, drops junk');
+check($cfg['menu'][0]['label'] === 'Guides', 'site_config: label trimmed');
+check($cfg['menu'][0]['children'][0]['to'] === '/guides/agent-image.md', 'site_config: child to kept');
+check(
+    isset($cfg['menu'][0]['children'][1]) && $cfg['menu'][0]['children'][1] === ['label' => 'Inert door'],
+    'site_config: label-only child survives without to/href'
+);
+check(!isset($cfg['menu'][0]['children'][2]), 'site_config: label-less child dropped');
+check($cfg['menu'][1]['href'] === '/api-docs/swagger.php', 'site_config: href trimmed');
+check(!isset($cfg['menu'][1]['children']), 'site_config: non-array children dropped');
+check($cfg['menu'][2] === ['label' => 'Junk'], 'site_config: entry survives on its label, bad children dropped');
+unlink($bad);
+
+// The live operator file must parse to the contracted shape (whatever
+// the operator currently has in it).
+$live = wanportal_site_config();
+check(
+    is_array($live) && array_key_exists('logo', $live) && array_key_exists('menu', $live)
+    && is_string($live['logo']) && is_array($live['menu']),
+    'site_config: live htdocs/config.json parses to the contracted shape'
+);
 
 /* ------------------------------------------------------------------ */
 section('listings.js DELETE paths');

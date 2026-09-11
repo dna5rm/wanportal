@@ -3,9 +3,9 @@
  * account cluster on the right — search is not one of them, it lives
  * on the dashboard itself. The gated listing pages never sit in
  * the bar itself — they live in the account dropdown, so a signed-out
- * visitor sees none of them anywhere in the chrome, and the classic
- * /classic door exists exactly once, inside that dropdown, only while
- * signed in. The API swagger is not a left public page: App
+ * visitor sees none of them anywhere in the chrome. No classic
+ * /classic door renders anywhere in the chrome, signed in or out.
+ * The API swagger is not a left public page: App
  * renders it in the right cluster — inside .nav-end, immediately
  * before the theme toggle and the account chip — for everyone, once
  * in the whole chrome, never a chip link and never a dropdown item;
@@ -198,10 +198,10 @@ describe('App chrome for a signed-in admin', () => {
         expect(wrapper.findAll('a[href="/runtime"]')).toHaveLength(1)
         expect(wrapper.findAll('a[href="/runtime"]')[0].classes()).toContain('menu-muted')
 
-        // Exactly one classic console door in the whole chrome, muted.
-        const classic = wrapper.findAll('a[href="/classic"]')
-        expect(classic).toHaveLength(1)
-        expect(classic[0].classes()).toContain('menu-muted')
+        // No classic console door anywhere in the chrome — the chip
+        // dropped it; Runtime is the only muted menu item.
+        expect(wrapper.findAll('a[href="/classic"]')).toHaveLength(0)
+        expect(wrapper.text()).not.toContain('Classic console')
     })
 })
 
@@ -217,7 +217,7 @@ describe('App chrome for a signed-in non-admin', () => {
         await openAccountMenu(wrapper)
         for (const label of GATED) expect(wrapper.text()).toContain(label)
         expect(wrapper.text()).not.toContain('Users')
-        expect(wrapper.findAll('a[href="/classic"]')).toHaveLength(1)
+        expect(wrapper.findAll('a[href="/classic"]')).toHaveLength(0)
 
         // The tool door is not admin-gated — a plain operator reaches
         // the runtime page too; the swagger link stays in the right

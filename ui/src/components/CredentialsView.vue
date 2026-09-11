@@ -15,12 +15,14 @@
   'wanportal-filter-credentials'): re-read on mount and saved as the
   user changes them — site typing debounced, the selects at once —
   until the clear button wipes the boxes and the key. View and edit
-  moved into the app; deletes stay on the classic console.
+  moved into the app, and admins get a delete door beside edit
+  (confirm first, then the soft-delete aware api path, then a
+  refetch) — the classic console no longer owns that step.
 -->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { getJson } from '../api'
+import { delJson, getJson } from '../api'
 import { getSession } from '../session'
 import { fmtClock } from '../format'
 import { humanErr } from './detailShared'
@@ -174,6 +176,32 @@ const banner = computed(() => {
     return null
 })
 
+/* Delete door, admin-only: the api soft-deletes an active credential
+ * (it just flips is_active) and hard-deletes an already inactive one,
+ * so the confirm says exactly that. Confirm first, then the singular
+ * api path CredentialDetailView also deletes through, then the listing
+ * refetches so the row actually leaves. A failure keeps the rows as
+ * they are and says so; delJson throws the bare status ('HTTP 403') on
+ * a refusal, and that is what the banner shows — the api's message
+ * text never survives it. */
+const deleting = ref(false)
+const deleteError = ref(null)
+
+async function deleteCredentialRow(c) {
+    if (deleting.value || !(session.value && session.value.isAdmin)) return
+    if (!window.confirm('Delete credential "' + c.name + '"? The first delete only hides the entry; deleting it again removes it permanently.')) return
+    deleting.value = true
+    deleteError.value = null
+    try {
+        await delJson('/cgi-bin/api/credentials/' + encodeURIComponent(c.id))
+        await fetchRows()
+    } catch (err) {
+        deleteError.value = (err && err.message) || 'unknown error'
+    } finally {
+        deleting.value = false
+    }
+}
+
 /* Type matches exactly (the select carries canonical values), site is
  * a substring match — the same narrowing the classic table does. */
 const visible = computed(() => rows.value.filter((c) => {
@@ -232,6 +260,9 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="banner" :class="banner.kind">{{ banner.text }}</div>
+    <div v-if="deleteError" class="banner banner-warn">
+        delete failed: {{ deleteError }} — the credential is still listed.
+    </div>
 
     <template v-if="session && session.authenticated">
         <section class="panel">
@@ -292,6 +323,8 @@ onBeforeUnmount(() => {
                     <td>
                         <router-link class="btn" :to="{ name: 'credential', params: { id: c.id } }">view</router-link>
                         <router-link class="btn" :to="{ name: 'credential-edit', params: { id: c.id } }">edit</router-link>
+                        <button v-if="session && session.isAdmin" class="btn" type="button" :disabled="deleting"
+                                @click="deleteCredentialRow(c)">delete</button>
                     </td>
                 </tr>
                 </tbody>

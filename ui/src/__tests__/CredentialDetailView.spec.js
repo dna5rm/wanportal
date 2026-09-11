@@ -63,7 +63,7 @@ async function mountDetail(options = {}) {
     await router.isReady()
 
     let credFetched = false
-    const stub = vi.fn(async (url) => {
+    const stub = vi.fn(async (url, opts = {}) => {
         if (url === '/cgi-bin/api/session') {
             if (options.sessionFails) throw options.sessionFails
             return jsonReply(
@@ -73,6 +73,12 @@ async function mountDetail(options = {}) {
             )
         }
         if (url === '/cgi-bin/api/credentials/' + C1) {
+            // DELETE rides the same url as the detail GET; the fetch
+            // options are what tell the two apart.
+            if (opts.method === 'DELETE') {
+                if (options.failDelete) throw options.failDelete
+                return jsonReply({ status: 'success', message: 'Credential soft deleted' })
+            }
             credFetched = true
             if (options.failCred) throw options.failCred
             return jsonReply(options.detailBody || detailBody(options.withSecret !== false))
@@ -157,5 +163,69 @@ describe('CredentialDetailView behind the login wall', () => {
         expect(wrapper.find('.gate').text()).toContain('session check failed (connection refused)')
         // A dead probe is not an authenticated session: edit stays hidden.
         expect(wrapper.find('a[href="/credentials/' + C1 + '/edit"]').exists()).toBe(false)
+    })
+})
+
+describe('CredentialDetailView delete', () => {
+    it('rides next to edit for an admin, confirms, DELETEs the plural path, and returns to the listing', async () => {
+        const { wrapper, router, stub } = await mountDetail()
+        vi.stubGlobal('confirm', () => true)
+
+        // Admin token: the delete button sits in the bar next to edit.
+        const del = wrapper.findAll('button').find((b) => b.text().startsWith('delete'))
+        expect(del).toBeTruthy()
+        await del.trigger('click')
+        await flushPromises()
+        await flushPromises()
+
+        const deleteCall = stub.mock.calls.find((c) => c[1] && c[1].method === 'DELETE')
+        expect(deleteCall).toBeTruthy()
+        expect(deleteCall[0]).toBe('/cgi-bin/api/credentials/' + C1)
+        // Success walks back to the vault listing.
+        expect(router.currentRoute.value.path).toBe('/credentials')
+        // The detail GET ran exactly once — no refetch on the way out.
+        const detailGets = stub.mock.calls.filter((c) => c[0] === '/cgi-bin/api/credentials/' + C1 && !(c[1] && c[1].method))
+        expect(detailGets.length).toBe(1)
+    })
+
+    it('hides delete from a signed-in non-admin', async () => {
+        const { wrapper } = await mountDetail({
+            sessionBody: { status: 'success', username: 'ops', is_admin: 0, exp: null }
+        })
+        const labels = wrapper.findAll('button').map((b) => b.text())
+        expect(labels).not.toContain('delete')
+        // Edit stays: the vault listing is readable by any signed-in user.
+        expect(wrapper.find('a[href="/credentials/' + C1 + '/edit"]').exists()).toBe(true)
+    })
+
+    it('leaves the record alone when confirm is declined', async () => {
+        const { wrapper, stub } = await mountDetail()
+        vi.stubGlobal('confirm', () => false)
+
+        const del = wrapper.findAll('button').find((b) => b.text().startsWith('delete'))
+        expect(del).toBeTruthy()
+        await del.trigger('click')
+        await flushPromises()
+        await flushPromises()
+
+        expect(stub.mock.calls.some((c) => c[1] && c[1].method === 'DELETE')).toBe(false)
+    })
+
+    it('keeps the record on screen and says so when the api refuses', async () => {
+        const { wrapper, router } = await mountDetail({ failDelete: new Error('HTTP 403') })
+        vi.stubGlobal('confirm', () => true)
+
+        const del = wrapper.findAll('button').find((b) => b.text().startsWith('delete'))
+        await del.trigger('click')
+        await flushPromises()
+        await flushPromises()
+
+        const warn = wrapper.find('.banner.banner-warn')
+        expect(warn.exists()).toBe(true)
+        expect(warn.text()).toContain('delete failed')
+        expect(warn.text()).toContain('HTTP 403')
+        expect(warn.text()).toContain('the record is still there')
+        // The failed delete navigates nowhere.
+        expect(router.currentRoute.value.path).toBe('/credentials/' + C1)
     })
 })
