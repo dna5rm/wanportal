@@ -236,7 +236,6 @@ onBeforeUnmount(() => {
     <header class="bar">
         <div class="bar-title">
             <h1>credentials</h1>
-            <span class="muted">vault listing · secrets never ride the list api</span>
         </div>
         <div class="bar-right">
             <span v-if="loading" class="muted">loading&hellip;</span>

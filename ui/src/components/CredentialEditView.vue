@@ -247,7 +247,6 @@ onMounted(async () => {
     <header class="bar">
         <div class="bar-title">
             <h1>{{ isEdit ? 'edit credential' : 'new credential' }}</h1>
-            <span class="muted">saving needs an admin token · blank password keeps the stored one</span>
         </div>
         <div class="bar-right">
             <span v-if="loading" class="muted">loading&hellip;</span>

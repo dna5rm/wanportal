@@ -232,7 +232,6 @@ onMounted(async () => {
     <header class="bar">
         <div class="bar-title">
             <h1>{{ editing ? 'edit user' : 'new user' }}</h1>
-            <span class="muted">local accounts · the api owns the rules</span>
         </div>
         <div class="bar-right">
             <span v-if="loading" class="muted">loading&hellip;</span>

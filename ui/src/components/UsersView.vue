@@ -236,7 +236,6 @@ onBeforeUnmount(() => {
     <header class="bar">
         <div class="bar-title">
             <h1>users</h1>
-            <span class="muted">admin listing · filters answered by the api</span>
         </div>
         <div class="bar-right">
             <span v-if="loading" class="muted">loading&hellip;</span>
