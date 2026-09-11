@@ -1,7 +1,7 @@
 # Agent image
 
-The probe agent ships as a self-contained cron container: `Dockerfile.agent`,
-built by `build_agent.sh` from the repository root. The container probes its
+The probe agent ships as a self-contained cron container: `agent/Dockerfile.agent`,
+built by `agent/build_agent.sh` from the repository root. The container probes its
 assigned monitors once per minute and posts loss and latency measurements
 back to a wanportal server.
 
@@ -11,12 +11,12 @@ back to a wanportal server.
   `tzdata`
 - Perl plus `perl-libwww` (LWP), `perl-lwp-protocol-https` (HTTPS support
   for LWP), `perl-io-socket-ssl`, and `perl-json`
-- Two files from the repository: `netping-agent.pl` and its cron wrapper,
-  `run-agent.sh`
+- Two files from the repository: `agent/netping-agent.pl` and its cron
+  wrapper, `agent/run-agent.sh` (installed at `/srv/agent/` in the image)
 
-Nothing else ships. `netping-legacy.pl` and `socket-agent.pl` are not
-included in the image; both run from a repository checkout with the host
-Perl installation when needed (`socket-agent.pl` is the variant that marks
+Nothing else ships. `agent/netping-legacy.pl` and `agent/socket-agent.pl` are
+not included in the image; both run from a repository checkout with the host
+Perl installation when needed (`agent/socket-agent.pl` is the variant that marks
 packets with DSCP/TOS reliably). The image also deliberately omits `curl`
 and `jq`; API requests are issued from outside the container.
 
@@ -26,7 +26,7 @@ communicate with a server that presents a self-signed certificate.
 
 ## Building and distributing the image
 
-`./build_agent.sh`, run from the repository root, tags the image
+`agent/build_agent.sh`, run from the repository root, tags the image
 `netping:<YYYYMMDD>` and `netping:latest`, then writes
 `htdocs/assets/netping_latest.tar.gz` from the `:latest` tag. The archive
 is gitignored and is offered as a download on the dashboard's netping page

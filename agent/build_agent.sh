@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# Build and package the netping agent Docker image (Dockerfile.agent).
+# Build and package the netping agent Docker image (agent/Dockerfile.agent).
 #
 # What it does, in order:
-#   1. Builds Dockerfile.agent with two tags: netping:<YYYYMMDD> and
+#   1. Builds agent/Dockerfile.agent with two tags: netping:<YYYYMMDD> and
 #      netping:latest. The date tag keeps versioned images around locally;
 #      the archive below is always cut from :latest.
 #   2. Writes the image to htdocs/assets/netping_latest.tar.gz so the
@@ -18,7 +18,7 @@ set -euo pipefail
 # Configuration
 IMAGE="netping"                                        # base name for both tags
 BUILD_DATE=$(date +%Y%m%d)                             # date tag; :latest is tagged in the same build
-DOCKERFILE="Dockerfile.agent"
+DOCKERFILE="agent/Dockerfile.agent"
 ARCHIVE_NAME="./htdocs/assets/${IMAGE}_latest.tar.gz"  # gitignored; served by the dashboard
 
 # Color codes for output

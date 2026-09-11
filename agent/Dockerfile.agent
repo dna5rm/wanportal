@@ -1,5 +1,5 @@
 # netping agent image: Alpine + cronie + Perl, runs the probe agent from cron.
-# Built by ./build_agent.sh -> tags netping:<date> and netping:latest, then
+# Built by agent/build_agent.sh -> tags netping:<date> and netping:latest, then
 # packaged to htdocs/assets/netping_latest.tar.gz. See api-docs/agent-image.md.
 #
 # The image ships only netping-agent.pl and its cron wrapper run-agent.sh.
@@ -12,8 +12,8 @@ WORKDIR /srv
 
 # Copy the shipped agent script and its cron wrapper; nothing else from the
 # repo goes into the image.
-COPY netping-agent.pl /srv/
-COPY run-agent.sh /srv/
+COPY agent/netping-agent.pl /srv/agent/
+COPY agent/run-agent.sh /srv/agent/
 
 # Runtime packages, installed in one layer with --no-cache (no apk upgrade:
 # the pinned base image is already current; a blanket upgrade would just
@@ -41,17 +41,17 @@ RUN apk add --no-cache cronie tzdata \
 # mounted, otherwise from /proc/1/environ - cron jobs do not inherit the
 # container env.
 RUN install -m 0644 /dev/stdin /etc/crontabs/root <<EOF
-*/1 * * * * /srv/run-agent.sh > /proc/1/fd/1 2>/proc/1/fd/2
+*/1 * * * * /srv/agent/run-agent.sh > /proc/1/fd/1 2>/proc/1/fd/2
 EOF
 
 # Agent scripts must stay executable for cron
-RUN chmod 755 /srv/*.pl /srv/*.sh
+RUN chmod 755 /srv/agent/netping-agent.pl /srv/agent/run-agent.sh
 
 # Healthcheck: there is no HTTP endpoint in the container to poke (and curl
 # is deliberately not shipped), so verify the container's actual job instead:
 # crond is alive and the agent script is executable.
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
-    CMD pidof crond >/dev/null && test -x /srv/netping-agent.pl
+    CMD pidof crond >/dev/null && test -x /srv/agent/netping-agent.pl
 
 # Foreground crond; -s sends job output to syslog instead of trying to mail
 # it (the crontab redirect above already sends it to the container's stdout).

@@ -1,5 +1,5 @@
 <?php
-// check_session_smoke.php - hermetic tests for htdocs/check_session.php
+// check_session_smoke.php - hermetic tests for htdocs/classic/check_session.php
 //
 // Covers the token-expiry logic added alongside GET /session:
 //   * $_SESSION['token_exp'] (stored at login from the /login claims) is
@@ -52,8 +52,8 @@ if (session_id() === '' && !@session_start()) {
 // session (no token_exp) whose one-time backfill hits the dead port.
 prime_session($case !== 'main' ? ['token_exp' => time() + 900] : []);
 
-require_once __DIR__ . '/../../htdocs/lib/api_proxy.php';
-require_once __DIR__ . '/../../htdocs/check_session.php';
+require_once __DIR__ . '/../../htdocs/classic/lib/api_proxy.php';
+require_once __DIR__ . '/../../htdocs/classic/check_session.php';
 
 $failures = 0;
 $check = function (bool $cond, string $what) use (&$failures): void {

@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# netping_script.t - GET /netping-script serves /srv/netping-agent.pl to JWT callers.
+# netping_script.t - GET /netping-script serves /srv/agent/netping-agent.pl to JWT callers.
 #
 # Extraction-based drift guard (same pattern as session_route.t and the
 # other tests/perl suites): `sub register_netping_script` is pulled out
@@ -21,7 +21,7 @@ use Test::More;
 
 my $root     = "$FindBin::Bin/../..";
 my $src_file = "$root/cgi-bin/netping_agent.pm";
-my $php_file = "$root/htdocs/netping.php";
+my $php_file = "$root/htdocs/classic/netping.php";
 
 ok(-f $src_file, 'cgi-bin/netping_agent.pm found')
     or plan skip_all => 'cgi-bin/netping_agent.pm missing';
@@ -43,11 +43,11 @@ plan skip_all => 'brace-balanced extraction of register_netping_script failed'
 my $sub_src = substr($src, $start, $end - $start + 1);
 
 # ---- path-parity guard: same file the classic page reads --------------------
-# htdocs/netping.php serves $filename = '/srv/netping-agent.pl' to classic
+# htdocs/classic/netping.php serves $filename = '/srv/agent/netping-agent.pl' to classic
 # users; the API endpoint must read exactly that path by default.
 my $php_src = do { local $/; open my $fh, '<', $php_file or die "$php_file: $!"; <$fh> };
 my ($php_path) = $php_src =~ m{^\s*\$filename\s*=\s*'([^']+)'\s*;}m;
-plan skip_all => "could not find \$filename literal in htdocs/netping.php"
+plan skip_all => "could not find \$filename literal in htdocs/classic/netping.php"
     unless defined $php_path;
 like($sub_src, qr{'\Q$php_path\E'}, "default script path matches netping.php ($php_path)");
 

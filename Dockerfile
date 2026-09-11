@@ -78,8 +78,9 @@ RUN cat <<EOF >>/etc/apache2/conf.d/api-docs.conf
 Alias /api-docs /var/www/localhost/api-docs
 EOF
 
-## Cron wrappers live in the image, not the bind mount. They drop to
-## apache so a rewritten /srv/run-*.sh cannot run as root.
+## Cron wrappers live in the image, not the bind mount. cron-run-notify
+## drops to apache so a rewritten /srv/notify/run-notify.sh cannot run as
+## root (cron-run-agent stays root: Net::Ping needs raw sockets).
 RUN mkdir -p /usr/local/sbin
 RUN cat >/usr/local/sbin/cron-run-agent <<'EOF'
 #!/bin/sh
@@ -90,7 +91,7 @@ if [ -r /srv/.env ]; then
   . /srv/.env
   set +a
 fi
-exec /srv/run-agent.sh
+exec /srv/agent/run-agent.sh
 EOF
 RUN cat >/usr/local/sbin/cron-run-notify <<'EOF'
 #!/bin/sh
@@ -100,7 +101,7 @@ if [ -r /srv/.env ]; then
   . /srv/.env
   set +a
 fi
-exec su -p -s /bin/sh apache -c 'exec /srv/run-notify.sh'
+exec su -p -s /bin/sh apache -c 'exec /srv/notify/run-notify.sh'
 EOF
 RUN chmod 755 /usr/local/sbin/cron-run-agent /usr/local/sbin/cron-run-notify
 RUN cat <<EOF >>/etc/crontabs/root
@@ -114,11 +115,11 @@ RUN install -d -o root -g root -m 775 /etc/cron.d
 RUN install -d -o apache -g apache -m 775 /var/rrd
 RUN find . -type f -exec chmod 644 {} \;
 RUN find . -type d -exec chmod 755 {} \;
-RUN rm -rf htdocs/index.html /var/www/localhost /var/cache/apk/*
+RUN rm -rf /var/www/localhost /var/cache/apk/*
 RUN ln -sf /srv /var/www/localhost
 RUN touch /var/log/cron.log
 RUN chown -R apache:apache *
-RUN chmod 755 cgi-bin/api *.pl *.sh
+RUN chmod 755 cgi-bin/api agent/*.pl agent/*.sh notify/*.pl notify/*.sh
 
 # Exposed ports
 EXPOSE 80

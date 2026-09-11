@@ -138,7 +138,7 @@ PY
 fi
 
 # GET /netping-script serves the agent script source to JWT callers
-# (the same /srv/netping-agent.pl htdocs/netping.php reads from disk).
+# (the same /srv/agent/netping-agent.pl htdocs/classic/netping.php reads from disk).
 code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "$API/netping-script" || echo 000)
 if [[ "$code" == "401" ]]; then
   ok "GET /netping-script without bearer is 401"
@@ -148,7 +148,7 @@ fi
 
 if [[ -n "$tok" ]]; then
   curl -sS --max-time 8 "${auth[@]}" "$API/netping-script" -o /tmp/wanportal-netping-script.json || true
-  python3 - "$ROOT/netping-agent.pl" <<'PY' && ok "GET /netping-script returns script source" || bad "GET /netping-script wrong or does not match disk"
+  python3 - "$ROOT/agent/netping-agent.pl" <<'PY' && ok "GET /netping-script returns script source" || bad "GET /netping-script wrong or does not match disk"
 import json, sys
 d = json.load(open("/tmp/wanportal-netping-script.json"))
 if d.get("status") != "success": sys.exit(1)
@@ -220,16 +220,16 @@ else
 fi
 
 # Host header must not be used as API URL in netping.php
-if grep -n "https://{\$server_name}" "$ROOT/htdocs/netping.php" >/dev/null; then
+if grep -n "https://{\$server_name}" "$ROOT/htdocs/classic/netping.php" >/dev/null; then
   bad "netping.php still interpolates SERVER_NAME into API URL"
 else
   ok "netping.php does not use Host as API URL"
 fi
 
-if grep -n "strtolower(\$_SERVER\['HTTP_USER_AGENT'\]" "$ROOT/htdocs/netping.php" >/dev/null \
-   && grep -n "echo \$content" "$ROOT/htdocs/netping.php" >/dev/null; then
+if grep -n "strtolower(\$_SERVER\['HTTP_USER_AGENT'\]" "$ROOT/htdocs/classic/netping.php" >/dev/null \
+   && grep -n "echo \$content" "$ROOT/htdocs/classic/netping.php" >/dev/null; then
   # dump still present: must be after a session gate
-  if grep -n "check_session\|!\s*isset(\$_SESSION\['user'\])" "$ROOT/htdocs/netping.php" >/dev/null; then
+  if grep -n "check_session\|!\s*isset(\$_SESSION\['user'\])" "$ROOT/htdocs/classic/netping.php" >/dev/null; then
     ok "netping.php agent dump is session-gated (or still present with a gate)"
   else
     bad "netping.php curl dump has no session gate"
@@ -238,7 +238,7 @@ else
   ok "netping.php does not dump agent source to curl UA"
 fi
 
-if grep -n "proxyRequest('DELETE', '/cgi-bin/api/" "$ROOT/htdocs/assets/js/listings.js" >/dev/null; then
+if grep -n "proxyRequest('DELETE', '/cgi-bin/api/" "$ROOT/htdocs/classic/assets/js/listings.js" >/dev/null; then
   bad "listings.js DELETE paths still double-prefix /cgi-bin/api"
 else
   ok "listings.js DELETE paths are API-relative"
@@ -269,7 +269,7 @@ else
 fi
 
 # cheap Host XSS: title must htmlspecialchars server_name
-if grep -n "<title>' . \$server_name" "$ROOT/htdocs/lib/page.php" >/dev/null; then
+if grep -n "<title>' . \$server_name" "$ROOT/htdocs/classic/lib/page.php" >/dev/null; then
   bad "page.php echoes \$server_name into <title> unescaped"
 else
   ok "page.php escapes server name in title"

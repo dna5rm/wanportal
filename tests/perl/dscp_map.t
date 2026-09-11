@@ -32,9 +32,9 @@ sub extract_map {
 }
 
 my @files = (
-    'netping-agent.pl',
-    'netping-legacy.pl',
-    'socket-agent.pl',
+    'agent/netping-agent.pl',
+    'agent/netping-legacy.pl',
+    'agent/socket-agent.pl',
 );
 plan tests => 3 * (scalar keys %expect);
 

@@ -16,5 +16,5 @@ fi
 
 # RUN: notify-email.pl
 if [ -n "${SMTP_SERVER:-}" ] && [ -n "${FROM_EMAIL:-}" ] && [ -n "${TO_EMAIL:-}" ]; then
-    /srv/notify-email.pl
+    /srv/notify/notify-email.pl
 fi

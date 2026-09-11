@@ -7,7 +7,7 @@ netping-legacy.pl - legacy Net::Ping fallback agent
 =head1 SYNOPSIS
 
     SERVER=https://wanportal.example.com PASSWORD=... AGENT_ID=... \
-        /srv/netping-legacy.pl
+        /srv/agent/netping-legacy.pl
 
 =head1 DESCRIPTION
 

@@ -115,7 +115,8 @@ $wa_render_items = function (array $items, bool $nested, int $depth = 0) use (&$
 
         if ($href === '/classic' || $href === '/classic/'
             || $to === '/classic' || $to === '/classic/'
-            || strcasecmp($label, 'Classic console') === 0) {
+            || strcasecmp($label, 'Classic console') === 0
+            || strcasecmp($label, 'Classic UI') === 0) {
             continue;
         }
 

@@ -2,7 +2,7 @@
 # latency_flag.t - the API-side latency spike rules match the PHP lib.
 #
 # public_api::add_latency_fields() is the Perl twin of
-# wanportal_is_latency_issue() in htdocs/lib/monitor_metrics.php. The
+# wanportal_is_latency_issue() in htdocs/classic/lib/monitor_metrics.php. The
 # API stamps latency_flag / latency_threshold_ms on every /monitors
 # row, so the two implementations must agree gate for gate:
 #

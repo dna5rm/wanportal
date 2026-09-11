@@ -1,14 +1,14 @@
 <?php
 /**
- * Smoke tests for the shared PHP libs: htdocs/lib/{page,api_proxy,monitor_metrics,site_config}.php
- * plus source-level checks on htdocs/config.php and htdocs/assets/js/listings.js.
+ * Smoke tests for the shared PHP libs: htdocs/classic/lib/{page,api_proxy,monitor_metrics,site_config}.php
+ * plus source-level checks on htdocs/classic/config.php and htdocs/classic/assets/js/listings.js.
  *
  * Run via tests/run.sh (docker exec wanportal /usr/bin/php84 /srv/tests/php/lib_smoke.php)
  * or directly from the repo root: php84 tests/php/lib_smoke.php
  *
  * Exit 0 when every check passes; prints FAIL lines and exits 1 otherwise.
  *
- * htdocs/config.php is deliberately NOT required here: it opens a mysqli
+ * htdocs/classic/config.php is deliberately NOT required here: it opens a mysqli
  * connection and dies without MYSQL_PASSWORD. lib/page.php,
  * lib/monitor_metrics.php and lib/api_proxy.php only define functions and
  * constants, so they load cleanly in a plain CLI process.
@@ -32,7 +32,7 @@ ini_set('display_errors', '1');
 ini_set('error_log', '/dev/null');
 
 $ROOT   = dirname(__DIR__, 2); // tests/php -> tests -> repo root
-$HTDOCS = $ROOT . '/htdocs';
+$HTDOCS = $ROOT . '/htdocs/classic';
 
 $pass = 0;
 $fail = 0;

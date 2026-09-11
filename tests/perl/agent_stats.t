@@ -20,10 +20,10 @@ use Test::More;
 use List::Util qw(sum);
 
 my $root = "$FindBin::Bin/../..";
-my $file = "$root/netping-agent.pl";
+my $file = "$root/agent/netping-agent.pl";
 
 unless (-f $file) {
-    plan skip_all => 'netping-agent.pl not present';
+    plan skip_all => 'agent/netping-agent.pl not present';
     exit 0;
 }
 

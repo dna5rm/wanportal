@@ -23,8 +23,8 @@ use Test::More;
 
 my $root = "$FindBin::Bin/../..";
 
-unless (-f "$root/Dockerfile.agent" && -f "$root/netping-agent.pl") {
-    plan skip_all => 'Dockerfile.agent or netping-agent.pl not present';
+unless (-f "$root/agent/Dockerfile.agent" && -f "$root/agent/netping-agent.pl") {
+    plan skip_all => 'agent/Dockerfile.agent or agent/netping-agent.pl not present';
     exit 0;
 }
 
@@ -35,8 +35,8 @@ sub slurp {
     <$fh>;
 }
 
-my $agent = slurp("$root/netping-agent.pl");
-my $df    = slurp("$root/Dockerfile.agent");
+my $agent = slurp("$root/agent/netping-agent.pl");
+my $df    = slurp("$root/agent/Dockerfile.agent");
 
 # Join backslash line continuations so `apk add --no-cache X \` + `Y` is one
 # logical line, then grab every apk add list (global match covers multiple RUNs).

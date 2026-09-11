@@ -25,7 +25,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
 $ROOT   = dirname(__DIR__, 2); // tests/php -> tests -> repo root
-$HTDOCS = $ROOT . '/htdocs';
+$HTDOCS = $ROOT . '/htdocs/classic';
 
 $pass = 0;
 $fail = 0;

@@ -10,8 +10,8 @@ netping_agent - serve the netping-agent.pl source to JWT callers (SPA)
 
 =head1 DESCRIPTION
 
-htdocs/netping.php hands the remote agent source to classic users by
-reading /srv/netping-agent.pl straight off disk (file_get_contents).
+htdocs/classic/netping.php hands the remote agent source to classic users by
+reading /srv/agent/netping-agent.pl straight off disk (file_get_contents).
 The SPA cannot read server paths, so GET /netping-script returns the
 same file to authenticated API clients as JSON:
 
@@ -37,10 +37,10 @@ our @EXPORT_OK = qw(register_netping_script);
 
 sub register_netping_script {
     # Optional argument: script path override (tests inject a temp
-    # file). Default is the same on-disk path htdocs/netping.php
-    # reads - /srv/netping-agent.pl, outside the webroot.
+    # file). Default is the same on-disk path htdocs/classic/netping.php
+    # reads - /srv/agent/netping-agent.pl, outside the webroot.
     my ($filename) = @_;
-    $filename = '/srv/netping-agent.pl' unless defined $filename && length $filename;
+    $filename = '/srv/agent/netping-agent.pl' unless defined $filename && length $filename;
 
     # @summary Get netping-agent.pl source
     # @description Returns the source of the remote ping agent script for display in the SPA. Requires a valid bearer token.

@@ -58,4 +58,4 @@ fi
 
 export PASSWORD="${PASSWORD:-LOCAL}"
 export SERVER="${SERVER:-http://localhost/cgi-bin/api}"
-exec /srv/netping-agent.pl
+exec /srv/agent/netping-agent.pl

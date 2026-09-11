@@ -5,8 +5,8 @@
 !api-docs/
 !cgi-bin/
 !htdocs/
-!run-*.sh
-!*.pl
+!agent/
+!notify/
 
 # Re-exclude build artifacts inside the kept dirs: the packaged agent image
 # (netping_latest.tar.gz, ~21 MB) is a build output served by the dashboard,

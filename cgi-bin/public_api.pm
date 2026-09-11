@@ -63,7 +63,7 @@ sub _uptime_seconds {
 }
 
 # Perl twin of wanportal_is_latency_issue() in
-# htdocs/lib/monitor_metrics.php: one shared definition of "this
+# htdocs/classic/lib/monitor_metrics.php: one shared definition of "this
 # monitor is spiking right now" so API consumers and the PHP pages
 # cannot drift apart on the rules. Same gates, same order:
 #

@@ -33,7 +33,7 @@
  * an object — returns the default instead of throwing. Never throws.
  *
  * Candidate paths, in order: the config.json beside this file's
- * htdocs dir (__DIR__ . '/../config.json' — resolves both in the
+ * htdocs dir (__DIR__ . '/../../config.json' — resolves both in the
  * container's bind-mounted live tree at /srv/htdocs and in the host
  * checkout), then the host checkout absolute path.
  *
@@ -53,7 +53,7 @@ function wanportal_site_config(?string $path = null): array
         $raw = null;
         $candidates = $path !== null
             ? [$path]
-            : [__DIR__ . '/../config.json', '/srv/wanportal/htdocs/config.json'];
+            : [__DIR__ . '/../../config.json', '/srv/wanportal/htdocs/config.json'];
         foreach ($candidates as $candidate) {
             if (!is_string($candidate) || !is_file($candidate) || !is_readable($candidate)) {
                 continue;

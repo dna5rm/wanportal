@@ -7,7 +7,7 @@ netping-agent.pl - wanportal remote ping agent
 =head1 SYNOPSIS
 
     SERVER=https://wanportal.example.com PASSWORD=... AGENT_ID=... \
-        /srv/netping-agent.pl
+        /srv/agent/netping-agent.pl
 
 =head1 DESCRIPTION
 

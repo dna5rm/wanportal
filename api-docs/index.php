@@ -1,6 +1,6 @@
 <?php
 // Include Parsedown
-require_once '/srv/htdocs/config.php';
+require_once '/srv/htdocs/classic/config.php';
 require_once '/srv/api-docs/Parsedown.php';
 
 // Get the filename from different possible sources
@@ -70,10 +70,10 @@ preg_match_all('/<h([1-6]) id="(.*?)">(.*?)<\/h[1-6]>/i', $html_content, $header
     <!-- Prism CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/assets/base.css">
+    <link rel="stylesheet" href="/classic/assets/base.css">
 </head>
 <body>
-<?php include '/srv/htdocs/navbar.php'; ?>
+<?php include '/srv/htdocs/classic/navbar.php'; ?>
 
 <div class="container-fluid">
     <div class="row">
@@ -112,7 +112,7 @@ preg_match_all('/<h([1-6]) id="(.*?)">(.*?)<\/h[1-6]>/i', $html_content, $header
     </div>
 </div>
 
-<?php include '/srv/htdocs/footer.php'; ?>
+<?php include '/srv/htdocs/classic/footer.php'; ?>
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

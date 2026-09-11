@@ -1,6 +1,6 @@
 <?php
 /**
- * Gate smoke tests for htdocs/proxy.php: auth, CSRF, method allowlist,
+ * Gate smoke tests for htdocs/classic/proxy.php: auth, CSRF, method allowlist,
  * path allowlist and forward/normalization -- run against the REAL
  * proxy.php source, extracted into a hermetic harness.
  *
@@ -45,7 +45,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
 $ROOT   = dirname(__DIR__, 2); // tests/php -> tests -> repo root
-$PROXY  = $ROOT . '/htdocs/proxy.php';
+$PROXY  = $ROOT . '/htdocs/classic/proxy.php';
 
 $pass = 0;
 $fail = 0;

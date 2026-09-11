@@ -6,7 +6,7 @@ require_once __DIR__ . '/lib/page.php';
 wanportal_session_start();
 // Allow Authenticated users to view the script.
 
-$filename = '/srv/netping-agent.pl';
+$filename = '/srv/agent/netping-agent.pl';
 $imagename = '/srv/htdocs/assets/netping_latest.tar.gz';
 
 
@@ -114,7 +114,7 @@ wanportal_render_header_row('Script: ' . basename($filename));
                     <div class="card-body">
                         <h5 class="card-title">Docker Image</h5>
                         <p class="mb-3">
-                            <a href="/classic/assets/netping_latest.tar.gz" class="btn btn-primary btn-sm">
+                            <a href="/assets/netping_latest.tar.gz" class="btn btn-primary btn-sm">
                                 <i class="bi bi-download"></i> Download 
                             </a>
                         </p>

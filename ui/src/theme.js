@@ -2,7 +2,7 @@
  * Light/dark theme for the SPA. Dark is the default (the :root tokens
  * in styles/base.css); light is opt-in via html[data-theme="light"].
  * The localStorage key is the one the classic console already writes
- * (htdocs/footer.php's dark-mode toggle, 'wanportal-theme' with
+ * (htdocs/classic/footer.php's dark-mode toggle, 'wanportal-theme' with
  * 'dark'/'light' values), so a choice made on /classic follows the
  * visitor into the SPA and vice versa — classic sets data-bs-theme
  * where the SPA sets data-theme, but both persist under the same key.
@@ -12,7 +12,7 @@
  * over a theme preference.
  */
 
-/* Shared with htdocs/footer.php and htdocs/lib/page.php — do not drift. */
+/* Shared with htdocs/classic/footer.php and htdocs/classic/lib/page.php — do not drift. */
 export const THEME_KEY = 'wanportal-theme'
 
 /* The persisted choice, or null when unset / storage unavailable. */

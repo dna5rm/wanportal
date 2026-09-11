@@ -1,6 +1,6 @@
 <?php
-require_once '/srv/htdocs/config.php';
-require_once '/srv/htdocs/lib/page.php';
+require_once '/srv/htdocs/classic/config.php';
+require_once '/srv/htdocs/classic/lib/page.php';
 wanportal_session_start();
 
 // SwaggerUI CSS/JS via head_extras (loaded only on this page).

@@ -1,6 +1,6 @@
 /*
  * Theme module specs: boot restore, toggle, and the shared classic
- * localStorage key. The key is the one htdocs/footer.php's dark-mode
+ * localStorage key. The key is the one htdocs/classic/footer.php's dark-mode
  * toggle writes ('wanportal-theme', 'dark'/'light' values, dark sets
  * data-bs-theme where the SPA sets data-theme) — these specs pin the
  * values so the two consoles cannot drift. Storage is exercised both

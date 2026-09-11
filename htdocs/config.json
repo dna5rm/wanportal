@@ -9,6 +9,6 @@
         { "label": "DB schema", "to": "/guides/db_schema.md" }
       ]
     },
-    { "label": "Classic console", "href": "/classic/" }
+    { "label": "Classic UI", "href": "/classic/" }
   ]
 }

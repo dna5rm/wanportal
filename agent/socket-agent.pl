@@ -7,7 +7,7 @@ socket-agent.pl - raw-socket ping agent with working DSCP marking
 =head1 SYNOPSIS
 
     SERVER=https://wanportal.example.com PASSWORD=... AGENT_ID=... \
-        /srv/socket-agent.pl [-d]
+        /srv/agent/socket-agent.pl [-d]
 
 =head1 DESCRIPTION
 
