@@ -16,10 +16,6 @@ in-container alerter; that lives in `../notify/`.
 | `netping-legacy.pl` | Old `Net::Ping` fallback. **Not** in the image. |
 | `run-notify.sh` | Compat shim only. Real notify is `../notify/run-notify.sh`. Do not add alert logic here. |
 
-The name `Dockerfile` is fine here: it no longer sits next to the
-wanportal image Dockerfile at the repo root. (It used to be
-`Dockerfile.agent` for that reason.)
-
 ## Build
 
 From the **repository root** (COPY paths are `agent/…`):

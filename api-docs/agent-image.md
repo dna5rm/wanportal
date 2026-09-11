@@ -17,7 +17,7 @@ back to a wanportal server.
 Nothing else ships. `agent/netping-legacy.pl` and `agent/socket-agent.pl` are
 not included in the image; both run from a repository checkout with the host
 Perl installation when needed (`agent/socket-agent.pl` is the variant that marks
-packets with DSCP/TOS reliably). The image also deliberately omits `curl`
+packets with DSCP/TOS reliably). The image also omits `curl`
 and `jq`; API requests are issued from outside the container.
 
 The agent does not verify TLS certificates: `netping-agent.pl` sets
@@ -63,7 +63,7 @@ docker run -d --name netping-agent --network host --restart unless-stopped \
   It also holds a single-instance lock, so an overlapping cron tick exits
   quietly and the next tick takes over.
 - A healthcheck confirms that `crond` is running and that the agent script
-  is executable; the container deliberately provides no HTTP endpoint for
+  is executable; the container provides no HTTP endpoint for
   health probes.
 
 Verify the container with `docker ps | grep netping-agent`. Cron output is
