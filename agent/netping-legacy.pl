@@ -12,7 +12,7 @@ netping-legacy.pl - legacy Net::Ping fallback agent
 =head1 DESCRIPTION
 
 This is the old-Perl fallback agent. It is not copied into
-Dockerfile.agent; the agent that ships is netping-agent.pl. This file
+Dockerfile; the agent that ships is netping-agent.pl. This file
 stays in the tree as the legacy fallback.
 
 The flow matches the shipped agent: fetch the monitor list for

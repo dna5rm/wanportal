@@ -32,7 +32,7 @@ Raw sockets need root; the script refuses to run without it. Monitors
 are fanned out over Parallel::ForkManager, four workers per CPU core
 by default.
 
-Dockerfile.agent ships netping-agent.pl; this is the raw-socket
+Dockerfile ships netping-agent.pl; this is the raw-socket
 variant for when monitors need their DSCP class honored on the wire.
 
 SSL certificate verification is off on purpose: agents are allowed to

@@ -1,6 +1,6 @@
 # Agent image
 
-The probe agent ships as a self-contained cron container: `agent/Dockerfile.agent`,
+The probe agent ships as a self-contained cron container: `agent/Dockerfile`,
 built by `agent/build_agent.sh` from the repository root. The container probes its
 assigned monitors once per minute and posts loss and latency measurements
 back to a wanportal server.

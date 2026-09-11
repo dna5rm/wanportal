@@ -1,51 +1,48 @@
 #!/bin/bash
 #
-# Build and package the netping agent Docker image (agent/Dockerfile.agent).
+# Build and package the netping agent Docker image (agent/Dockerfile).
 #
-# What it does, in order:
-#   1. Builds agent/Dockerfile.agent with two tags: netping:<YYYYMMDD> and
-#      netping:latest. The date tag keeps versioned images around locally;
-#      the archive below is always cut from :latest.
-#   2. Writes the image to htdocs/assets/netping_latest.tar.gz so the
-#      dashboard can serve it as a download (the "Docker Image" card on the
-#      netping page). The archive is a build artifact and gitignored.
-#   3. Prints load/run instructions for the target host.
+# Always runs from the repository root so COPY agent/… in the Dockerfile
+# and the tarball path htdocs/assets/netping_latest.tar.gz resolve.
+# Invoke as ./agent/build_agent.sh from anywhere.
 #
-# Run from the repo root. See api-docs/agent-image.md for what the image contains.
+# Tags netping:<YYYYMMDD> and netping:latest, then gzip-saves :latest
+# for the dashboard download. Build on the same architecture as the
+# host that will run the container. Mixed arch (arm64 vs amd64) needs
+# a build on each architecture — do not load an arm64 tarball on amd64.
+#
+# See agent/README.md and api-docs/agent-image.md.
 
 set -euo pipefail
 
-# Configuration
-IMAGE="netping"                                        # base name for both tags
-BUILD_DATE=$(date +%Y%m%d)                             # date tag; :latest is tagged in the same build
-DOCKERFILE="agent/Dockerfile.agent"
-ARCHIVE_NAME="./htdocs/assets/${IMAGE}_latest.tar.gz"  # gitignored; served by the dashboard
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
 
-# Color codes for output
+IMAGE="netping"
+BUILD_DATE="$(date +%Y%m%d)"
+DOCKERFILE="agent/Dockerfile"
+ARCHIVE_NAME="./htdocs/assets/${IMAGE}_latest.tar.gz"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Function to log messages
-log() {
-    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
-}
+log() { echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"; }
+error() { echo -e "${RED}[ERROR] $1${NC}" >&2; }
+success() { echo -e "${GREEN}[SUCCESS] $1${NC}"; }
 
-# Function to log errors
-error() {
-    echo -e "${RED}[ERROR] $1${NC}" >&2
-}
+ARCH="$(uname -m)"
+log "Starting build for ${IMAGE} (host arch ${ARCH})..."
+if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+    log "This image will be linux/arm64. Do not docker-load it on amd64. Build on the target host instead."
+fi
 
-# Function to show success messages
-success() {
-    echo -e "${GREEN}[SUCCESS] $1${NC}"
-}
+if [ ! -f "$DOCKERFILE" ]; then
+    error "missing $DOCKERFILE (cwd=$ROOT)"
+    exit 1
+fi
 
-# Main execution
-log "Starting build process for ${IMAGE} image..."
-
-# Build Docker image: one build, two tags
 log "Building Docker image..."
 if docker build --tag "${IMAGE}:${BUILD_DATE}" --tag "${IMAGE}:latest" --file "${DOCKERFILE}" .; then
     success "Docker image built successfully"
@@ -54,12 +51,10 @@ else
     exit 1
 fi
 
-# Show current images
 log "Current ${IMAGE} images:"
 docker images "${IMAGE}"
 
-# Save image to compressed archive. docker save | gzip streams straight to
-# the file, so no intermediate uncompressed tarball is ever written.
+mkdir -p "$(dirname "$ARCHIVE_NAME")"
 log "Saving image to ${ARCHIVE_NAME}..."
 if docker save "${IMAGE}:latest" | gzip > "${ARCHIVE_NAME}"; then
     success "Image saved to ${ARCHIVE_NAME}"
@@ -68,25 +63,20 @@ else
     exit 1
 fi
 
-# Print usage instructions. The run example uses --network host so probes
-# originate from the host's own network stack, matching what the host sees.
-echo -e "\n${GREEN}=== Docker Image Build Complete ===${NC}
+echo -e "
+${GREEN}=== Docker Image Build Complete ===${NC}
 
-The image has been built and saved successfully.
-
-${BLUE}To load the image on another system:${NC}
+${BLUE}To load the image on another system of the SAME architecture:${NC}
     gunzip -c ${ARCHIVE_NAME} | docker load
 
 ${BLUE}To run the container:${NC}
-    docker run -d --name netping-agent --network host --restart unless-stopped \\
-        -e SERVER=\"https://<SERVER>/cgi-bin/api\" \\
-        -e PASSWORD=\"<PASSWORD>\" -e AGENT_ID=\"<AGENT_ID>\" \\
+    docker run -d --name netping-agent --network host --restart unless-stopped \\\\
+        -e SERVER=\\\"https://<SERVER>/cgi-bin/api\\\" \\\\
+        -e PASSWORD=\\\"<PASSWORD>\\\" -e AGENT_ID=\\\"<AGENT_ID>\\\" \\\\
         ${IMAGE}:latest
 
-${BLUE}To verify the container is running:${NC}
+${BLUE}To verify:${NC}
     docker ps | grep netping-agent
-
-${BLUE}To view container logs:${NC}
     docker logs netping-agent
 "
 

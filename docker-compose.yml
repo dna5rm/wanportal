@@ -15,9 +15,8 @@ services:
       # in the image drop to apache so bind-mount scripts are not root.
       - .:/srv:rw
     ports:
+      # Extra LAN/VPN binds belong in docker-compose.override.yml (gitignored).
       - "127.0.0.1:${HTTP_PORT:-3385}:80"
-      - "172.31.3.20:${HTTP_PORT:-3385}:80"
-      - "100.127.31.20:${HTTP_PORT:-3385}:80"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/cgi-bin/api/health"]

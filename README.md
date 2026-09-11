@@ -36,7 +36,7 @@ api-docs/          The docs tree, served at /api-docs: openapi.yaml,
                    branding/ (project logo), architecture.svg.
 agent/             Field probe image: netping-agent.pl, socket-agent.pl,
                    netping-legacy.pl, run-agent.sh, build_agent.sh,
-                   Dockerfile.agent.
+                   Dockerfile.
 notify/            In-container alert jobs (not field agents):
                    notify-email.pl, notify-ntfy.pl, run-notify.sh.
 tests/             validate.sh (commit gate) + run.sh; perl/ *.t and php/
@@ -96,7 +96,7 @@ on first use.
 | `notify-ntfy.pl` | Down/clear push via an ntfy server (`NTFY_SERVER` / `NTFY_TOPIC`). Standalone — not wired into the cron wrappers. |
 | `run-notify.sh` | Cron wrapper. The image's `/usr/local/sbin/cron-run-notify` calls it every 5 minutes after dropping to `apache`. |
 
-The probe agent also ships as a cron container: `Dockerfile.agent`, built
+The probe agent also ships as a cron container: `Dockerfile`, built
 by `build_agent.sh` into `netping:<date>` + `netping:latest` and packaged
 to `htdocs/assets/netping_latest.tar.gz` (downloadable at
 `/assets/netping_latest.tar.gz`). The image carries only

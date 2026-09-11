@@ -1,5 +1,5 @@
 # netping agent image: Alpine + cronie + Perl, runs the probe agent from cron.
-# Built by agent/build_agent.sh -> tags netping:<date> and netping:latest, then
+# Built by agent/build_agent.sh from agent/Dockerfile -> tags netping:<date>
 # packaged to htdocs/assets/netping_latest.tar.gz. See api-docs/agent-image.md.
 #
 # The image ships only netping-agent.pl and its cron wrapper run-agent.sh.
