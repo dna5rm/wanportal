@@ -13,6 +13,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import MonitorsView from '../components/MonitorsView.vue'
 import { getSession } from '../session'
 import { jsonReply } from './stubs'
+import { saveFilter } from '../listingFilter'
 
 /* The session module is mocked at its door, but api.js rides the real
  * authHeaders/clearToken/getToken exports, so the original stays loaded
@@ -21,8 +22,6 @@ vi.mock('../session', async (importOriginal) => ({
     ...await importOriginal(),
     getSession: vi.fn()
 }))
-
-enableAutoUnmount(afterEach)
 
 beforeEach(() => {
     // Write doors are signed-in only, so the default probe says admin
@@ -33,7 +32,16 @@ beforeEach(() => {
 afterEach(() => {
     vi.unstubAllGlobals()
     getSession.mockReset()
+    // The listing filter rides localStorage across mounts; drop it so
+    // a filter typed in one case cannot re-shape the next mount.
+    localStorage.clear()
 })
+
+// Registered after the clear above on purpose: afterEach hooks run in
+// reverse order, so the auto-unmount — whose onBeforeUnmount flushes a
+// pending filter write — must run BEFORE the storage clear, or the
+// flushed write leaks into the next case.
+enableAutoUnmount(afterEach)
 
 /* The api hands ids back as uuids (char(36)), so the fixtures carry
  * uuid-shaped strings — the detail links and edit urls are built from
@@ -210,5 +218,97 @@ describe('MonitorsView write doors', () => {
 
         expect(wrapper.find('.bar-right a[href="/monitors/new"]').exists()).toBe(true)
         expect(wrapper.find('tbody tr td:last-child a').exists()).toBe(true)
+    })
+})
+
+/* The filter is client-side and persistent: it reads on mount from the
+ * wanportal-filter-monitors key, writes there debounced (200ms) as the
+ * user types, and the clear button — visible only while a filter is
+ * set — empties both the box and the key. The 250ms settle waits out
+ * the debounce with real timers, the way a real pause types. */
+describe('MonitorsView persistent filter', () => {
+    it('renders the filter input and no clear button while empty', async () => {
+        const { wrapper } = await mountListing()
+
+        const input = wrapper.find('.listing-filter input')
+        expect(input.attributes('placeholder')).toBe('filter…')
+        expect(input.element.value).toBe('')
+        expect(wrapper.find('.listing-filter button').exists()).toBe(false)
+
+        // An empty filter hides nothing.
+        expect(wrapper.findAll('tbody tr')).toHaveLength(3)
+    })
+
+    it('narrows the rows case-insensitively over any field', async () => {
+        const { wrapper } = await mountListing()
+
+        const input = wrapper.find('.listing-filter input')
+        // 'BRANCH' hits both the description and the target address of
+        // the same row; the match is any-field, not first-field.
+        await input.setValue('BRANCH')
+        expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+        expect(wrapper.text()).toContain('branch vpn')
+
+        // Agent names match — edge-a carries two monitors.
+        await input.setValue('edge-a')
+        expect(wrapper.findAll('tbody tr')).toHaveLength(2)
+
+        // A filter nothing matches reads as such, not as "no monitors".
+        await input.setValue('zzz')
+        expect(wrapper.text()).toContain('no monitors match')
+    })
+
+    it('persists the typed filter to storage once the debounce passes', async () => {
+        const { wrapper } = await mountListing()
+
+        await wrapper.find('.listing-filter input').setValue('edge-a')
+        expect(localStorage.getItem('wanportal-filter-monitors')).toBeNull()
+
+        await new Promise((r) => setTimeout(r, 250))
+        expect(localStorage.getItem('wanportal-filter-monitors')).toBe('{"q":"edge-a"}')
+
+        // The rows follow the typed filter immediately, not on reload.
+        expect(wrapper.findAll('tbody tr')).toHaveLength(2)
+    })
+
+    it('flushes a pending debounce when leaving mid-pause', async () => {
+        const { wrapper } = await mountListing()
+
+        // Typed, then away before the 200ms debounce can fire — the
+        // unmount must flush the write, not drop it.
+        await wrapper.find('.listing-filter input').setValue('edge-a')
+        expect(localStorage.getItem('wanportal-filter-monitors')).toBeNull()
+
+        wrapper.unmount()
+        expect(localStorage.getItem('wanportal-filter-monitors')).toBe('{"q":"edge-a"}')
+    })
+
+    it('clear button empties the box and the storage for good', async () => {
+        const { wrapper } = await mountListing()
+
+        await wrapper.find('.listing-filter input').setValue('branch')
+        await new Promise((r) => setTimeout(r, 250))
+        expect(wrapper.find('.listing-filter button').exists()).toBe(true)
+
+        await wrapper.find('.listing-filter button').trigger('click')
+        expect(wrapper.find('.listing-filter input').element.value).toBe('')
+        expect(wrapper.find('.listing-filter button').exists()).toBe(false)
+        expect(wrapper.findAll('tbody tr')).toHaveLength(3)
+
+        // The key stays gone — the clear must not be re-persisted by
+        // the same watch tick the emptying triggers.
+        await new Promise((r) => setTimeout(r, 250))
+        expect(localStorage.getItem('wanportal-filter-monitors')).toBeNull()
+    })
+
+    it('re-reads a stored filter on mount, so it survives leaving', async () => {
+        saveFilter('monitors', { q: 'hq-gw' })
+
+        const { wrapper } = await mountListing()
+
+        expect(wrapper.find('.listing-filter input').element.value).toBe('hq-gw')
+        expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+        expect(wrapper.text()).toContain('quiet probe')
+        expect(wrapper.text()).not.toContain('branch vpn')
     })
 })

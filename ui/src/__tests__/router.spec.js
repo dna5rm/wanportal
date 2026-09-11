@@ -44,6 +44,16 @@ describe('router boot', () => {
         expect(router.resolve('/api').name).toBe('api')
         expect(router.resolve('/api').href).toBe('#/api')
     })
+
+    it('resolves the guide door to the in-app guide route', () => {
+        // ApiDocsView links the markdown guides with router-link now —
+        // /guides/:file takes the basename as a prop and the classic
+        // /api-docs/index.php renderer is out of the loop.
+        expect(router.hasRoute('guide')).toBe(true)
+        const resolved = router.resolve('/guides/agent-image.md')
+        expect(resolved.name).toBe('guide')
+        expect(resolved.href).toBe('#/guides/agent-image.md')
+    })
 })
 
 describe('auth gate', () => {
@@ -63,9 +73,10 @@ describe('auth gate', () => {
         ]
         // Dashboard, tools and the drill-down details stay public —
         // the dashboard links those records for anonymous visitors.
-        // /runtime and /api are public too: the runtime page and
-        // the swagger the classic console served outside check_session.
-        const open = ['dashboard', 'search', 'latency', 'runtime', 'api', 'login',
+        // /runtime, /api and the /guides pages are public too: the
+        // runtime page and the docs the classic console served
+        // outside check_session.
+        const open = ['dashboard', 'search', 'latency', 'runtime', 'api', 'guide', 'login',
             'monitor', 'agent', 'target', 'agent-netping']
 
         for (const name of gated) {
@@ -121,12 +132,15 @@ describe('auth gate', () => {
         await router.push('/monitors/abc')
         expect(router.currentRoute.value.name).toBe('monitor')
 
-        // The new doors are public as well — the runtime page and the
-        // swagger render for a visitor the session API never sees.
+        // The new doors are public as well — the runtime page, the
+        // swagger and the markdown guides render for a visitor the
+        // session API never sees.
         await router.push('/runtime')
         expect(router.currentRoute.value.name).toBe('runtime')
         await router.push('/api')
         expect(router.currentRoute.value.name).toBe('api')
+        await router.push('/guides/agent-image.md')
+        expect(router.currentRoute.value.name).toBe('guide')
 
         expect(fetchMock).not.toHaveBeenCalled()
     })

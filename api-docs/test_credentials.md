@@ -1,7 +1,7 @@
 # Test: Credentials API
 
-Log in first. In a dev deployment the seeded admin account is `admin`
-with the database password (`netops` in the default compose):
+Log in first. In a development deployment the seeded admin account
+is `admin`, with the database password (`netops` in the default compose):
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost/cgi-bin/api/login \
@@ -9,8 +9,8 @@ TOKEN=$(curl -s -X POST http://localhost/cgi-bin/api/login \
   -d '{"username":"admin","password":"netops"}' | jq -r '.token')
 ```
 
-Creating, updating, and deleting credentials need an admin token;
-reading the list and the details work for any signed-in user.
+Creating, updating, and deleting credentials require an admin token;
+reading the list and the details is available to any authenticated user.
 
 ## Create a credential (device account)
 
@@ -35,11 +35,11 @@ curl -s -X POST http://localhost/cgi-bin/api/credentials \
   }' | jq '.'
 ```
 
-The response carries just the status and the new entry's `id`; only
-`name` and `type` are required. If `sensitivity` is omitted it defaults
+The response includes the status and the new entry's `id`; only
+`name` and `type` are required. If `sensitivity` is omitted, it defaults
 to MEDIUM.
 
-## Create another credential (API key)
+## Create a credential (API key)
 
 ```bash
 curl -s -X POST http://localhost/cgi-bin/api/credentials \
@@ -67,13 +67,13 @@ curl -s http://localhost/cgi-bin/api/credentials \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
-By default only active entries come back, and passwords are never
+By default, only active entries are returned, and passwords are never
 included in list responses.
 
 ## List credentials with filters
 
-Filtering happens through query parameters — a JSON body on a GET is
-ignored. Exact match is the default; other columns also accept
+Filtering is performed through query parameters; a JSON body on a GET
+request is ignored. Exact matching is the default; columns also accept
 comparison prefixes (`=`, `!=`, `<`, `<=`, `>`, `>=`), a `%...%`
 wildcard for a LIKE match, and the sentinels `NULL` / `NOT NULL`:
 
@@ -99,8 +99,8 @@ curl -s "http://localhost/cgi-bin/api/credentials?is_active=0" \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
-`is_active` accepts only 0 or 1, so there is no way to list both states
-in one call.
+`is_active` accepts only 0 or 1, so both states cannot be listed in a
+single call.
 
 ## Get one credential (replace the id)
 
@@ -110,8 +110,8 @@ curl -s http://localhost/cgi-bin/api/credentials/YOUR-UUID-HERE \
 ```
 
 The stored password appears here only for admin callers, and every
-view stamps `last_accessed_at` / `last_accessed_by` with who looked
-and when.
+view updates `last_accessed_at` / `last_accessed_by` with the caller
+and the time of the access.
 
 ## Rotate a password (replace the id)
 
@@ -127,16 +127,18 @@ curl -s -X PUT http://localhost/cgi-bin/api/credentials/YOUR-UUID-HERE \
 
 ## Delete a credential (replace the id)
 
-The first delete is a soft delete — the entry is just marked inactive.
-Deleting the same (now inactive) entry again removes the row for good:
+The first delete is a soft delete: the entry is marked inactive.
+Deleting the same (now inactive) entry again removes the row
+permanently:
 
 ```bash
 curl -s -X DELETE http://localhost/cgi-bin/api/credentials/YOUR-UUID-HERE \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
-`Credential soft deleted` means it is only hidden; `Credential
-permanently deleted` means the row is gone.
+`Credential soft deleted` indicates that the entry is only hidden;
+`Credential permanently deleted` indicates that the row has been
+removed.
 
 ## Password visibility policy
 

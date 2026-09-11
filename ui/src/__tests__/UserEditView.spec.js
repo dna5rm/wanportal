@@ -17,6 +17,9 @@ import { jsonReply } from './stubs'
 enableAutoUnmount(afterEach)
 
 afterEach(() => {
+    // jsdom keeps one window per spec file, so a history state left
+    // behind would flip the next leaveForm call into its back branch.
+    window.history.replaceState(null, '')
     vi.unstubAllGlobals()
 })
 
@@ -63,6 +66,9 @@ async function mountEditor(options = {}) {
             { path: '/users/:id/edit', name: 'user-edit', component: { render: () => null }, props: true }
         ]
     })
+    /* A prior route (via) stands in for wherever the operator opened
+     * the form from, so router.back() has somewhere to land. */
+    if (options.via) await router.push(options.via)
     await router.push('/users/new')
     await router.isReady()
 
@@ -146,10 +152,47 @@ describe('UserEditView creating a user', () => {
             password: 'plain-secret'
         })
 
-        // Success lands back on the listing, and the secret is gone
-        // from the form state already.
+        // Success leaves through the form exit — this bare mount has
+        // no history, so it falls back to the listing — and the
+        // secret is gone from the form state already.
         expect(router.currentRoute.value.path).toBe('/users')
         expect(wrapper.find('#f-password').element.value).toBe('')
+    })
+
+    it('returns to the page that opened the form when history has one', async () => {
+        const { wrapper, router } = await mountEditor({
+            sessionBody: adminSession(),
+            via: '/'
+        })
+
+        // Production's hash history mirrors window.history and carries
+        // the previous SPA entry; the memory history here never writes
+        // it, so the same shape is stubbed in for the back branch.
+        window.history.replaceState({ back: '/' }, '')
+        await wrapper.find('#f-username').setValue('newbie')
+        await wrapper.find('#f-password').setValue('plain-secret')
+        await wrapper.find('form').trigger('submit')
+        await flushPromises()
+        await flushPromises()
+
+        expect(router.currentRoute.value.path).toBe('/')
+    })
+
+    it('cancel obeys the same exit: back with history, list without', async () => {
+        // No history in a bare mount: the listing fallback.
+        const fresh = await mountEditor({ sessionBody: adminSession() })
+        await fresh.wrapper.findAll('button')
+            .find((b) => b.text() === 'cancel').trigger('click')
+        await flushPromises()
+        expect(fresh.router.currentRoute.value.path).toBe('/users')
+
+        // A real previous page: back to it, not the fallback.
+        const withHistory = await mountEditor({ sessionBody: adminSession(), via: '/' })
+        window.history.replaceState({ back: '/' }, '')
+        await withHistory.wrapper.findAll('button')
+            .find((b) => b.text() === 'cancel').trigger('click')
+        await flushPromises()
+        expect(withHistory.router.currentRoute.value.path).toBe('/')
     })
 
     it('asks for a username and a password before touching the api', async () => {

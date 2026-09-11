@@ -1,7 +1,7 @@
 # Database Schema
 
 ## Overview
-WanPortal uses MySQL/MariaDB with InnoDB engine and UTF-8 (utf8mb4) character encoding. All tables use UUID primary keys and include appropriate foreign key constraints where relationships exist.
+WanPortal uses MySQL/MariaDB with the InnoDB storage engine and UTF-8 (`utf8mb4`) character encoding. All tables use UUID primary keys and include appropriate foreign key constraints where relationships exist.
 
 ## Tables
 
@@ -24,8 +24,8 @@ Stores monitoring agent information and credentials.
 - CHECK CONSTRAINT `chk_valid_ip_address` (validates IP format)
 
 **Notes:**
-- System maintains a special 'LOCAL' agent for localhost monitoring
-- `address` field accepts both IPv4 and IPv6 formats
+- The system maintains a special `LOCAL` agent for localhost monitoring
+- The `address` field accepts both IPv4 and IPv6 formats
 
 ### targets
 Stores monitoring target information.
@@ -42,8 +42,8 @@ Stores monitoring target information.
 - UNIQUE KEY `address` (`address`)
 
 **Notes:**
-- `address` can be IPv4, IPv6, or hostname
-- Targets can be referenced by multiple monitors
+- The `address` column accepts an IPv4 address, an IPv6 address, or a hostname
+- A target may be referenced by multiple monitors
 
 ### monitors
 Stores monitoring configurations and statistics.
@@ -57,7 +57,7 @@ Stores monitoring configurations and statistics.
 | `protocol` | varchar(10) | Protocol (ICMP/ICMPV6/TCP) |
 | `port` | int(11) | Port number (for TCP) |
 | `dscp` | varchar(10) | DSCP marking |
-| `pollcount` | int(11) | Pings per probe cycle (the agent caps a cycle at five) |
+| `pollcount` | int(11) | Pings per probe cycle (the agent caps each cycle at five) |
 | `pollinterval` | int(11) | Seconds between poll cycles |
 | `is_active` | tinyint(1) | Active status flag |
 | `sample` | bigint(20) | Number of samples collected |
@@ -88,9 +88,9 @@ Stores monitoring configurations and statistics.
 - `target_id` REFERENCES `targets` (`id`) ON DELETE CASCADE
 
 **Notes:**
-- RTT values stored in milliseconds
-- Loss values stored as percentages (0-100)
-- Associated RRD files stored in `/var/rrd/{monitor_id}.rrd`
+- RTT values are stored in milliseconds
+- Loss values are stored as percentages (0-100)
+- Each monitor's time-series data is stored in an RRD file at `/var/rrd/{monitor_id}.rrd`
 
 ### users
 Stores user account information and access control.
@@ -119,11 +119,11 @@ Stores user account information and access control.
 - KEY `idx_email` (`email`)
 
 **Notes:**
-- System maintains a special 'admin' user, seeded at startup with the
+- The system maintains a special `admin` user, seeded at startup with the
   database password as its initial password
 - Passwords are stored as bcrypt hashes
-- Accounts lock after 5 failed attempts
-- Lock duration is 30 minutes
+- Accounts lock after five failed attempts
+- The lock duration is 30 minutes
 
 ### credentials
 Stores secure credentials and access tokens.
@@ -135,7 +135,7 @@ Stores secure credentials and access tokens.
 | `name` | varchar(255) | Credential name |
 | `type` | ENUM | Type (ACCOUNT/CERTIFICATE/API/PSK/CODE) |
 | `username` | varchar(255) | Associated username |
-| `password` | text | Stored secret value (only admins see it, via the detail endpoint) |
+| `password` | text | Stored secret value; exposed to administrators only, via the detail endpoint |
 | `url` | text | Related URL |
 | `owner` | varchar(255) | Credential owner |
 | `comment` | text | Additional notes |
@@ -157,15 +157,15 @@ Stores secure credentials and access tokens.
 - KEY `idx_credentials_site` (`site`)
 
 **Notes:**
-- Supports soft delete via `is_active` flag
-- Tracks access history
-- Supports structured metadata storage
-- Secrets are stored as-is; visibility is controlled at the API layer
-  (list responses never include passwords, detail responses only for
-  admins)
+- Records support soft deletion via the `is_active` flag
+- Access history is tracked in `last_accessed_at` and `last_accessed_by`
+- Structured metadata is stored in the `metadata` column
+- Secrets are stored as provided; visibility is controlled at the API
+  layer: list responses never include passwords, and detail responses
+  expose them to administrators only
 
 ## Data Storage
-- Primary data stored in MySQL/MariaDB
-- Time-series data stored in RRD files
-- RRD files located in `/var/rrd/`
+- Primary data is stored in MySQL/MariaDB
+- Time-series data is stored in RRD files
+- RRD files are located in `/var/rrd/`
 - Each monitor has its own RRD file named `{monitor_id}.rrd`

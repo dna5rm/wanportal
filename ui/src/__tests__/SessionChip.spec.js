@@ -1,11 +1,12 @@
 /*
  * Session chip specs: the chip renders the right-hand account cluster
  * from the probe result App hands it — no fetch of its own. Signed-out
- * shows one log-in door with the two utility links — API and
- * Runtime — as compact text beside it; signed-in shows the
+ * shows one log-in door and nothing else — the API swagger is bar
+ * furniture App owns and Runtime stays under the account menu, so
+ * neither renders beside the log-in link; signed-in shows the
  * username button — one plain label, no nested chip, admin and expiry
  * claimed in the tooltip — whose dropdown carries the gated pages
- * (Users only for admins), the API and Runtime doors above
+ * (Users only for admins), the Runtime door above
  * the muted classic console link, and log out. The menu
  * closes on route changes and on clicks outside the cluster, and log
  * out forgets the tab's token and asks App to re-probe via the change
@@ -38,7 +39,7 @@ async function mountChip(session) {
     const router = createRouter({
         history: createMemoryHistory(),
         routes: ['/agents', '/targets', '/monitors', '/credentials', '/users',
-            '/api', '/runtime', '/login']
+            '/runtime', '/login']
             .map((path) => ({ path, component: { render: () => null } }))
     })
     await router.push('/')
@@ -61,22 +62,17 @@ describe('SessionChip while signed out', () => {
         expect(wrapper.findAll('a[href="/login.php"]')).toHaveLength(0)
     })
 
-    it('keeps the swagger and runtime doors reachable beside log in', async () => {
+    it('renders no API or Runtime doors beside log in', async () => {
         const { wrapper } = await mountChip(signedOut)
 
-        // The utility doors sit next to the log-in door as compact
-        // in-app links — both render inside the SPA now, no new tab
-        // and no /classic/server.php hop.
-        const docs = wrapper.findAll('a[href="/api"]')
-        expect(docs).toHaveLength(1)
-        expect(docs[0].text()).toBe('API')
-        expect(docs[0].classes()).toContain('nav-utility')
-
-        const runtime = wrapper.findAll('a[href="/runtime"]')
-        expect(runtime).toHaveLength(1)
-        expect(runtime[0].text()).toBe('Runtime')
-        expect(runtime[0].classes()).toContain('nav-utility')
-        expect(runtime[0].attributes('target')).toBeUndefined()
+        // The swagger door is App's bar item — the right cluster —
+        // now, and Runtime stays under the account menu — the chip
+        // adds neither beside the log-in link, so Runtime is reachable
+        // only after signing in.
+        expect(wrapper.findAll('a[href="/api"]')).toHaveLength(0)
+        expect(wrapper.findAll('a[href="/runtime"]')).toHaveLength(0)
+        expect(wrapper.findAll('.nav-utility')).toHaveLength(0)
+        expect(wrapper.text()).not.toContain('Runtime')
     })
 })
 
@@ -135,15 +131,15 @@ describe('SessionChip for a signed-in admin', () => {
         expect(classic).toHaveLength(1)
         expect(classic[0].classes()).toContain('menu-muted')
 
-        // The two in-app doors sit above it, muted too.
-        const docs = menu.findAll('a[href="/api"]')
-        expect(docs).toHaveLength(1)
-        expect(docs[0].classes()).toContain('menu-muted')
-
-        expect(menu.findAll('a[href="/runtime"]')).toHaveLength(1)
+        // The Runtime door sits above it, muted — and API is not a
+        // dropdown item: App's public bar owns the swagger link.
+        expect(menu.findAll('a[href="/api"]')).toHaveLength(0)
+        const runtime = menu.findAll('a[href="/runtime"]')
+        expect(runtime).toHaveLength(1)
+        expect(runtime[0].text()).toBe('Runtime')
+        expect(runtime[0].classes()).toContain('menu-muted')
         const labels = menu.findAll('a').map((a) => a.text())
-        expect(labels.indexOf('API')).toBeGreaterThan(-1)
-        expect(labels.indexOf('Runtime')).toBeGreaterThan(labels.indexOf('API'))
+        expect(labels.indexOf('Runtime')).toBeGreaterThan(-1)
         expect(labels.indexOf('Classic console')).toBeGreaterThan(labels.indexOf('Runtime'))
 
         // A second click folds it back up.
@@ -165,9 +161,10 @@ describe('SessionChip for a signed-in non-admin', () => {
         for (const label of GATED) expect(menu.text()).toContain(label)
         expect(menu.text()).not.toContain('Users')
 
-        // The info doors are not admin-gated — a plain operator
-        // reaches swagger and the runtime page too.
-        expect(menu.findAll('a[href="/api"]')).toHaveLength(1)
+        // The tool door is not admin-gated — a plain operator reaches
+        // the runtime page too; the swagger link stays bar furniture
+        // from App, not a dropdown item.
+        expect(menu.findAll('a[href="/api"]')).toHaveLength(0)
         expect(menu.findAll('a[href="/runtime"]')).toHaveLength(1)
     })
 })

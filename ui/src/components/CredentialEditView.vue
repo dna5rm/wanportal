@@ -23,6 +23,7 @@ import { useRouter } from 'vue-router'
 import { getJson } from '../api'
 import { authHeaders, clearToken, getToken, getSession } from '../session'
 import { humanErr, idFromLocation } from './detailShared'
+import { leaveForm } from './goBack'
 
 const props = defineProps({
     id: { type: String, default: '' }
@@ -196,8 +197,11 @@ async function save() {
             await sendJson('PUT', '/cgi-bin/api/credentials/' + encodeURIComponent(credentialId.value), payload)
             router.push({ name: 'credentials' })
         } else {
-            const reply = await sendJson('POST', '/cgi-bin/api/credentials', payload)
-            router.push({ name: 'credential', params: { id: reply.id } })
+            /* A create goes back to wherever the form was opened from —
+             * usually the listing; an edit keeps landing on the
+             * listing as before. */
+            await sendJson('POST', '/cgi-bin/api/credentials', payload)
+            leaveForm(router, 'credentials')
         }
     } catch (e) {
         formError.value = (e && e.message) || 'save failed'
@@ -206,12 +210,11 @@ async function save() {
     }
 }
 
-/* Editing cancels back to the record, creating cancels to the list. */
-const cancelTo = computed(() => (
-    isEdit.value
-        ? { name: 'credential', params: { id: credentialId.value } }
-        : { name: 'credentials' }
-))
+/* Cancel obeys the same exit rule as a create: back to wherever the
+ * form was opened from, the listing when there is no history. */
+function cancel() {
+    leaveForm(router, 'credentials')
+}
 
 function toLogin() {
     redirected.value = true
@@ -352,7 +355,7 @@ onMounted(async () => {
                 <button class="btn btn-save" type="submit" :disabled="busy">
                     {{ busy ? 'saving…' : 'save credential' }}
                 </button>
-                <router-link class="btn" :to="cancelTo">cancel</router-link>
+                <button class="btn" type="button" @click="cancel">cancel</button>
             </div>
         </form>
     </template>

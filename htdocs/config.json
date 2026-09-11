@@ -1,0 +1,14 @@
+{
+  "logo": "/assets/logo.png",
+  "menu": [
+    {
+      "label": "Guides",
+      "children": [
+        { "label": "Agent image", "to": "/guides/agent-image.md" },
+        { "label": "TCP dump", "to": "/guides/tcpdump.md" },
+        { "label": "DB schema", "to": "/guides/db_schema.md" }
+      ]
+    },
+    { "label": "Classic console", "href": "/classic/" }
+  ]
+}

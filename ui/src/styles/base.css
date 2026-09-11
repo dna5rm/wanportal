@@ -3,6 +3,16 @@
  * styling was already the look people signed off on, so this file keeps
  * it nearly verbatim; the only additions are the top-nav rules and the
  * app shell padding.
+ *
+ * Dark stays the default :root. A visitor who picked light — persisted
+ * under the classic console's 'wanportal-theme' localStorage key and
+ * restored by main.js before mount — gets html[data-theme="light"],
+ * which re-points the neutral tokens only: background, panels, text,
+ * muted labels and edges. The status hues (--up/--warn/--danger and
+ * their translucent fills) are declared once in :root and never
+ * overridden, so status colors read identically on both themes. The
+ * hover tints and menu shadow are tokens too, because the hardcoded
+ * white-on-dark values would be invisible on white panels.
  */
 :root {
     --bg: #0e1319;
@@ -17,6 +27,23 @@
     --warn-bg: rgba(217, 161, 59, .14);
     --danger-bg: rgba(229, 83, 75, .14);
     --stale: #b085f5;
+    --hover: rgba(255, 255, 255, .04);
+    --shadow: 0 6px 18px rgba(0, 0, 0, .35);
+}
+
+/* Light override: the same neutral roles, re-pointed at daylight
+ * values. --stale is deepened within its violet family so it keeps
+ * AA-ish contrast on the white panel (the dark-mode lavender does
+ * not); the status hues stay exactly as declared above. */
+html[data-theme="light"] {
+    --bg: #eef1f5;
+    --panel: #ffffff;
+    --panel-edge: #d3dae3;
+    --text: #24303e;
+    --muted: #5d6b7d;
+    --stale: #7c52c7;
+    --hover: rgba(23, 43, 66, .06);
+    --shadow: 0 6px 18px rgba(31, 45, 62, .14);
 }
 
 * { box-sizing: border-box; }
@@ -73,32 +100,36 @@ a { color: var(--up); }
 }
 
 /* Right-hand account cluster: signed-out it holds the single log-in
- * door; signed-in it holds the account button and its dropdown. */
+ * door; signed-in it holds the account button and its dropdown. The
+ * gap keeps the filled buttons clear of the API link and of each
+ * other now that the account controls carry the .btn chrome. */
 .nav-end {
     margin-left: auto;
     display: flex;
     align-items: center;
+    gap: 10px;
 }
 
-/* A bare <button> falls back to the UA's near-black text colour and
- * zero padding — invisible and barely clickable on the dark bar — so
- * the label is pinned to the palette and given a real hit area. */
+/* The account controls — the signed-in username toggle and the
+ * signed-out log-in door — share the .btn chrome used across the app:
+ * a panel fill, a visible border, a real hit area and a hover edge,
+ * so both read as buttons on the dark bar instead of bare text. The
+ * username button stays the dropdown's toggle; the log-in door keeps
+ * its router-link behaviour. */
 .account-btn {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    background: none;
-    border: none;
-    padding: 2px 6px;
-    font: inherit;
+    background: var(--panel);
     color: var(--text);
+    border: 1px solid var(--panel-edge);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font: inherit;
+    font-size: 12px;
     cursor: pointer;
 }
 
-.account-btn:hover {
-    background: rgba(255, 255, 255, .04);
-    color: var(--text);
-}
+.account-btn:hover { border-color: var(--muted); }
 
 .account-menu {
     position: absolute;
@@ -112,7 +143,7 @@ a { color: var(--up); }
     border: 1px solid var(--panel-edge);
     border-radius: 8px;
     padding: 5px 0;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+    box-shadow: var(--shadow);
 }
 
 .menu-link {
@@ -129,7 +160,7 @@ a { color: var(--up); }
 }
 
 .menu-link:hover {
-    background: rgba(255, 255, 255, .04);
+    background: var(--hover);
     color: var(--text);
 }
 
@@ -309,7 +340,7 @@ th {
 
 tbody tr:last-child td { border-bottom: none; }
 
-tbody tr:hover td { background: rgba(255, 255, 255, .03); }
+tbody tr:hover td { background: var(--hover); }
 
 .num { text-align: right; white-space: nowrap; }
 

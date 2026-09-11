@@ -137,6 +137,28 @@ sys.exit(0)
 PY
 fi
 
+# GET /netping-script serves the agent script source to JWT callers
+# (the same /srv/netping-agent.pl htdocs/netping.php reads from disk).
+code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "$API/netping-script" || echo 000)
+if [[ "$code" == "401" ]]; then
+  ok "GET /netping-script without bearer is 401"
+else
+  bad "GET /netping-script without bearer http $code (want 401)"
+fi
+
+if [[ -n "$tok" ]]; then
+  curl -sS --max-time 8 "${auth[@]}" "$API/netping-script" -o /tmp/wanportal-netping-script.json || true
+  python3 - "$ROOT/netping-agent.pl" <<'PY' && ok "GET /netping-script returns script source" || bad "GET /netping-script wrong or does not match disk"
+import json, sys
+d = json.load(open("/tmp/wanportal-netping-script.json"))
+if d.get("status") != "success": sys.exit(1)
+if d.get("filename") != "netping-agent.pl": sys.exit(1)
+disk = open(sys.argv[1], "r", encoding="utf-8", errors="replace").read()
+if d.get("content") != disk: sys.exit(1)
+sys.exit(0)
+PY
+fi
+
 # ---- URL contract (SPA cutover) ------------------------------------------
 # The Vue SPA is the UI served at /; the classic PHP console stays at
 # /classic (with or without the trailing slash); the old /app alias is

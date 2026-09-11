@@ -1720,6 +1720,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /cgi-bin/api/docs:
+    get:
+      tags:
+        - Public API
+      summary: List API documentation files
+      description: |
+        Public endpoint listing the markdown guides under /srv/api-docs,
+        the same directory Parsedown renders as
+        /api-docs/index.php?file=... Only .md basenames are returned
+        (Parsedown.php is never listed), sorted by name, each with the
+        title from its first "# " heading. Read-only and parameter-free;
+        a missing docs directory yields an empty list.
+      responses:
+        '200':
+          description: Catalog of markdown guides
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          description: Markdown basename (e.g. test_users.md)
+                        title:
+                          type: string
+                          description: First "# " heading of the file
+
   /cgi-bin/api/credentials:
     get:
       tags:

@@ -24,6 +24,7 @@ import { useRouter } from 'vue-router'
 import { getJson } from '../api'
 import { authHeaders, clearToken, getToken, getSession } from '../session'
 import { humanErr } from './detailShared'
+import { leaveForm } from './goBack'
 
 const props = defineProps({
     id: { type: String, default: '' }
@@ -181,7 +182,14 @@ async function save() {
             payload
         )
         form.password = '' // the secret leaves form state on the way out
-        router.push({ name: 'users' })
+        /* A create goes back to wherever the form was opened from —
+         * usually the listing; an edit keeps landing on the listing
+         * as before. */
+        if (editing.value) {
+            router.push({ name: 'users' })
+        } else {
+            leaveForm(router, 'users')
+        }
     } catch (e) {
         if (isAuthRefusal(e)) {
             adminOnly.value = true
@@ -198,6 +206,12 @@ async function save() {
  * looking alike. */
 function minute(s) {
     return s ? String(s).slice(0, 16) : ''
+}
+
+/* Cancel obeys the same exit rule as a create: back to wherever the
+ * form was opened from, the listing when there is no history. */
+function cancel() {
+    leaveForm(router, 'users')
 }
 
 onMounted(async () => {
@@ -305,7 +319,7 @@ onMounted(async () => {
                     <button type="submit" class="btn" :disabled="busy">
                         {{ busy ? 'saving…' : 'save user' }}
                     </button>
-                    <router-link class="btn btn-link" :to="{ name: 'users' }">cancel</router-link>
+                    <button type="button" class="btn btn-link" @click="cancel">cancel</button>
                 </div>
             </form>
         </section>

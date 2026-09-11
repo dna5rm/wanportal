@@ -9,9 +9,10 @@
   says it failed instead of implying the agent monitors nothing.
 -->
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { getJson } from '../api'
 import { getSession } from '../session'
+import { resolveShowInactive, setShowInactive } from '../prefs'
 import { agentClass, fmtClock, lossClass } from '../format'
 import {
     activeChipCls,
@@ -43,8 +44,13 @@ const session = ref(null)
 const canEdit = computed(() => !!(session.value && session.value.authenticated))
 
 /* The classic page hides effectively-inactive rows behind a toggle;
- * defaulting to showing everything keeps the read-only page honest. */
-const showInactive = ref(true)
+ * the choice is the shared show-inactive flag (prefs.js), resolved
+ * like lib/page.php's wanportal_get_show_inactive(): the URL query
+ * wins, then the stored choice, else unchecked. Toggling persists it
+ * and round-trips the URL query without a reload, so the choice
+ * survives leaving this page the way the classic session flag did. */
+const showInactive = ref(resolveShowInactive())
+watch(showInactive, (value) => setShowInactive(value))
 
 async function fetchAll() {
     if (!agentId.value) {

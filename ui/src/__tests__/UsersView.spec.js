@@ -6,17 +6,29 @@
  * listing itself folds back to the gate instead of a generic error.
  * Both doors — the probe and the listing — are answered by one stubbed
  * fetch, keyed by url, same as the other specs.
+ *
+ * The show-inactive checkbox is the shared flag from prefs.js (the
+ * session-flag stand-in): resolved URL > localStorage > false, and
+ * persisted to both places on toggle. The fetch stub answers per url
+ * and ignores the params, like the real API it stands in for — the
+ * url assertions carry the filter contract, and both afterEach steps
+ * reset the flag and the address bar between tests.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import UsersView from '../components/UsersView.vue'
+import { SHOW_INACTIVE_KEY } from '../prefs'
 import { jsonReply } from './stubs'
 
 enableAutoUnmount(afterEach)
 
 afterEach(() => {
     vi.unstubAllGlobals()
+    // The shared flag is localStorage-backed and the toggle
+    // round-trips the address bar — reset both between tests.
+    localStorage.clear()
+    window.history.replaceState(null, '', window.location.pathname)
 })
 
 /* An admin row and a half-registered one: blank name/email cells and
@@ -39,8 +51,12 @@ function adminSession() {
  * error) and the listing breaking via failUsers. userUrls collects
  * every listing url the page asked for, in order. The memory router
  * mirrors the production table for the routes this page links to, so
- * the router-links resolve for real. */
+ * the router-links resolve for real. localStorage is wiped at entry
+ * as well as in afterEach: a previous test's unmount can flush a
+ * pending filter save after the hook ran, and a restored filter would
+ * silently re-narrow the listing under test. */
 async function mountUsers(options = {}) {
+    localStorage.clear()
     const userUrls = []
     const router = createRouter({
         history: createMemoryHistory(),
@@ -75,12 +91,15 @@ async function mountUsers(options = {}) {
 }
 
 describe('UsersView for a signed-in admin', () => {
-    it('loads the listing with default filters left off the url', async () => {
+    it('loads the listing honoring the stored show-inactive choice', async () => {
+        // The shared flag says show all users: no is_active param.
+        localStorage.setItem(SHOW_INACTIVE_KEY, 'true')
         const { wrapper, stub, userUrls } = await mountUsers({ sessionBody: adminSession() })
 
         // The probe answers first, then the listing — once, unfiltered.
         expect(stub.mock.calls[0][0]).toBe('/cgi-bin/api/session')
         expect(userUrls).toEqual(['/cgi-bin/api/users'])
+        expect(wrapper.find('input[type=checkbox]').element.checked).toBe(true)
 
         expect(wrapper.find('h2').text()).toContain('users')
         expect(wrapper.text()).toContain('(2)')
@@ -108,9 +127,28 @@ describe('UsersView for a signed-in admin', () => {
         expect(rows[1].text()).toContain('never')
     })
 
+    it('defaults to active only until the shared flag says otherwise', async () => {
+        const { wrapper, userUrls } = await mountUsers({ sessionBody: adminSession() })
+
+        // Nothing stored and nothing in the URL: the classic session
+        // default (false) applies, so the call narrows to active rows.
+        expect(userUrls).toEqual(['/cgi-bin/api/users?is_active=1'])
+        expect(wrapper.find('input[type=checkbox]').element.checked).toBe(false)
+    })
+
+    it('lets a show_inactive URL query override the stored choice', async () => {
+        localStorage.setItem(SHOW_INACTIVE_KEY, 'true')
+        window.history.replaceState(null, '', '/?show_inactive=false')
+
+        const { userUrls } = await mountUsers({ sessionBody: adminSession() })
+
+        // The URL wins like $_GET does for wanportal_get_show_inactive.
+        expect(userUrls).toEqual(['/cgi-bin/api/users?is_active=1'])
+    })
+
     it('debounces typing and applies the term on enter', async () => {
         const { wrapper, userUrls } = await mountUsers({ sessionBody: adminSession() })
-        expect(userUrls).toEqual(['/cgi-bin/api/users'])
+        expect(userUrls).toEqual(['/cgi-bin/api/users?is_active=1'])
 
         // Typing alone waits for the debounce — nothing is fetched yet.
         const input = wrapper.find('input[type=search]')
@@ -120,35 +158,129 @@ describe('UsersView for a signed-in admin', () => {
         await input.trigger('keydown.enter')
         await flushPromises()
         await flushPromises()
-        expect(userUrls).toEqual(['/cgi-bin/api/users', '/cgi-bin/api/users?q=ops'])
+        expect(userUrls).toEqual([
+            '/cgi-bin/api/users?is_active=1',
+            '/cgi-bin/api/users?q=ops&is_active=1'
+        ])
     })
 
-    it('rides the role and inactive filters as query params', async () => {
+    it('rides the role and inactive filters as query params and persists the flag', async () => {
         const { wrapper, userUrls } = await mountUsers({ sessionBody: adminSession() })
         const select = wrapper.find('select')
 
+        // Active-only is the default, so the role filter rides with it.
         await select.setValue('1')
         await flushPromises()
         await flushPromises()
-        expect(userUrls[1]).toBe('/cgi-bin/api/users?is_admin=1')
+        expect(userUrls[1]).toBe('/cgi-bin/api/users?is_admin=1&is_active=1')
 
-        // Back to every role: the empty value is dropped, not sent.
+        // Checking "show inactive" drops the is_active param entirely —
+        // every user comes back.
+        await wrapper.find('input[type=checkbox]').setValue(true)
+        await flushPromises()
+        await flushPromises()
+        expect(userUrls[2]).toBe('/cgi-bin/api/users?is_admin=1')
+
+        // The checked state round-trips through localStorage and the
+        // address bar, like the classic session write-back plus its
+        // URL hook — without a reload.
+        expect(localStorage.getItem(SHOW_INACTIVE_KEY)).toBe('true')
+        expect(window.location.search).toBe('?show_inactive=true')
+
+        // Back to every role with the flag still on.
         await select.setValue('')
         await flushPromises()
         await flushPromises()
-        expect(userUrls[2]).toBe('/cgi-bin/api/users')
+        expect(userUrls[3]).toBe('/cgi-bin/api/users')
 
-        // Unchecking "show inactive" narrows the call to active rows.
+        // Unchecking narrows the call to active rows again.
         await wrapper.find('input[type=checkbox]').setValue(false)
         await flushPromises()
         await flushPromises()
-        expect(userUrls[3]).toBe('/cgi-bin/api/users?is_active=1')
+        expect(userUrls[4]).toBe('/cgi-bin/api/users?is_active=1')
+        expect(localStorage.getItem(SHOW_INACTIVE_KEY)).toBe('false')
+        expect(window.location.search).toBe('?show_inactive=false')
+    })
 
-        // Both filters together, in the order the url builder sets them.
-        await select.setValue('0')
+    it('restores q and role from the stored filter and applies them on load', async () => {
+        // The shape the view itself writes through listingFilter.js:
+        // q is the master field, role rides beside it.
+        localStorage.setItem(
+            'wanportal-filter-users',
+            JSON.stringify({ q: 'ops', role: '1' })
+        )
+        const { wrapper, userUrls } = await mountUsers({ sessionBody: adminSession() })
+
+        // The restored filters ride the very first listing call —
+        // no fetch fires for the restoration, it seeds the state.
+        expect(userUrls).toEqual(['/cgi-bin/api/users?q=ops&is_admin=1&is_active=1'])
+        expect(wrapper.find('input[type=search]').element.value).toBe('ops')
+        expect(wrapper.find('select').element.value).toBe('1')
+
+        // Something to wipe: the clear button is up while a filter is set.
+        expect(wrapper.find('button[aria-label="clear filters"]').exists()).toBe(true)
+    })
+
+    it('ignores a stored role outside the select\'s values', async () => {
+        localStorage.setItem('wanportal-filter-users', '{"q":"","role":"7"}')
+        const { userUrls } = await mountUsers({ sessionBody: adminSession() })
+
+        // Junk role reads as the all-users default instead of
+        // narrowing the listing to nothing.
+        expect(userUrls).toEqual(['/cgi-bin/api/users?is_active=1'])
+        expect(localStorage.getItem('wanportal-filter-users')).toBe('{"q":"","role":"7"}')
+    })
+
+    it('persists the role at once and the text debounced, flushing on unmount', async () => {
+        const { wrapper } = await mountUsers({ sessionBody: adminSession() })
+
+        // A role pick saves immediately, without waiting out a timer.
+        await wrapper.find('select').setValue('0')
+        await flushPromises()
+        expect(localStorage.getItem('wanportal-filter-users'))
+            .toBe('{"q":"","role":"0"}')
+
+        // Typing debounces: nothing stored right after the keystroke.
+        await wrapper.find('input[type=search]').setValue('ops')
+        expect(localStorage.getItem('wanportal-filter-users'))
+            .toBe('{"q":"","role":"0"}')
+
+        // Leaving the page mid-debounce still lands the edit — the
+        // unmount flush carries it, so the filter survives navigation.
+        wrapper.unmount()
+        expect(localStorage.getItem('wanportal-filter-users'))
+            .toBe('{"q":"ops","role":"0"}')
+    })
+
+    it('persists the typed filter once the debounce settles', async () => {
+        const { wrapper } = await mountUsers({ sessionBody: adminSession() })
+        await wrapper.find('input[type=search]').setValue('ops')
+
+        // The debounce the fetch already used (500ms) covers the save.
+        await new Promise((resolve) => setTimeout(resolve, 550))
+        expect(localStorage.getItem('wanportal-filter-users'))
+            .toBe('{"q":"ops","role":""}')
+    })
+
+    it('clears the boxes and the stored key and refetches unfiltered', async () => {
+        localStorage.setItem(
+            'wanportal-filter-users',
+            JSON.stringify({ q: 'ops', role: '1' })
+        )
+        const { wrapper, userUrls } = await mountUsers({ sessionBody: adminSession() })
+        expect(userUrls[0]).toBe('/cgi-bin/api/users?q=ops&is_admin=1&is_active=1')
+
+        await wrapper.find('button[aria-label="clear filters"]').trigger('click')
         await flushPromises()
         await flushPromises()
-        expect(userUrls[4]).toBe('/cgi-bin/api/users?is_admin=0&is_active=1')
+
+        // Back to the all-users, active-only default — and the key is
+        // gone, not rewritten with the defaults.
+        expect(userUrls[1]).toBe('/cgi-bin/api/users?is_active=1')
+        expect(localStorage.getItem('wanportal-filter-users')).toBeNull()
+        expect(wrapper.find('input[type=search]').element.value).toBe('')
+        expect(wrapper.find('select').element.value).toBe('')
+        expect(wrapper.find('button[aria-label="clear filters"]').exists()).toBe(false)
     })
 
     it('reports a plain failure without gating the page', async () => {

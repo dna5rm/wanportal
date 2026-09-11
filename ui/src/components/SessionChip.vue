@@ -1,17 +1,20 @@
-<!--
-  The right-hand account cluster of the top bar. Renders from the
+<!-- The right-hand account cluster of the top bar. Renders from the
   session probe App hands down — no fetch of its own — and shows
   claims only, never the token: a signed-out visitor gets a single
-  log-in link, a dead API shows "session?" rather than pretending the
+  log-in door on the .btn chrome, a dead API shows "session?" rather
+  than pretending the
   visitor is signed out, and a signed-in one gets a single username
   button — one plain label, no nested chip; the admin claim and the
   token expiry live in its tooltip — that toggles the account
   dropdown: the gated listing pages — Agents, Targets, Monitors,
-  Credentials, plus Users for admins — then the two in-app doors —
-  API (#/api, the swagger) and Runtime (#/runtime) —
-  above the muted /classic door, and log out. Signed out, the same
-  two doors sit beside the log-in link as compact text so an operator
-  can reach swagger and the runtime page before signing in. Signing
+  Credentials, plus Users for admins — then the Runtime door
+  #/runtime) above the muted /classic door, and log out. The API
+  swagger is not a dropdown item either: App already renders it in the
+  bar's right cluster as the plain nav-link it is, so it never renders
+  twice. Signed out there is
+  nothing but the
+  log-in door — Runtime stays under the account menu, so it is
+  reachable only after signing in. Signing
   out forgets the tab's token and asks App
   to re-probe via the change event. The menu closes on any route
   change and on clicks outside the cluster.
@@ -73,7 +76,6 @@ async function signOut() {
                 <router-link class="menu-link" to="/monitors">Monitors</router-link>
                 <router-link class="menu-link" to="/credentials">Credentials</router-link>
                 <router-link v-if="session.isAdmin" class="menu-link" to="/users">Users</router-link>
-                <router-link class="menu-link menu-muted" to="/api">API</router-link>
                 <router-link class="menu-link menu-muted" to="/runtime">Runtime</router-link>
                 <a class="menu-link menu-muted" href="/classic">Classic console</a>
                 <button class="menu-link" type="button" title="forget this tab's token" @click="signOut">Log out</button>
@@ -81,9 +83,7 @@ async function signOut() {
         </template>
 
         <template v-else-if="session.reason === 'signed-out'">
-            <router-link class="nav-link nav-utility" to="/api">API</router-link>
-            <router-link class="nav-link nav-utility" to="/runtime">Runtime</router-link>
-            <router-link class="nav-link" to="/login">Log in</router-link>
+            <router-link class="btn login-btn" to="/login">Log in</router-link>
         </template>
 
         <span v-else class="muted" :title="session.error || 'session check failed'">session?</span>
@@ -99,7 +99,10 @@ async function signOut() {
     font-size: 11.5px;
 }
 
-/* The signed-out utility doors: the same muted nav-link voice as the
- * log-in link but smaller, a quiet step below it. */
-.nav-utility { font-size: 11.5px; }
+/* The log-in door carries the bar's .btn chrome on a router-link;
+ * this drops the underline the UA hangs on anchors so the door reads
+ * as the button the chrome makes of it. */
+.session-chip .login-btn {
+    text-decoration: none;
+}
 </style>

@@ -15,7 +15,7 @@ curl -s http://localhost/cgi-bin/api/users \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
-## Create a new user (standard user)
+## Create a user (standard user)
 
 ```bash
 curl -s -X POST http://localhost/cgi-bin/api/users \
@@ -31,10 +31,10 @@ curl -s -X POST http://localhost/cgi-bin/api/users \
   }' | jq '.'
 ```
 
-Passwords need at least eight characters with at least one letter and
-one digit.
+Passwords require at least eight characters, including at least one
+letter and one digit.
 
-## Create another user (admin user)
+## Create a user (admin user)
 
 ```bash
 curl -s -X POST http://localhost/cgi-bin/api/users \
@@ -50,7 +50,7 @@ curl -s -X POST http://localhost/cgi-bin/api/users \
   }' | jq '.'
 ```
 
-## Try to create a user with a weak password (should fail)
+## Attempt to create a user with a weak password (should fail)
 
 ```bash
 curl -s -X POST http://localhost/cgi-bin/api/users \
@@ -63,7 +63,7 @@ curl -s -X POST http://localhost/cgi-bin/api/users \
   }' | jq '.'
 ```
 
-### Expected response:
+### Expected response
 
 ```json
 {
@@ -72,7 +72,7 @@ curl -s -X POST http://localhost/cgi-bin/api/users \
 }
 ```
 
-## Update a user (replace USER-UUID with an actual UUID)
+## Update a user (replace USER-UUID)
 
 ```bash
 curl -s -X PUT http://localhost/cgi-bin/api/users/USER-UUID \
@@ -96,10 +96,10 @@ curl -s -X PUT http://localhost/cgi-bin/api/users/USER-UUID \
   }' | jq '.'
 ```
 
-## Try to modify the built-in admin with a non-admin token (should fail)
+## Attempt to modify the built-in admin with a non-admin token (should fail)
 
-First get a non-admin token (the standard user created above), then
-try to deactivate the built-in admin account:
+First obtain a non-admin token (for the standard user created above),
+then attempt to deactivate the built-in admin account:
 
 ```bash
 NON_ADMIN_TOKEN=$(curl -s -X POST http://localhost/cgi-bin/api/login \
@@ -114,7 +114,7 @@ curl -s -X PUT http://localhost/cgi-bin/api/users/ADMIN-UUID \
   }' | jq '.'
 ```
 
-### Expected response:
+### Expected response
 
 ```json
 {
@@ -123,9 +123,9 @@ curl -s -X PUT http://localhost/cgi-bin/api/users/ADMIN-UUID \
 }
 ```
 
-A non-admin is stopped by the admin check before the built-in-admin
-protection even comes into play; the built-in `admin` account can only
-be changed by the admin itself.
+A non-admin caller is rejected by the admin-token check before the
+built-in-admin protection applies; the built-in `admin` account can be
+changed only by the `admin` user itself.
 
 ## Delete a user (replace USER-UUID)
 
@@ -134,7 +134,7 @@ curl -s -X DELETE http://localhost/cgi-bin/api/users/USER-UUID \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
-### Expected response:
+### Expected response
 
 ```json
 {
@@ -144,14 +144,14 @@ curl -s -X DELETE http://localhost/cgi-bin/api/users/USER-UUID \
 }
 ```
 
-## Try to delete the admin user (should fail)
+## Attempt to delete the admin user (should fail)
 
 ```bash
 curl -s -X DELETE http://localhost/cgi-bin/api/users/ADMIN-UUID \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
-### Expected response:
+### Expected response
 
 ```json
 {
@@ -167,7 +167,7 @@ curl -s http://localhost/cgi-bin/api/users \
   -H "Authorization: Bearer $NON_ADMIN_TOKEN" | jq '.'
 ```
 
-### Expected response:
+### Expected response
 
 ```json
 {

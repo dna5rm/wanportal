@@ -23,6 +23,7 @@ import { useRouter } from 'vue-router'
 import { getJson } from '../api'
 import { authHeaders, clearToken, getToken } from '../session'
 import { humanErr, uuidOk } from './detailShared'
+import { leaveForm } from './goBack'
 
 const props = defineProps({
     id: { type: String, default: '' }
@@ -196,7 +197,14 @@ async function save() {
             await sendJson('POST', '/cgi-bin/api/agent', payload)
         }
         password.value = '' // the secret went out in the call, not into state
-        router.push({ name: 'agents' })
+        /* A create goes back to wherever the form was opened from —
+         * usually the listing; an edit keeps landing on the listing
+         * as before. */
+        if (isEdit.value) {
+            router.push({ name: 'agents' })
+        } else {
+            leaveForm(router, 'agents')
+        }
     } catch (err) {
         if (err && err.status === 401) {
             // The token expired mid-edit; sign in again and come back.
@@ -212,6 +220,12 @@ async function save() {
 
 const showForm = computed(() =>
     !redirecting.value && !fillLoading.value && !fillError.value)
+
+/* Cancel obeys the same exit rule as a create: back to the page the
+ * form was opened from, the listing when there is no history. */
+function cancel() {
+    leaveForm(router, 'agents')
+}
 
 const banner = computed(() => fillError.value || saveError.value)
 </script>
@@ -291,7 +305,7 @@ const banner = computed(() => fillError.value || saveError.value)
                 <button class="btn submit" type="submit" :disabled="busy">
                     {{ busy ? 'saving…' : (isEdit ? 'save agent' : 'create agent') }}
                 </button>
-                <router-link class="btn" :to="{ name: 'agents' }">cancel</router-link>
+                <button class="btn" type="button" @click="cancel">cancel</button>
             </div>
         </form>
     </section>

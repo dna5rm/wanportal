@@ -10,16 +10,21 @@
   Filters split the way the classic page splits them: type and site
   narrow the already-loaded rows client-side, while active/inactive is
   the one filter the api answers (is_active only takes 0 or 1, and
-  there is no combined listing), so that one refetches. View and edit
+  there is no combined listing), so that one refetches. All three
+  persist like the trio listings' text filter (listingFilter.js, key
+  'wanportal-filter-credentials'): re-read on mount and saved as the
+  user changes them — site typing debounced, the selects at once —
+  until the clear button wipes the boxes and the key. View and edit
   moved into the app; deletes stay on the classic console.
 -->
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getJson } from '../api'
 import { getSession } from '../session'
 import { fmtClock } from '../format'
 import { humanErr } from './detailShared'
+import { clearFilter, loadFilter, saveFilter } from '../listingFilter'
 
 const router = useRouter()
 
@@ -32,10 +37,50 @@ const loadedAt = ref(null)
 const redirected = ref(false)    // signed-out walk to /login in flight
 
 /* Type + site narrow what is already on the page; active/inactive is
- * answered by the api, so picking it refetches. */
-const typeFilter = ref('')
-const siteFilter = ref('')
-const activeFilter = ref('1')
+ * answered by the api, so picking it refetches. All three ride the
+ * listingFilter key 'wanportal-filter-credentials' and are seeded
+ * from it — a stored type outside the select's values reads as the
+ * all-types default and a non-'0' active reads as '1', so junk
+ * storage cannot blank the listing by accident. */
+const FILTER_PAGE = 'credentials'
+const CRED_TYPES = ['', 'ACCOUNT', 'CERTIFICATE', 'API', 'PSK', 'CODE']
+const savedFilter = loadFilter(FILTER_PAGE)
+const typeFilter = ref(CRED_TYPES.includes(savedFilter.typeFilter) ? savedFilter.typeFilter : '')
+const siteFilter = ref(typeof savedFilter.siteFilter === 'string' ? savedFilter.siteFilter : '')
+const activeFilter = ref(savedFilter.activeFilter === '0' ? '0' : '1')
+
+/* Persist all three as the user changes them: site typing debounces
+ * (500ms, same cadence the users listing gives its text filter), the
+ * selects save at once and supersede a pending site save. The clear
+ * button swallows the one watch tick its resets trigger, so the key
+ * it just removed is not rewritten with the defaults. */
+let saveTimer = null
+let swallowSave = false
+watch(
+    () => ({
+        typeFilter: typeFilter.value,
+        siteFilter: siteFilter.value,
+        activeFilter: activeFilter.value
+    }),
+    (val, old) => {
+        if (swallowSave) { swallowSave = false; return }
+        clearTimeout(saveTimer)
+        if (val.siteFilter !== old.siteFilter) {
+            saveTimer = setTimeout(() => saveCredsFilter(), 500)
+        } else {
+            saveCredsFilter()
+        }
+    }
+)
+
+function saveCredsFilter() {
+    saveTimer = null
+    saveFilter(FILTER_PAGE, {
+        typeFilter: typeFilter.value,
+        siteFilter: siteFilter.value,
+        activeFilter: activeFilter.value
+    })
+}
 
 let requestSeq = 0               // guards against out-of-order responses
 
@@ -101,6 +146,22 @@ function refetch() {
     if (session.value && session.value.authenticated) fetchRows()
 }
 
+/* The clear button only renders while a filter is off its default. It
+ * resets the boxes, removes the stored key, and refetches — but only
+ * when the active select actually moved, because that is the one
+ * filter the api answers; type and site narrow loaded rows alone. */
+function clearCredFilters() {
+    clearTimeout(saveTimer)
+    saveTimer = null
+    const wasActive = activeFilter.value
+    swallowSave = true
+    typeFilter.value = ''
+    siteFilter.value = ''
+    activeFilter.value = '1'
+    clearFilter(FILTER_PAGE)
+    if (wasActive !== '1') refetch()
+}
+
 /* Same honesty rule as the other listings: a dead api with nothing to
  * show gets a loud banner, a dead refresh keeps the last good rows. */
 const banner = computed(() => {
@@ -132,6 +193,14 @@ onMounted(async () => {
         return // dead probe: the gate explains, nothing loads
     }
     fetchRows()
+})
+
+onBeforeUnmount(() => {
+    // A site-debounce still running at leave time holds the user's
+    // last edit — flush it so the filter survives navigation intact.
+    if (saveTimer) {
+        saveCredsFilter()
+    }
 })
 </script>
 
@@ -181,6 +250,9 @@ onMounted(async () => {
                     <option value="1">active</option>
                     <option value="0">inactive</option>
                 </select>
+                <button v-if="typeFilter || siteFilter || activeFilter !== '1'"
+                        class="btn" type="button"
+                        aria-label="clear filters" @click="clearCredFilters">clear</button>
             </div>
         </section>
 

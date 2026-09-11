@@ -7,7 +7,7 @@
   the public GET /cgi-bin/api/targets/:id the detail page already
   uses, so the form fills even before the probe answers.
 
-  Address rules are ported verbatim from the classic form (ipv4,
+  Address rules are ported from the classic form (ipv4,
   ipv6, or hostname — target.pm is the law behind them). The api
   re-checks and 400s anything else, so this side is politeness,
   not authority.
@@ -18,6 +18,7 @@ import { useRouter } from 'vue-router'
 import { getJson, postJson, putJson } from '../api'
 import { getSession } from '../session'
 import { humanErr } from './detailShared'
+import { leaveForm } from './goBack'
 
 const props = defineProps({
     id: { type: String, default: '' }
@@ -47,10 +48,28 @@ const canEdit = computed(() =>
     sessionReady.value && !adminOnly.value
     && !!session.value && session.value.authenticated && session.value.isAdmin)
 
-/* The three regexes targets_edit.php ships, kept character-for-character
- * so the two forms can never drift apart. */
+/* The three address regexes targets_edit.php ships. ipv4 and the
+ * hostname pattern are kept character-for-character; the ipv6 one is
+ * the same shape with balanced parens so it actually compiles. */
 const ipv4Re = /^(\d{1,3}\.){3}\d{1,3}$/
-const ipv6Re = __IPV6_PHP_PORT__
+    /* The classic targets_edit.php regex does not compile; this is
+     * the same shape with balanced parens. */
+    const ipv6Re = new RegExp(
+      '^(' +
+      '([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|' +
+      '([0-9A-Fa-f]{1,4}:){1,7}:|' +
+      '([0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|' +
+      '([0-9A-Fa-f]{1,4}:){1,5}(:[0-9A-Fa-f]{1,4}){1,2}|' +
+      '([0-9A-Fa-f]{1,4}:){1,4}(:[0-9A-Fa-f]{1,4}){1,3}|' +
+      '([0-9A-Fa-f]{1,4}:){1,3}(:[0-9A-Fa-f]{1,4}){1,4}|' +
+      '([0-9A-Fa-f]{1,4}:){1,2}(:[0-9A-Fa-f]{1,4}){1,5}|' +
+      '[0-9A-Fa-f]{1,4}:((:[0-9A-Fa-f]{1,4}){1,6})|' +
+      ':((:[0-9A-Fa-f]{1,4}){1,7}|:)|' +
+      'fe80:(:[0-9A-Fa-f]{0,4}){0,4}%[0-9a-zA-Z]{1,}|' +
+      '::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|' +
+      '([0-9A-Fa-f]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])' +
+      ')$'
+    )
 const hostRe = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
 
 function addressOk(v) {
@@ -126,14 +145,19 @@ async function submit() {
             ? await putJson('/cgi-bin/api/target/' + encodeURIComponent(props.id), body)
             : await postJson('/cgi-bin/api/target', body)
 
-        /* The api answers with the record's id either way; land on the
-         * detail page so the save is visibly real, like the classic
-         * redirect to targets.php only one hop more specific. */
-        const id = (reply && reply.id) || props.id
-        if (id) {
-            router.push({ name: 'target', params: { id } })
+        /* A create goes back to wherever the form was opened from —
+         * usually the listing, which re-fetches and shows the new
+         * record; an edit keeps landing on the record's detail page
+         * so the save is visibly real. */
+        if (!editing.value) {
+            leaveForm(router, 'targets')
         } else {
-            router.push({ name: 'targets' })
+            const id = (reply && reply.id) || props.id
+            if (id) {
+                router.push({ name: 'target', params: { id } })
+            } else {
+                router.push({ name: 'targets' })
+            }
         }
     } catch (e) {
         const msg = (e && e.message) || 'unknown error'
@@ -151,6 +175,12 @@ async function submit() {
     } finally {
         busy.value = false
     }
+}
+
+/* Cancel obeys the same exit rule as a create: back to wherever the
+ * form was opened from, the listing when there is no history. */
+function cancel() {
+    leaveForm(router, 'targets')
 }
 </script>
 
@@ -218,7 +248,7 @@ async function submit() {
                 <button class="btn" type="submit" :disabled="busy">
                     {{ busy ? 'saving…' : (editing ? 'save target' : 'create target') }}
                 </button>
-                <router-link class="btn" :to="{ name: 'targets' }">cancel</router-link>
+                <button class="btn" type="button" @click="cancel">cancel</button>
             </div>
         </form>
     </section>

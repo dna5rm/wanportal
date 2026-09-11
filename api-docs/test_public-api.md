@@ -1,7 +1,7 @@
 # Test: Public APIs
 
-These endpoints need no login. They expose the monitoring topology
-read-only; agent passwords never appear in any response.
+These endpoints require no authentication. They expose the monitoring
+topology read-only; agent passwords never appear in any response.
 
 ## List all agents
 
@@ -9,7 +9,7 @@ read-only; agent passwords never appear in any response.
 curl -s http://localhost/cgi-bin/api/agents | jq '.'
 ```
 
-### Expected response:
+### Expected response
 
 ```json
 {
@@ -33,7 +33,7 @@ curl -s http://localhost/cgi-bin/api/agents | jq '.'
 curl -s http://localhost/cgi-bin/api/targets | jq '.'
 ```
 
-### Expected response:
+### Expected response
 
 ```json
 {
@@ -55,11 +55,11 @@ curl -s http://localhost/cgi-bin/api/targets | jq '.'
 curl -s http://localhost/cgi-bin/api/monitors | jq '.'
 ```
 
-### Expected response:
+### Expected response
 
-One entry per monitor. The `is_active` flag is the effective one — a
-monitor counts as inactive when its agent or its target is inactive
-too.
+One entry per monitor. The `is_active` flag is the effective value: a
+monitor counts as inactive when its agent or its target is also
+inactive.
 
 ```json
 {
@@ -103,8 +103,8 @@ too.
 
 ## Filter monitors
 
-`/monitors` is the only listing with filters, and they are query
-parameters:
+`/monitors` is the only listing that supports filters, which are
+passed as query parameters:
 
 ```bash
 # Monitors currently at exactly 0% loss
@@ -114,4 +114,4 @@ curl -s "http://localhost/cgi-bin/api/monitors?current_loss=0" | jq '.'
 curl -s "http://localhost/cgi-bin/api/monitors?is_active=1" | jq '.'
 ```
 
-`/agents` and `/targets` take no filters.
+`/agents` and `/targets` accept no filters.

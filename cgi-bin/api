@@ -45,10 +45,12 @@ use auth            qw(auth_middleware register_login register_session);
 use test            qw(register_test);
 use credentials     qw(register_credentials);
 use public_api      qw(register_public_endpoints);
+use api_docs        qw(register_api_docs);
 use agent           qw(register_agent);
 use target          qw(register_target);
-use monitor         qw(register_monitor);
-use agent_monitors  qw(register_agent_monitors);
+use monitor          qw(register_monitor);
+use agent_monitors   qw(register_agent_monitors);
+use netping_agent    qw(register_netping_script);
 
 # Secure app config from env (with hard defaults for dev)
 my $jwt_secret = $ENV{JWT_SECRET}       // 'Wr9deCWWV&AV58DyH8Wz9Mz%6N6r5@sb';
@@ -90,6 +92,7 @@ my %valid_protocols = map { $_ => 1 } qw(ICMP ICMPV6 TCP);
 # Register public endpoints (no auth required)
 register_agent_monitors($db_config);
 register_public_endpoints($db_config);
+register_api_docs();
 
 # Register login endpoint
 register_login($db_config);
@@ -104,6 +107,7 @@ group {
     register_agent($db_config);
     register_target($db_config);
     register_monitor($db_config, \%valid_protocols, \%valid_dscp);
+    register_netping_script();
 };
 
 app->start;

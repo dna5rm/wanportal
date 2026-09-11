@@ -7,6 +7,18 @@
   here either. "Show inactive" maps the same way: checked == no
   is_active param (all users), unchecked == is_active=1.
 
+  The checkbox is the shared show-inactive flag (prefs.js) — the
+  same key the agent and target detail pages bind, because the
+  classic pages kept one session flag across them. That makes the
+  SPA default to active-only where the classic users.php GET
+  mapping defaulted to all users; a URL ?show_inactive=true
+  restores the all-users view for a visit.
+
+  The q + role filters persist like the trio listings' text filter
+  (listingFilter.js, key 'wanportal-filter-users'): re-read on
+  mount and saved as the user types (debounced) or picks a role,
+  until the clear button wipes both the boxes and the key.
+
   The listing sits behind the login wall, so this view checks the
   session probe first and shows an "admin only" note instead of a
   table for anyone the API will not answer. Create and edit moved
@@ -14,9 +26,11 @@
   routes, and nothing here POSTs.
 -->
 <script setup>
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { getJson } from '../api'
 import { getSession } from '../session'
+import { resolveShowInactive, setShowInactive } from '../prefs'
+import { clearFilter, loadFilter, saveFilter } from '../listingFilter'
 
 const session = ref(null)        // session probe result
 const sessionReady = ref(false)  // probe done (success or failure)
@@ -25,10 +39,47 @@ const error = ref(null)          // users fetch error, shown as a banner
 const loading = ref(false)
 
 // Filters mirror htdocs/users.php: free-text q, role select, and the
-// inactive checkbox (checked == show all users).
-const q = ref('')
-const role = ref('')             // '' all, '1' admins, '0' non-admins
-const showInactive = ref(true)
+// inactive checkbox (checked == show all users). The checkbox is the
+// shared show-inactive flag (prefs.js) — the same key the agent and
+// target detail pages bind, because the classic pages kept one
+// session flag across them — so a choice made here follows to the
+// agent detail and back. Resolved like wanportal_get_show_inactive():
+// URL query wins, then the stored choice, else false (active only) —
+// which is why this starts unchecked rather than all-users.
+//
+// q + role ride the listingFilter key 'wanportal-filter-users' and
+// are seeded from it: a stored role other than the select's three
+// values reads as the all-users default, so junk storage cannot
+// narrow the listing by accident.
+const FILTER_PAGE = 'users'
+const savedFilter = loadFilter(FILTER_PAGE)
+const q = ref(savedFilter.q)
+const role = ref(['0', '1'].includes(savedFilter.role) ? savedFilter.role : '')
+const showInactive = ref(resolveShowInactive())
+watch(showInactive, (value) => setShowInactive(value))
+
+/* Persist q + role as the user changes them: typing debounces to the
+ * same 500ms the fetch debounce uses, a role pick saves at once (and
+ * supersedes a pending text save — the write snapshots both refs).
+ * The clear button swallows the one watch tick its resets trigger,
+ * so the key it just removed is not rewritten with the defaults. */
+let saveTimer = null
+let swallowSave = false
+watch(
+    () => ({ q: q.value, role: role.value }),
+    (val, old) => {
+        if (swallowSave) { swallowSave = false; return }
+        clearTimeout(saveTimer)
+        if (val.q !== old.q) {
+            saveTimer = setTimeout(
+                () => saveFilter(FILTER_PAGE, { q: q.value, role: role.value }),
+                500
+            )
+        } else {
+            saveFilter(FILTER_PAGE, { q: val.q, role: val.role })
+        }
+    }
+)
 
 let searchTimer = null
 let requestSeq = 0               // guards against out-of-order responses
@@ -96,6 +147,22 @@ function toggleInactive() {
     applyNow()
 }
 
+/* The clear button only renders while q or role is set. It wipes the
+ * boxes, removes the stored key, and refetches — the watch tick the
+ * resets trigger is swallowed so the removal sticks. */
+function clearFilters() {
+    clearTimeout(searchTimer)
+    clearTimeout(saveTimer)
+    saveTimer = null
+    swallowSave = true
+    q.value = ''
+    role.value = ''
+    clearFilter(FILTER_PAGE)
+    if (session.value && session.value.authenticated && session.value.isAdmin) {
+        loadUsers()
+    }
+}
+
 function roleClass(u) {
     return Number(u.is_admin) ? 'chip chip-danger' : 'chip'
 }
@@ -120,6 +187,13 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
     clearTimeout(searchTimer)
+    // A debounce still running at leave time holds the user's last
+    // edit — flush it so the filter survives the navigation intact.
+    if (saveTimer) {
+        clearTimeout(saveTimer)
+        saveTimer = null
+        saveFilter(FILTER_PAGE, { q: q.value, role: role.value })
+    }
 })
 </script>
 
@@ -174,6 +248,8 @@ onBeforeUnmount(() => {
                     <option value="1">admins only</option>
                     <option value="0">non-admins only</option>
                 </select>
+                <button v-if="q || role" class="btn" type="button"
+                        aria-label="clear filters" @click="clearFilters">clear</button>
                 <label class="check">
                     <input v-model="showInactive" type="checkbox" @change="toggleInactive">
                     show inactive

@@ -34,6 +34,7 @@ import CredentialDetailView from './components/CredentialDetailView.vue'
 import CredentialEditView from './components/CredentialEditView.vue'
 import ServerView from './components/ServerView.vue'
 import ApiDocsView from './components/ApiDocsView.vue'
+import GuideView from './components/GuideView.vue'
 import LoginView from './components/LoginView.vue'
 import { getSession } from './session'
 
@@ -198,6 +199,19 @@ const routes = [
         name: 'api',
         path: '/api',
         component: ApiDocsView
+    },
+    /* route:guide */
+    {
+        // Markdown guides from the /cgi-bin/api/docs glob render in the
+        // app now: GuideView fetches the file sitting next to
+        // openapi.yaml and renders it itself — the classic Parsedown
+        // page is out of the loop. Public, like the docs it replaces;
+        // the basename rides in as a prop. A plain object route, so
+        // there is no alias slot to pass a bare undefined into.
+        name: 'guide',
+        path: '/guides/:file',
+        component: GuideView,
+        props: true
     },
     /* route:login */
     {

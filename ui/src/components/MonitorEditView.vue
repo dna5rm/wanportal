@@ -18,6 +18,7 @@ import { useRouter } from 'vue-router'
 import { getJson, postJson, putJson } from '../api'
 import { getSession } from '../session'
 import { humanErr, uuidOk } from './detailShared'
+import { leaveForm } from './goBack'
 
 const props = defineProps({
     id: { type: String, default: '' }
@@ -224,11 +225,18 @@ async function save() {
         const r = isEdit.value
             ? await putJson('/cgi-bin/api/monitor/' + encodeURIComponent(props.id), payload)
             : await postJson('/cgi-bin/api/monitor', payload)
-        const rid = (r && r.id) || (r && r.monitor && r.monitor.id) || (isEdit.value ? props.id : '')
-        if (rid) {
-            router.push({ name: 'monitor', params: { id: rid } })
+        /* A create goes back to wherever the form was opened from —
+         * usually the listing; an edit keeps landing on the record's
+         * detail page. */
+        if (!isEdit.value) {
+            leaveForm(router, 'monitors')
         } else {
-            router.push({ name: 'monitors' })
+            const rid = (r && r.id) || (r && r.monitor && r.monitor.id) || props.id
+            if (rid) {
+                router.push({ name: 'monitor', params: { id: rid } })
+            } else {
+                router.push({ name: 'monitors' })
+            }
         }
     } catch (err) {
         if (isForbidden(err)) {
@@ -244,6 +252,12 @@ async function save() {
 
 const showForm = computed(() =>
     !redirecting.value && !fillLoading.value && !fillError.value)
+
+/* Cancel obeys the same exit rule as a create: back to wherever the
+ * form was opened from, the listing when there is no history. */
+function cancel() {
+    leaveForm(router, 'monitors')
+}
 </script>
 
 <template>
@@ -359,7 +373,7 @@ const showForm = computed(() =>
                 <button class="btn submit" type="submit" :disabled="busy">
                     {{ busy ? 'saving…' : (isEdit ? 'save monitor' : 'create monitor') }}
                 </button>
-                <router-link class="btn" :to="{ name: 'monitors' }">cancel</router-link>
+                <button class="btn" type="button" @click="cancel">cancel</button>
             </div>
         </form>
     </section>

@@ -1,4 +1,14 @@
-# Test: Monitor APIs
+# Monitor API recipes
+
+Recipes for the monitor configuration endpoints. A monitor ties an
+agent to a target and defines how that agent probes the target.
+Create, update, delete, and the statistics reset require an
+administrator token; the monitor list is public.
+
+The examples call the API on the local host; adjust the base URL to
+match the deployment.
+
+## Acquire a token
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost/cgi-bin/api/login \
@@ -6,33 +16,60 @@ TOKEN=$(curl -s -X POST http://localhost/cgi-bin/api/login \
   -d '{"username":"admin","password":"netops"}' | jq -r '.token')
 ```
 
-Create, update, delete, and the statistics reset are admin-only.
+## List all monitors
 
-## List all monitors (public endpoint)
+The list endpoint is public and requires no token:
 
 ```bash
 curl -s http://localhost/cgi-bin/api/monitors | jq '.'
 ```
 
-## Create a basic ICMP monitor
+The list supports optional query filters, for example `is_active`
+(0 or 1) and `current_loss` (exact percentage match).
+
+## Resolve the ids used below
+
+`agent_id` and `target_id` are required and must reference existing
+records; the API returns 404 otherwise. Resolve the seeded LOCAL
+agent and take a target id from the public list:
+
+```bash
+AGENT_ID=$(curl -s http://localhost/cgi-bin/api/agents \
+  | jq -r '.agents[] | select(.name=="LOCAL") | .id')
+TARGET_ID=$(curl -s http://localhost/cgi-bin/api/targets | jq -r '.targets[0].id')
+```
+
+## Create a monitor
+
+Basic ICMP monitor:
 
 ```bash
 curl -s -X POST http://localhost/cgi-bin/api/monitor \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "agent_id": "00000000-0000-0000-0000-000000000000",
-    "target_id": "F918A070-4843-11F0-BADB-CED674C4600D",
-    "description": "Google DNS Monitor",
-    "protocol": "ICMP",
-    "dscp": "BE",
-    "pollcount": 5,
-    "pollinterval": 60
-  }' | jq '.'
+  -d "{
+    \"agent_id\": \"$AGENT_ID\",
+    \"target_id\": \"$TARGET_ID\",
+    \"description\": \"ICMP Monitor\",
+    \"protocol\": \"ICMP\",
+    \"dscp\": \"BE\",
+    \"pollcount\": 5,
+    \"pollinterval\": 60
+  }" | jq '.'
 ```
 
-Defaults if you leave them out: protocol ICMP, port 0, dscp BE,
-pollcount 5, pollinterval 60.
+### Expected response
+
+```json
+{
+  "status": "success",
+  "message": "Monitor created successfully",
+  "id": "12345678-1234-5678-1234-567812345678"
+}
+```
+
+Omitted fields take their defaults: protocol ICMP, port 0, DSCP BE,
+pollcount 5, and pollinterval 60.
 
 ## Create a TCP monitor
 
@@ -40,101 +77,39 @@ pollcount 5, pollinterval 60.
 curl -s -X POST http://localhost/cgi-bin/api/monitor \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "agent_id": "00000000-0000-0000-0000-000000000000",
-    "target_id": "F918A070-4843-11F0-BADB-CED674C4600D",
-    "description": "Web Server Monitor",
-    "protocol": "TCP",
-    "port": 443,
-    "dscp": "AF21",
-    "pollcount": 3,
-    "pollinterval": 30
-  }' | jq '.'
+  -d "{
+    \"agent_id\": \"$AGENT_ID\",
+    \"target_id\": \"$TARGET_ID\",
+    \"description\": \"Web Server Monitor\",
+    \"protocol\": \"TCP\",
+    \"port\": 443,
+    \"dscp\": \"AF21\",
+    \"pollcount\": 3,
+    \"pollinterval\": 30
+  }" | jq '.'
 ```
 
-## Try to create a monitor with an invalid protocol (should fail)
+## Retrieve a monitor
+
+Use a monitor id from the list response:
 
 ```bash
-curl -s -X POST http://localhost/cgi-bin/api/monitor \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_id": "00000000-0000-0000-0000-000000000000",
-    "target_id": "F918A070-4843-11F0-BADB-CED674C4600D",
-    "protocol": "INVALID"
-  }' | jq '.'
-```
+MONITOR_ID=$(curl -s http://localhost/cgi-bin/api/monitors | jq -r '.monitors[0].id')
 
-### Expected response:
-
-```json
-{
-  "status": "error",
-  "message": "Validation failed: Invalid protocol"
-}
-```
-
-## Try to create a monitor with an invalid DSCP (should fail)
-
-Same shape as above with `"dscp": "INVALID"`. Expected response:
-
-```json
-{
-  "status": "error",
-  "message": "Validation failed: Invalid DSCP value"
-}
-```
-
-## Try to create a monitor with an invalid port (should fail)
-
-Same shape as above with `"protocol": "TCP", "port": 99999`. Expected
-response:
-
-```json
-{
-  "status": "error",
-  "message": "Validation failed: Port must be between 0 and 65535"
-}
-```
-
-## Try to create a duplicate monitor (should fail)
-
-A monitor is unique on agent, target, protocol, port, and DSCP
-together. Repeat the exact ICMP/BE creation from the top — same agent
-and target — and the second attempt fails:
-
-```bash
-curl -s -X POST http://localhost/cgi-bin/api/monitor \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_id": "00000000-0000-0000-0000-000000000000",
-    "target_id": "F918A070-4843-11F0-BADB-CED674C4600D",
-    "protocol": "ICMP",
-    "dscp": "BE"
-  }' | jq '.'
-```
-
-### Expected response:
-
-```json
-{
-  "status": "error",
-  "message": "Monitor with these parameters already exists"
-}
-```
-
-## Get a single monitor (use a real id)
-
-```bash
-curl -s http://localhost/cgi-bin/api/monitor/29234F4C-48B5-11F0-A00C-E37EC6BF7404 \
+curl -s http://localhost/cgi-bin/api/monitor/$MONITOR_ID \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
-## Update the monitor description
+The response contains the monitor configuration, its current and
+lifetime statistics, and the joined agent and target fields.
+
+## Update a monitor
+
+The description, protocol, port, DSCP value, and active flag can be
+changed after creation:
 
 ```bash
-curl -s -X PUT http://localhost/cgi-bin/api/monitor/29234F4C-48B5-11F0-A00C-E37EC6BF7404 \
+curl -s -X PUT http://localhost/cgi-bin/api/monitor/$MONITOR_ID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -142,10 +117,20 @@ curl -s -X PUT http://localhost/cgi-bin/api/monitor/29234F4C-48B5-11F0-A00C-E37E
   }' | jq '.'
 ```
 
-## Deactivate the monitor
+### Expected response
+
+```json
+{
+  "status": "success",
+  "message": "Monitor updated successfully",
+  "id": "12345678-1234-5678-1234-567812345678"
+}
+```
+
+## Deactivate a monitor
 
 ```bash
-curl -s -X PUT http://localhost/cgi-bin/api/monitor/29234F4C-48B5-11F0-A00C-E37EC6BF7404 \
+curl -s -X PUT http://localhost/cgi-bin/api/monitor/$MONITOR_ID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -153,13 +138,15 @@ curl -s -X PUT http://localhost/cgi-bin/api/monitor/29234F4C-48B5-11F0-A00C-E37E
   }' | jq '.'
 ```
 
-## Try to update polling parameters (should fail)
+The response matches the description update above.
 
-`pollcount` and `pollinterval` are fixed when the monitor is created —
-an update that touches either is rejected outright:
+## Polling parameters are immutable
+
+`pollcount` and `pollinterval` are fixed when the monitor is created.
+An update that touches either is rejected outright with HTTP 400:
 
 ```bash
-curl -s -X PUT http://localhost/cgi-bin/api/monitor/29234F4C-48B5-11F0-A00C-E37EC6BF7404 \
+curl -s -X PUT http://localhost/cgi-bin/api/monitor/$MONITOR_ID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -168,7 +155,7 @@ curl -s -X PUT http://localhost/cgi-bin/api/monitor/29234F4C-48B5-11F0-A00C-E37E
   }' | jq '.'
 ```
 
-### Expected response:
+### Expected response
 
 ```json
 {
@@ -177,73 +164,124 @@ curl -s -X PUT http://localhost/cgi-bin/api/monitor/29234F4C-48B5-11F0-A00C-E37E
 }
 ```
 
-## Reset the monitor statistics
+## Reset monitor statistics
 
-Clears the counters and lifetime averages and stamps `last_clear`:
+The reset clears the counters and lifetime averages and stamps
+`last_clear`:
 
 ```bash
-curl -s -X POST http://localhost/cgi-bin/api/monitor/29234F4C-48B5-11F0-A00C-E37EC6BF7404/reset \
+curl -s -X POST http://localhost/cgi-bin/api/monitor/$MONITOR_ID/reset \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
-### Expected response:
+### Expected response
 
 ```json
 {
   "status": "success",
   "message": "Monitor statistics reset successfully",
-  "id": "29234F4C-48B5-11F0-A00C-E37EC6BF7404"
+  "id": "12345678-1234-5678-1234-567812345678"
 }
 ```
 
-## Try to update a non-existent monitor (should fail)
+## Delete a monitor
+
+Deleting a monitor also deletes its RRD data files. The operation
+cannot be undone.
+
+```bash
+curl -s -X DELETE http://localhost/cgi-bin/api/monitor/$MONITOR_ID \
+  -H "Authorization: Bearer $TOKEN" | jq '.'
+```
+
+### Expected response
+
+```json
+{
+  "status": "success",
+  "message": "Monitor deleted successfully",
+  "id": "12345678-1234-5678-1234-567812345678"
+}
+```
+
+## Error handling
+
+### Invalid protocol
+
+A create request with an unsupported protocol fails with HTTP 400.
+Use the create request shape above with `"protocol": "INVALID"`:
+
+```json
+{
+  "status": "error",
+  "message": "Validation failed: Invalid protocol"
+}
+```
+
+### Invalid DSCP value
+
+Same request shape with `"dscp": "INVALID"`:
+
+```json
+{
+  "status": "error",
+  "message": "Validation failed: Invalid DSCP value"
+}
+```
+
+### Invalid port
+
+Same request shape with `"protocol": "TCP"` and `"port": 99999`:
+
+```json
+{
+  "status": "error",
+  "message": "Validation failed: Port must be between 0 and 65535"
+}
+```
+
+### Duplicate monitor
+
+A monitor is unique on the combination of agent, target, protocol,
+port, and DSCP. Repeating the ICMP/BE creation from above with the
+same agent and target fails with HTTP 400:
+
+```bash
+curl -s -X POST http://localhost/cgi-bin/api/monitor \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"agent_id\": \"$AGENT_ID\",
+    \"target_id\": \"$TARGET_ID\",
+    \"protocol\": \"ICMP\",
+    \"dscp\": \"BE\"
+  }" | jq '.'
+```
+
+### Expected response
+
+```json
+{
+  "status": "error",
+  "message": "Monitor with these parameters already exists"
+}
+```
+
+### Monitor not found
+
+Requests that reference an unknown monitor id fail with HTTP 404.
+The same error applies to the GET, PUT, and DELETE variants:
 
 ```bash
 curl -s -X PUT http://localhost/cgi-bin/api/monitor/NON-EXISTENT-ID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "description": "This should fail"
+    "description": "No such monitor"
   }' | jq '.'
 ```
 
-### Expected response:
-
-```json
-{
-  "status": "error",
-  "message": "Monitor not found"
-}
-```
-
-## Delete a monitor
-
-Deleting a monitor also deletes its RRD data files. This cannot be
-undone.
-
-```bash
-curl -s -X DELETE http://localhost/cgi-bin/api/monitor/29234F4C-48B5-11F0-A00C-E37EC6BF7404 \
-  -H "Authorization: Bearer $TOKEN" | jq '.'
-```
-
-### Expected response:
-
-```json
-{
-  "status": "success",
-  "message": "Monitor deleted successfully",
-  "id": "29234F4C-48B5-11F0-A00C-E37EC6BF7404"
-}
-```
-
-## Try to delete a non-existent monitor (should fail)
-
-```bash
-curl -s -X DELETE http://localhost/cgi-bin/api/monitor/NON-EXISTENT-ID \
-  -H "Authorization: Bearer $TOKEN" | jq '.'
-```
-
-### Expected response:
+### Expected response
 
 ```json
 {
