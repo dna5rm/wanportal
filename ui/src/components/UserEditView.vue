@@ -235,7 +235,7 @@ onMounted(async () => {
         </div>
         <div class="bar-right">
             <span v-if="loading" class="muted">loading&hellip;</span>
-            <router-link class="btn btn-link" :to="{ name: 'users' }">back to users</router-link>
+            <router-link class="btn" :to="{ name: 'users' }">back to users</router-link>
         </div>
     </header>
 
@@ -318,7 +318,7 @@ onMounted(async () => {
                     <button type="submit" class="btn" :disabled="busy">
                         {{ busy ? 'saving…' : 'save user' }}
                     </button>
-                    <button type="button" class="btn btn-link" @click="cancel">cancel</button>
+                    <button type="button" class="btn" @click="cancel">cancel</button>
                 </div>
             </form>
         </section>
@@ -432,11 +432,6 @@ onMounted(async () => {
     display: flex;
     gap: 8px;
     margin-top: 14px;
-}
-
-.btn-link {
-    text-decoration: none;
-    display: inline-block;
 }
 
 .facts {

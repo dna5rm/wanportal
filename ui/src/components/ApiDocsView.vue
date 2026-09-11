@@ -135,7 +135,7 @@ onBeforeUnmount(() => {
 
 .doc-door:hover {
     color: var(--text);
-    text-decoration: underline;
+    text-decoration: none;
 }
 
 .doc-sep {

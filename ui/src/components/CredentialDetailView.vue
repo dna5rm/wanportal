@@ -179,7 +179,6 @@ onBeforeUnmount(() => {
         <div class="bar-title">
             <h1>credential</h1>
             <span v-if="cred" class="muted">{{ cred.name }}</span>
-            <span class="muted">· each view stamps last-accessed on the record</span>
         </div>
         <div class="bar-right">
             <span v-if="loading" class="muted">loading&hellip;</span>

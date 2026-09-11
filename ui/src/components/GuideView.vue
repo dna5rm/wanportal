@@ -206,7 +206,7 @@ const label = computed(() => props.file || 'guide')
 
 .guide-body :deep(a) {
     color: var(--text);
-    text-decoration: underline;
+    text-decoration: none;
 }
 
 .guide-body :deep(table) {

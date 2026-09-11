@@ -239,7 +239,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="bar-right">
             <span v-if="loading" class="muted">loading&hellip;</span>
-            <router-link class="btn btn-link" :to="{ name: 'user-new' }">new user</router-link>
+            <router-link class="btn" :to="{ name: 'user-new' }">new user</router-link>
         </div>
     </header>
 
@@ -329,7 +329,7 @@ onBeforeUnmount(() => {
                     <td>
                         <!-- Edit opens the in-app editor for this row;
                              delete mirrors the other listings' door. -->
-                        <router-link :to="{ name: 'user-edit', params: { id: u.id } }">edit</router-link>
+                        <router-link class="btn" :to="{ name: 'user-edit', params: { id: u.id } }">edit</router-link>
                         <button v-if="canAdmin" class="btn" type="button" :disabled="deleting"
                                 @click="deleteUserRow(u)">delete</button>
                     </td>
@@ -381,9 +381,4 @@ onBeforeUnmount(() => {
 .gate p:last-child { margin-bottom: 0; }
 
 .row-inactive td { opacity: .55; }
-
-.btn-link {
-    text-decoration: none;
-    display: inline-block;
-}
 </style>

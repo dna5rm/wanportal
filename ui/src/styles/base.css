@@ -60,7 +60,13 @@ body {
     padding: 0 18px 30px;
 }
 
-a { color: var(--up); }
+/* No underline anywhere: identity links, table name links, nav and
+ * .btn doors all share the flat look, so one rule covers the element
+ * and its hover state (David asked for consistency, not a third
+ * state). */
+a { color: var(--up); text-decoration: none; }
+
+a:hover { text-decoration: none; }
 
 .muted { color: var(--muted); font-weight: 400; }
 
