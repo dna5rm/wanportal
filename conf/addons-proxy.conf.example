@@ -1,0 +1,23 @@
+# addons-proxy.conf.example
+#
+# Copy next to docker-compose.yml, then edit:
+#   cp conf/addons-proxy.conf.example conf/addons-proxy.conf
+#
+# The image IncludeOptional's /srv/conf/addons-proxy.conf (the repo is
+# bind-mounted at /srv). conf/addons-proxy.conf is gitignored. This
+# example is the tracked template. Routing only; no secrets.
+#
+# The addon is a compose sidecar on the same network. Apache uses the
+# service name as the hostname. Do not ProxyPass /, /cgi-bin, /classic,
+# /api-docs, or /assets.
+
+ProxyPreserveHost On
+
+# Example: wanportal-addon-nb (NetBox certs, sites, cloud-api).
+# Everything under /nb/ including /nb/cloud-api/ rides this one prefix.
+RequestHeader set X-Forwarded-Prefix "/nb"
+ProxyPass        /nb/ http://wanportal-addon-nb:80/nb/
+ProxyPassReverse /nb/ http://wanportal-addon-nb:80/nb/
+
+# Optional extra host-only rules:
+# IncludeOptional /srv/conf/addons-site.conf

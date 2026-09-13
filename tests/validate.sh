@@ -289,6 +289,18 @@ else
   bad "Dockerfile cron still runs bind-mount scripts as root"
 fi
 
+# Addon reverse-proxy hook: proxy modules load in the image and exactly one
+# IncludeOptional overlays operator routes. File-based check on purpose —
+# asserting loaded modules would require a rebuild on every image bump.
+if grep -q 'LoadModule proxy_module modules/mod_proxy.so' "$ROOT/Dockerfile" \
+   && grep -q 'LoadModule proxy_http_module modules/mod_proxy_http.so' "$ROOT/Dockerfile" \
+   && grep -q 'IncludeOptional /srv/conf/addons-proxy.conf' "$ROOT/Dockerfile" \
+   && ! grep -qE '^[[:space:]]*ProxyPass' "$ROOT/Dockerfile"; then
+  ok "Dockerfile enables mod_proxy and the addon IncludeOptional (no hardcoded ProxyPass)"
+else
+  bad "Dockerfile addon proxy hook missing (proxy modules / IncludeOptional / ProxyPass leaked into image)"
+fi
+
 echo
 echo "== tests/run.sh =="
 if [[ -f "$ROOT/tests/run.sh" ]]; then

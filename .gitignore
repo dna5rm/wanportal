@@ -25,3 +25,9 @@ __pycache__/
 htdocs/assets/netping_latest.tar.gz
 tmp/
 *.rrd
+
+# Addon reverse-proxy: the image's IncludeOptional target and the
+# site-local file it chains to are host-specific, so only the .example
+# is tracked (see conf/addons-proxy.conf.example).
+conf/addons-proxy.conf
+conf/addons-site.conf

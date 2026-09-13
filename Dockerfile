@@ -22,7 +22,9 @@ RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-rege
     perl-net-ldap perl-crypt-eksblowfish
 
 ## Web Server + PHP
-RUN apk add --no-cache apache2 apache2-utils php84 \
+# apache2-proxy ships mod_proxy/mod_proxy_http for the addon reverse-proxy
+# hook in conf.d/proxy.conf below.
+RUN apk add --no-cache apache2 apache2-proxy apache2-utils php84 \
     php84-apache2 php84-curl php84-mysqli php84-session php84-simplexml php84-xml
 
 # AllowOverride within DocumentRoot
@@ -54,6 +56,22 @@ EOF
 RUN cat <<EOF >>/etc/apache2/conf.d/rewrite.conf
 LoadModule rewrite_module modules/mod_rewrite.so
 LoadModule headers_module modules/mod_headers.so
+EOF
+
+### Addon reverse-proxy hook. No reverse-proxy route is hardcoded in the
+### image: the modules load here and operators drop their own routes in a
+### bind-mounted conf file (see conf/addons-proxy.conf.example).
+# The apache2-proxy package already loads mod_proxy* in its own
+# conf.d/proxy.conf; the explicit LoadModule lines keep this hook
+# self-contained (duplicate loads log a harmless AH01574 warning).
+RUN cat <<EOF >>/etc/apache2/conf.d/proxy.conf
+LoadModule proxy_module modules/mod_proxy.so
+LoadModule proxy_http_module modules/mod_proxy_http.so
+
+# Addon sidecars on the same compose network. Generic on purpose: any
+# operator conf at /srv/conf/addons-proxy.conf is overlaid here. Absent
+# file is fine (IncludeOptional), so the core image stays addon-free.
+IncludeOptional /srv/conf/addons-proxy.conf
 EOF
 
 ### Server identity hardening

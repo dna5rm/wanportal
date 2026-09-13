@@ -37,6 +37,7 @@ import ServerView from './components/ServerView.vue'
 import ApiDocsView from './components/ApiDocsView.vue'
 import GuideView from './components/GuideView.vue'
 import LoginView from './components/LoginView.vue'
+import AddonFrame from './components/AddonFrame.vue'
 import { getSession } from './session'
 
 /*
@@ -214,6 +215,14 @@ const routes = [
         component: GuideView,
         props: true
     },
+    /* route:addons */
+    // Sidecar doors ride inside the app shell in a borderless iframe:
+    // the topnav stays the only header, the classic console and the
+    // sites report render under the same bar and never leave the SPA
+    // (no new tab). Public, like the classic pages they frame — no
+    // meta.auth.
+    { path: '/addons/certs', name: 'addon-certs', component: AddonFrame, props: { src: '/nb/' } },
+    { path: '/addons/sites', name: 'addon-sites', component: AddonFrame, props: { src: '/nb/reports/sites.php' } },
     /* route:login */
     {
         // Sign-in lives in the app now: the form posts JSON to the

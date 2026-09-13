@@ -1,8 +1,11 @@
 <!--
   NavMenu: renders the operator's config.json menu in the top bar,
-  after the built-in public pages. A flat item is a router-link when it carries
-  `to`, an external door (target=_blank rel=noopener) when it carries
-  `href`, and an inert label when it carries neither. An item with
+  after the built-in public pages. A flat item is a router-link when it
+  carries `to`, and an anchor when it carries `href`: same-origin hrefs
+  (starting with /, ./, or #) stay in this tab as plain anchors with no
+  target, while absolute http(s) hrefs open an external door
+  (target=_blank rel=noopener). An item with neither is an inert label.
+  An item with
   children renders its label as a hover/click dropdown and recurses
   into NavMenu for the children, so deeper nesting costs no extra
   branch — each level opens its own panel the same way. The panel is
@@ -28,6 +31,12 @@ function close() {
 function toggle(i) {
     openAt.value = openAt.value === i ? null : i
 }
+
+/* Same-origin hrefs (starting with /, ./, or #) navigate in this tab;
+ * only absolute http(s) URLs leave the portal and open a new tab. */
+function isExternalHref(href) {
+    return /^https?:\/\//i.test(href)
+}
 </script>
 
 <template>
@@ -43,7 +52,12 @@ function toggle(i) {
             </div>
         </div>
         <router-link v-else-if="it.to" class="nav-link" :to="it.to">{{ it.label }}</router-link>
-        <a v-else-if="it.href" class="nav-link" :href="it.href" target="_blank" rel="noopener">{{ it.label }}</a>
+        <!-- Absolute http(s) hrefs leave the portal: a new tab, with no
+             window.opener on the far side. -->
+        <a v-else-if="it.href && isExternalHref(it.href)" class="nav-link" :href="it.href" target="_blank" rel="noopener">{{ it.label }}</a>
+        <!-- Same-origin hrefs (/ ./ # ...) are plain anchors: they stay
+             in this tab, with no target and no rel. -->
+        <a v-else-if="it.href" class="nav-link" :href="it.href">{{ it.label }}</a>
         <span v-else class="nav-inert">{{ it.label }}</span>
     </template>
 </template>

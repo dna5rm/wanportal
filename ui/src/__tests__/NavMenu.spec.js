@@ -1,11 +1,14 @@
 /*
  * NavMenu specs: the site-config menu that App renders after the
  * built-in public pages. A flat item is a router-link when it carries
- * `to`, an external door (target=_blank rel=noopener) when it carries
- * `href`, and an item with children opens a hover/click dropdown that
- * recurses into NavMenu for the children. The component is pure — it
- * takes the items as a prop and touches no fetch — so the specs mount
- * it against a memory router like the other chrome specs do.
+ * `to`, and an anchor when it carries `href`: same-origin hrefs
+ * (starting with /, ./, or #) stay in this tab as plain anchors with
+ * no target, while absolute http(s) hrefs open an external door
+ * (target=_blank rel=noopener). An item with children opens a
+ * hover/click dropdown that recurses into NavMenu for the children.
+ * The component is pure — it takes the items as a prop and touches no
+ * fetch — so the specs mount it against a memory router like the other
+ * chrome specs do.
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
@@ -28,31 +31,41 @@ async function mountMenu(items) {
 }
 
 describe('NavMenu renders flat config items', () => {
-    it('makes a `to` item a router-link and an `href` item an external door', async () => {
+    it('makes a `to` item a router-link, a same-origin href an in-tab anchor, and an external href a door', async () => {
         const wrapper = await mountMenu([
             { label: 'Guides', to: '/guides' },
             { label: 'Status page', href: 'https://status.example.net' },
+            { label: 'Certs', href: '/nb/' },
             { label: 'Just a label' }
         ])
 
         // The router-link resolves through the memory router to a
         // plain anchor with the route href.
         const links = wrapper.findAll('a')
-        expect(links).toHaveLength(2)
+        expect(links).toHaveLength(3)
         expect(links[0].attributes('href')).toBe('/guides')
         expect(links[0].text()).toBe('Guides')
 
-        // The href item is a real external door: new tab, no
-        // window.opener, and never a router-link.
-        expect(links[1].attributes('href')).toBe('https://status.example.net')
-        expect(links[1].attributes('target')).toBe('_blank')
-        expect(links[1].attributes('rel')).toBe('noopener')
-        expect(links[1].classes()).toContain('nav-link')
+        // A same-origin href (/ ./ # ...) is an in-tab anchor: it
+        // carries no target and no rel, so it never opens a new tab.
+        const certs = links.find((a) => a.attributes('href') === '/nb/')
+        expect(certs.text()).toBe('Certs')
+        expect(certs.attributes('target')).toBeUndefined()
+        expect(certs.attributes('rel')).toBeUndefined()
+        expect(certs.classes()).toContain('nav-link')
+
+        // An absolute http(s) href is still an external door: new tab,
+        // no window.opener, and never a router-link.
+        const status = links.find((a) => a.attributes('href') === 'https://status.example.net')
+        expect(status.attributes('href')).toBe('https://status.example.net')
+        expect(status.attributes('target')).toBe('_blank')
+        expect(status.attributes('rel')).toBe('noopener')
+        expect(status.classes()).toContain('nav-link')
 
         // An item with neither to nor href stays an inert label —
         // no dead link in the bar.
         expect(wrapper.text()).toContain('Just a label')
-        expect(wrapper.findAll('a')).toHaveLength(2)
+        expect(wrapper.findAll('a')).toHaveLength(3)
         expect(wrapper.findAll('button')).toHaveLength(0)
     })
 })

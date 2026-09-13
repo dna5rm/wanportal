@@ -9,6 +9,13 @@
         { "label": "DB schema", "to": "/guides/db_schema.md" }
       ]
     },
+    {
+      "label": "NetBox",
+      "children": [
+        { "label": "Certs", "to": "/addons/certs" },
+        { "label": "Sites", "to": "/addons/sites" }
+      ]
+    },
     { "label": "Classic UI", "href": "/classic/" }
   ]
 }
