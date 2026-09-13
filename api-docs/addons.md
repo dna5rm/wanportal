@@ -62,6 +62,13 @@ second gitignored file for site-local overrides
 (`IncludeOptional /srv/conf/addons-site.conf`); the template ends with that
 include.
 
+## Extending without SPA work
+
+A new PHP page under the sidecar `/nb/` prefix does not need a Vue change.
+Link it from the addon's own chrome (`chrome.php`) and, if you want it in the
+portal bar, add an `href` to `/nb/...` in `htdocs/config.json`. Same-origin
+hrefs stay in this tab. Hash routes and AddonFrame iframes are optional.
+
 ## Rules of the road
 
 - **Prefixes must not collide with the portal.** Avoid `/cgi-bin`, `/classic`,
