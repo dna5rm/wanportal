@@ -16,6 +16,17 @@
         { "label": "Sites", "to": "/addons/sites" }
       ]
     },
+    {
+      "label": "IPControl",
+      "children": [
+        { "label": "Zones", "href": "/ipc/zones.php" },
+        { "label": "CIDRs", "href": "/ipc/cidr.php" },
+        { "label": "Sites", "href": "/ipc/ipc_sites.php" },
+        { "label": "Devices", "href": "/ipc/devices.php" },
+        { "label": "Public", "href": "/ipc/public.php" },
+        { "label": "Infrastructure", "href": "/ipc/infrastructure.php" }
+      ]
+    },
     { "label": "Classic UI", "href": "/classic/" }
   ]
 }

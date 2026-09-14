@@ -19,5 +19,14 @@ RequestHeader set X-Forwarded-Prefix "/nb"
 ProxyPass        /nb/ http://wanportal-addon-nb:80/nb/
 ProxyPassReverse /nb/ http://wanportal-addon-nb:80/nb/
 
+# Example: a second sidecar on its own prefix (wanportal-addon-ipc).
+# Uncomment to enable; each addon keeps one stable prefix and its own
+# X-Forwarded-Prefix value.
+# <Location /ipc/>
+#     RequestHeader set X-Forwarded-Prefix "/ipc"
+# </Location>
+# ProxyPass        /ipc/ http://wanportal-addon-ipc:80/ipc/
+# ProxyPassReverse /ipc/ http://wanportal-addon-ipc:80/ipc/
+
 # Optional extra host-only rules:
 # IncludeOptional /srv/conf/addons-site.conf

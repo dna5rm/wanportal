@@ -34,14 +34,26 @@ cp conf/addons-proxy.conf.example conf/addons-proxy.conf
 
 The template shows one prefix for an example sidecar named
 `wanportal-addon-nb` on the compose network. Nested paths such as
-`/nb/cloud-api/` ride the same `/nb/` rule; do not add a second
-`/ipc` prefix (that path is left for other sidecars).
+`/nb/cloud-api/` ride the same `/nb/` rule. A second sidecar gets its
+own prefix on the same network: the template also carries a commented
+`/ipc/` example for a second sidecar (`wanportal-addon-ipc`) —
+uncomment it and edit the service name to fit your install.
 
 ```apache
 ProxyPreserveHost On
 RequestHeader set X-Forwarded-Prefix "/nb"
 ProxyPass        /nb/ http://wanportal-addon-nb:80/nb/
 ProxyPassReverse /nb/ http://wanportal-addon-nb:80/nb/
+```
+
+The second sidecar block in the template is commented out:
+
+```apache
+<Location /ipc/>
+    RequestHeader set X-Forwarded-Prefix "/ipc"
+</Location>
+ProxyPass        /ipc/ http://wanportal-addon-ipc:80/ipc/
+ProxyPassReverse /ipc/ http://wanportal-addon-ipc:80/ipc/
 ```
 
 Each addon is its own compose service attached to the existing network, so no
