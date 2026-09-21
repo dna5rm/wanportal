@@ -55,13 +55,22 @@ docker compose up --build -d
 curl -sS http://localhost:3385/cgi-bin/api/health
 ```
 
-- The app is published on localhost, port `3385` by default (`HTTP_PORT`);
-  Apache listens on 80 inside the container.
+- The app is published on `HTTP_ADDR` (default `127.0.0.1`), port
+  `HTTP_PORT` (default `3385`); Apache listens on 80 inside the container.
+  Set `HTTP_ADDR=0.0.0.0` to listen on all interfaces.
 - First login: user `admin`, password = `MYSQL_PASSWORD`. LDAP is optional
   (`AUTH_LDAP_ENABLED`); valid LDAP logins are treated as admins.
 - The compose network is dual-stack so IPv6 targets are reachable from the
-  container.
+  container. To run IPv4-only, set `enable_ipv6: false` on the `netops`
+  network in `docker-compose.override.yml` and recreate the network.
 - Extra port binds belong in `docker-compose.override.yml` (gitignored).
+- The repo is bind-mounted at `/srv`. Apache in the container must be able
+  to traverse every host directory on that path (execute bit). A 403 with
+  AH00035 ("search permissions are missing") is a host directory mode
+  problem, not an app bug.
+- Sidecar addons (`/nb/`, `/ipc/`, `/catalog/`): see
+  [api-docs/addons.md](api-docs/addons.md). Always `docker compose up`
+  from this directory, never from an addon tree.
 
 ## Build the SPA
 
@@ -122,11 +131,18 @@ MYSQL_PORT=3306
 MYSQL_USER=root
 MYSQL_PASSWORD=change-me
 MYSQL_DB=netops
+HTTP_ADDR=127.0.0.1
 HTTP_PORT=3385
 JWT_SECRET=
 APP_SECRET=
 AUTH_LDAP_ENABLED=false
+AUTH_LDAP_SERVER_URI=
+AUTH_LDAP_BIND_DN=
+AUTH_LDAP_BIND_PASSWORD=
+AUTH_LDAP_USER_SEARCH_BASEDN=
+AUTH_LDAP_USER_SEARCH_ATTR=uid
 AUTH_LDAP_REQUIRE_GROUPS=
+LDAP_IGNORE_CERT_ERRORS=true
 ```
 
 Compose has built-in fallbacks for `MYSQL_PASSWORD`, `JWT_SECRET`, and
@@ -136,10 +152,17 @@ faces a network.
 LDAP supports an optional group allowlist: set `AUTH_LDAP_REQUIRE_GROUPS` to
 pipe-separated group DNs, e.g.
 `AUTH_LDAP_REQUIRE_GROUPS=CN=Netops,OU=Groups,DC=example,DC=com|CN=Ops,DC=example,DC=com`
-(a DN contains commas, so the pipe is the separator). A non-empty value
-restricts LDAP logins to users in at least one listed group (matched
-transitively); empty or unset keeps the default behavior - any user able to
-bind can log in, and valid LDAP logins are still treated as admins.
+(a DN contains commas, so the pipe is the separator). Quote the whole DN
+(and the whole bind DN) as one `.env` value — do not quote only the CN.
+A non-empty value restricts LDAP logins to users in at least one listed
+group (Active Directory nested `memberOf` first, then plain `memberOf` if
+the server rejects the matching rule). Empty or unset keeps the default:
+any user able to bind can log in. Valid LDAP logins are still treated as
+admins.
+
+`AUTH_LDAP_REQUIRE_GROUPS` is passed into CGI via Apache `PassEnv`. A
+compose env change is not enough until the image is rebuilt so that
+directive exists. LDAP failures return a normal login error, not HTTP 500.
 
 ## config.json
 

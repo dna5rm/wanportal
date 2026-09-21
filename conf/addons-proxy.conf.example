@@ -15,7 +15,10 @@ ProxyPreserveHost On
 
 # Example: wanportal-addon-nb (NetBox certs, sites, cloud-api).
 # Everything under /nb/ including /nb/cloud-api/ rides this one prefix.
-RequestHeader set X-Forwarded-Prefix "/nb"
+# Scope the header so it does not leak onto later prefixes.
+<Location /nb/>
+    RequestHeader set X-Forwarded-Prefix "/nb"
+</Location>
 ProxyPass        /nb/ http://wanportal-addon-nb:80/nb/
 ProxyPassReverse /nb/ http://wanportal-addon-nb:80/nb/
 
@@ -27,6 +30,15 @@ ProxyPassReverse /nb/ http://wanportal-addon-nb:80/nb/
 # </Location>
 # ProxyPass        /ipc/ http://wanportal-addon-ipc:80/ipc/
 # ProxyPassReverse /ipc/ http://wanportal-addon-ipc:80/ipc/
+
+# Example: a third sidecar on its own prefix (wanportal-addon-catalog).
+# Uncomment to enable; each addon keeps one stable prefix and its own
+# X-Forwarded-Prefix value.
+# <Location /catalog/>
+#     RequestHeader set X-Forwarded-Prefix "/catalog"
+# </Location>
+# ProxyPass        /catalog/ http://wanportal-addon-catalog:80/catalog/
+# ProxyPassReverse /catalog/ http://wanportal-addon-catalog:80/catalog/
 
 # Optional extra host-only rules:
 # IncludeOptional /srv/conf/addons-site.conf
