@@ -9,7 +9,12 @@
   children renders its label as a hover/click dropdown and recurses
   into NavMenu for the children, so deeper nesting costs no extra
   branch — each level opens its own panel the same way. The panel is
-  absolutely positioned, so the bar's flex layout never moves.
+  absolutely positioned, so the bar's flex layout never moves. The
+  panel hangs 4px below its label (the .account-menu offset); a
+  transparent ::before bridge on the panel covers those 4px so the
+  pointer travelling from label to items never crosses dead pixels
+  — crossing them would fire mouseleave on .nav-drop and unmount
+  the panel mid-move.
 -->
 <script setup>
 import { ref } from 'vue'
@@ -103,6 +108,20 @@ function isExternalHref(href) {
     border-radius: 8px;
     padding: 5px 0;
     box-shadow: var(--shadow);
+}
+
+/* The 4px offset above is dead pixels for the pointer: a label-to-item
+ * move used to cross them, fire mouseleave on .nav-drop, and unmount
+ * the panel before the mouse reached anything. A transparent bridge
+ * on the panel puts those pixels back inside the wrapper's hover
+ * region — same visible offset as .account-menu, no dead strip. */
+.nav-drop-menu::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 0;
+    right: 0;
+    height: 4px;
 }
 
 .nav-drop-menu .nav-drop {
