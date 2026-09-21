@@ -136,6 +136,25 @@ sub _ldap_group_filter_plain {
         . ')';
 }
 
+# Open an LDAP connection for login. Never onerror=>'die': AD referrals and
+# unsupported matching rules must become a failed login, not HTTP 500.
+# Protocol v3 + referrals off matches typical AD client config.
+sub _ldap_connect {
+    my ($cfg) = @_;
+    my $ldap = Net::LDAP->new(
+        $cfg->{server_uri},
+        version => 3,
+        verify  => $cfg->{ignore_cert} ? 'none' : 'require',
+        onerror => undef,
+    );
+    return unless $ldap;
+    eval {
+        require Net::LDAP::Constant;
+        $ldap->set_option(Net::LDAP::Constant::LDAP_OPT_REFERRALS(), 0);
+    };
+    return $ldap;
+}
+
 # ---------------------------------------------------------------------------
 # Attempt LDAP authentication
 # Returns: (1, $full_name) on success, (0, $error_message) on failure
@@ -157,37 +176,35 @@ sub _ldap_authenticate {
         return (0, 'Empty password not allowed');
     }
 
-    my $ldap;
-    eval {
-        $ldap = Net::LDAP->new(
-            $cfg->{server_uri},
-            verify  => $cfg->{ignore_cert} ? 'none' : 'require',
-            onerror => 'die',
-        );
-    };
-    if ($@ || !$ldap) {
-        return (0, "LDAP connection failed: $@");
+    my $ldap = _ldap_connect($cfg);
+    if (!$ldap) {
+        return (0, 'LDAP connection failed');
     }
 
     # Step 1: Bind with service account to search for the user DN
-    my $mesg = $ldap->bind($cfg->{bind_dn}, password => $cfg->{bind_pass});
-    if ($mesg->code) {
-        $ldap->unbind;
-        return (0, 'LDAP service bind failed: ' . $mesg->error);
+    my $mesg = eval { $ldap->bind($cfg->{bind_dn}, password => $cfg->{bind_pass}) };
+    if ($@ || !$mesg || $mesg->code) {
+        my $err = $@ || ($mesg ? $mesg->error : 'no-result');
+        warn "[auth.pm] LDAP service bind failed: $err";
+        eval { $ldap->unbind };
+        return (0, 'LDAP service bind failed');
     }
 
     # Step 2: Search for the user by their uid/search attribute.
     # The username is escaped per RFC 4515 so a submitted value containing
     # filter metacharacters (* ( ) \ NUL) cannot alter the search filter.
     my $filter = '(' . $cfg->{search_attr} . '=' . _ldap_filter_escape($username) . ')';
-    my $search = $ldap->search(
-        base   => $cfg->{base_dn},
-        scope  => 'sub',
-        filter => $filter,
-        attrs  => ['dn', 'cn', 'givenName', 'sn'],
-    );
-    if ($search->code || $search->count == 0) {
-        $ldap->unbind;
+    my $search = eval {
+        $ldap->search(
+            base   => $cfg->{base_dn},
+            scope  => 'sub',
+            filter => $filter,
+            attrs  => ['dn', 'cn', 'givenName', 'sn'],
+        );
+    };
+    if ($@ || !$search || $search->code || $search->count == 0) {
+        warn "[auth.pm] LDAP user search failed: " . ($@ || ($search ? $search->error : 'no-result'));
+        eval { $ldap->unbind };
         return (0, 'User not found in LDAP');
     }
 
@@ -223,11 +240,7 @@ sub _ldap_authenticate {
     #      catch the exception, log the actual LDAP error code
     #      to the Apache error log, and return a normal failure
     #      status.
-    my $user_ldap = Net::LDAP->new(
-        $cfg->{server_uri},
-        verify  => $cfg->{ignore_cert} ? 'none' : 'require',
-        onerror => undef,    # don't die; we'll check ->code below
-    );
+    my $user_ldap = _ldap_connect($cfg);
     if (!$user_ldap) {
         warn "[auth.pm] LDAP user-bind connection failed: $@";
         return (0, "LDAP connection failed for user-bind");

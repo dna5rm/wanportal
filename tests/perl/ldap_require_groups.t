@@ -54,22 +54,24 @@ sub extract_sub {
     return undef;
 }
 
-my $escape_body = extract_sub('_ldap_filter_escape');
-my $config_body = extract_sub('_ldap_config');
-my $filter_body = extract_sub('_ldap_group_filter');
-my $plain_body  = extract_sub('_ldap_group_filter_plain');
-my $auth_body   = extract_sub('_ldap_authenticate');
+my $escape_body  = extract_sub('_ldap_filter_escape');
+my $config_body  = extract_sub('_ldap_config');
+my $filter_body  = extract_sub('_ldap_group_filter');
+my $plain_body   = extract_sub('_ldap_group_filter_plain');
+my $connect_body = extract_sub('_ldap_connect');
+my $auth_body    = extract_sub('_ldap_authenticate');
 
-if (!$escape_body || !$config_body || !$filter_body || !$plain_body || !$auth_body) {
+if (!$escape_body || !$config_body || !$filter_body || !$plain_body
+    || !$connect_body || !$auth_body) {
     plan skip_all =>
         'one of _ldap_filter_escape/_ldap_config/_ldap_group_filter/'
-      . '_ldap_group_filter_plain/_ldap_authenticate not found in auth.pm; update this test';
+      . '_ldap_group_filter_plain/_ldap_connect/_ldap_authenticate not found in auth.pm; update this test';
     exit 0;
 }
 
 # The filter subs call the escape sub; compile the helpers together. All of
 # them use lexicals and %ENV only, so they compile under this file's strict.
-my $helpers_ok = eval "$escape_body\n$config_body\n$filter_body\n$plain_body\n1";
+my $helpers_ok = eval "$escape_body\n$config_body\n$filter_body\n$plain_body\n$connect_body\n1";
 plan skip_all => "extracted auth.pm helpers do not compile: $@" if !$helpers_ok;
 
 # _ldap_authenticate references auth.pm's file-level $LDAP_AVAILABLE flag;
@@ -123,6 +125,7 @@ our $CONN_N         = 0;   # fake connection counter
         return $self;
     }
     sub bind   { return bless {}, 'FakeMesg' }
+    sub set_option { return 1 }
     sub search {
         my ($self, %args) = @_;
         push @main::SEARCHES,
