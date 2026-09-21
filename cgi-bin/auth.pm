@@ -17,6 +17,20 @@ LDAP when it is enabled in the environment. Success issues a
 one-hour signed JWT carrying the username and an is_admin flag;
 repeated local failures lock the account for half an hour.
 
+An optional group allowlist can gate LDAP logins further:
+C<AUTH_LDAP_REQUIRE_GROUPS> takes pipe-separated group DNs (a DN
+contains commas, so the pipe is the separator, not the comma).
+When it is non-empty, a user bind only counts as a login if the
+authenticated DN matches at least one listed group. The gate first
+asks with the Active Directory transitive-membership matching rule
+(nested groups count on AD); a server that rejects the rule - LLDAP
+answers code 53 to any extensible match - falls back to a plain
+C<(memberOf=DN)> equality search on the same connection. The login
+is denied only when both searches fail or the successful one
+matches nothing; empty or unset leaves the gate off, and any user
+able to bind is accepted. Either way a valid LDAP login is still
+treated as an admin (is_admin=1).
+
 The signed claims (username, is_admin, exp) are also returned in
 the /login response so web clients never decode the JWT
 themselves, and C<GET /session> (JWT-protected) echoes the
@@ -65,6 +79,10 @@ sub _ldap_config {
         base_dn     => $ENV{AUTH_LDAP_USER_SEARCH_BASEDN} // '',
         search_attr => $ENV{AUTH_LDAP_USER_SEARCH_ATTR}   // 'uid',
         ignore_cert => ($ignore_cert =~ /^(true|1|yes)$/i) ? 1 : 0,
+
+        # Optional group allowlist: pipe-separated group DNs. A DN contains
+        # commas, so the pipe is the separator. Empty/unset = no gate.
+        require_groups => [ grep { length } split /\|/, ($ENV{AUTH_LDAP_REQUIRE_GROUPS} // '') ],
     };
 }
 
@@ -83,6 +101,39 @@ sub _ldap_filter_escape {
     $value =~ s/\)/\\29/g;
     $value =~ s/\x00/\\00/g;
     return $value;
+}
+
+# ---------------------------------------------------------------------------
+# Build the any-of filter for the optional group allowlist. Each group DN is
+# escaped per RFC 4515 before it touches the filter, so raw environment text
+# never reaches the LDAP server. Matching rule 1.2.840.113556.1.4.1941
+# (LDAP_MATCHING_RULE_IN_CHAIN) makes nested/transitive group membership
+# count, not just direct memberOf links. Returns '' when the list is empty
+# (the caller skips the gate entirely). Servers that reject the rule get
+# _ldap_group_filter_plain as the fallback.
+# ---------------------------------------------------------------------------
+sub _ldap_group_filter {
+    my ($groups) = @_;
+    return '' unless ref($groups) eq 'ARRAY' && @$groups;
+    return '(|'
+        . join('',
+            map { '(memberOf:1.2.840.113556.1.4.1941:=' . _ldap_filter_escape($_) . ')' } @$groups)
+        . ')';
+}
+
+# ---------------------------------------------------------------------------
+# Plain-equality variant of _ldap_group_filter for servers that reject the
+# AD transitive-membership matching rule (LLDAP answers code 53 to any
+# extensible match). Same RFC 4515 escaping and any-of shape, but direct
+# memberOf only - which is all such servers model anyway.
+# ---------------------------------------------------------------------------
+sub _ldap_group_filter_plain {
+    my ($groups) = @_;
+    return '' unless ref($groups) eq 'ARRAY' && @$groups;
+    return '(|'
+        . join('',
+            map { '(memberOf=' . _ldap_filter_escape($_) . ')' } @$groups)
+        . ')';
 }
 
 # ---------------------------------------------------------------------------
@@ -203,6 +254,54 @@ sub _ldap_authenticate {
            . " name=" . ($user_bind->error_name // 'undef')
            . " text=" . ($user_bind->error_text // 'undef');
         return (0, 'Invalid LDAP credentials');
+    }
+
+    # Step 4: optional group allowlist. AUTH_LDAP_REQUIRE_GROUPS carries
+    # pipe-separated group DNs (a DN contains commas, so the pipe is the
+    # separator); an empty list leaves the gate off. The check reuses the
+    # still-open service-bind connection and is scoped to the user's own
+    # DN, so it answers "is this DN in any allowed group" in one query.
+    # The nested AD rule is tried first (nested groups count).
+    # Any nonzero code - LLDAP rejects the extensible match with code 53 -
+    # triggers exactly one retry with the plain memberOf filter on the
+    # SAME connection. Fail-closed: deny when both searches fail, or when
+    # the successful search matches nothing. DNs reach either filter only
+    # through _ldap_group_filter(plain) (escaped).
+    my $require_groups = $cfg->{require_groups} || [];
+    if (@$require_groups) {
+        # $ldap was created with onerror => 'die'. An unsupported matching
+        # rule (LLDAP code 53) therefore raises instead of returning a
+        # Message object — that was the HTTP 500 on /login. Eval both
+        # searches so a reject becomes a retry, not a 500.
+        my $group_search = eval {
+            $ldap->search(
+                base   => $user_dn,
+                scope  => 'base',
+                filter => _ldap_group_filter($require_groups),
+                attrs  => ['dn'],
+            );
+        };
+        if ($@ || !$group_search || $group_search->code) {
+            my $why = $@ ? $@ : ($group_search ? $group_search->code : 'no-result');
+            warn "[auth.pm] LDAP group gate: nested memberOf rule rejected "
+               . "($why); retrying with plain memberOf";
+            $group_search = eval {
+                $ldap->search(
+                    base   => $user_dn,
+                    scope  => 'base',
+                    filter => _ldap_group_filter_plain($require_groups),
+                    attrs  => ['dn'],
+                );
+            };
+        }
+        if ($@ || !$group_search || $group_search->code || $group_search->count == 0) {
+            my $code  = $group_search ? $group_search->code  : 'undef';
+            my $count = $group_search ? $group_search->count : 'undef';
+            warn "[auth.pm] LDAP group gate denied $user_dn: "
+               . "code=$code count=$count err=" . ($@ // '');
+            $ldap->unbind;
+            return (0, 'Invalid LDAP credentials');
+        }
     }
 
     return (1, $full_name);

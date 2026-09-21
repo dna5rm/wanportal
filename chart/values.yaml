@@ -69,6 +69,8 @@ auth:
     bindDn: ""
     userSearchBaseDn: ""
     userSearchAttr: uid
+    # Pipe-separated group DNs; empty/unset = any bindable user may log in.
+    requireGroups: ""
     ignoreCertErrors: "true"
 
 resources: {}

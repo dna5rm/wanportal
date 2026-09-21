@@ -126,11 +126,20 @@ HTTP_PORT=3385
 JWT_SECRET=
 APP_SECRET=
 AUTH_LDAP_ENABLED=false
+AUTH_LDAP_REQUIRE_GROUPS=
 ```
 
 Compose has built-in fallbacks for `MYSQL_PASSWORD`, `JWT_SECRET`, and
 `APP_SECRET` so the stack boots without them; set real values before anything
 faces a network.
+
+LDAP supports an optional group allowlist: set `AUTH_LDAP_REQUIRE_GROUPS` to
+pipe-separated group DNs, e.g.
+`AUTH_LDAP_REQUIRE_GROUPS=CN=Netops,OU=Groups,DC=example,DC=com|CN=Ops,DC=example,DC=com`
+(a DN contains commas, so the pipe is the separator). A non-empty value
+restricts LDAP logins to users in at least one listed group (matched
+transitively); empty or unset keeps the default behavior - any user able to
+bind can log in, and valid LDAP logins are still treated as admins.
 
 ## config.json
 

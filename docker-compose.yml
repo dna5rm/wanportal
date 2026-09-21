@@ -32,6 +32,9 @@ services:
       - AUTH_LDAP_BIND_PASSWORD=${AUTH_LDAP_BIND_PASSWORD}
       - AUTH_LDAP_USER_SEARCH_BASEDN=${AUTH_LDAP_USER_SEARCH_BASEDN}
       - AUTH_LDAP_USER_SEARCH_ATTR=${AUTH_LDAP_USER_SEARCH_ATTR}
+      # Optional group allowlist: pipe-separated group DNs (a DN contains
+      # commas, so the pipe is the separator). Empty/unset = no gate.
+      - AUTH_LDAP_REQUIRE_GROUPS=${AUTH_LDAP_REQUIRE_GROUPS:-}
       - LDAP_IGNORE_CERT_ERRORS=${LDAP_IGNORE_CERT_ERRORS:-true}
       - MYSQL_HOST=${MYSQL_HOST:-wandb}
       - MYSQL_PORT=${MYSQL_PORT:-3306}

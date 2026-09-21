@@ -15,4 +15,6 @@ data:
   AUTH_LDAP_BIND_DN: {{ .Values.auth.ldap.bindDn | quote }}
   AUTH_LDAP_USER_SEARCH_BASEDN: {{ .Values.auth.ldap.userSearchBaseDn | quote }}
   AUTH_LDAP_USER_SEARCH_ATTR: {{ .Values.auth.ldap.userSearchAttr | quote }}
+  # Pipe-separated group DNs (a DN contains commas); empty = no gate.
+  AUTH_LDAP_REQUIRE_GROUPS: {{ .Values.auth.ldap.requireGroups | quote }}
   LDAP_IGNORE_CERT_ERRORS: {{ .Values.auth.ldap.ignoreCertErrors | quote }}
