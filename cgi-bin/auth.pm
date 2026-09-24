@@ -363,6 +363,27 @@ sub auth_middleware {
 }
 
 # ---------------------------------------------------------------------------
+# Local password check. Returns 1 only on a real match.
+# A non-bcrypt hash (legacy hex digests, empty, $2y$/$2b$ that we
+# normalize) must not die: Crypt::Eksblowfish::Bcrypt::bcrypt croaks
+# unless the settings are $2a$ or $2$, and an uncaught croak on this
+# path is HTTP 500 before LDAP is ever tried.
+# $2y$/$2b$ are the same algorithm; compare after rewriting the prefix
+# so a PHP password_hash() row can still match.
+# ---------------------------------------------------------------------------
+sub _local_password_matches {
+    my ($password, $hash) = @_;
+    return 0 unless defined $password && defined $hash && length($hash) >= 29;
+    my $settings = substr($hash, 0, 29);
+    $settings =~ s/\A\$2[yb]\$/\$2a\$/;
+    my $computed = eval { bcrypt($password, $settings) };
+    return 0 if $@ || !defined $computed;
+    my $stored = $hash;
+    $stored =~ s/\A\$2[yb]\$/\$2a\$/;
+    return $computed eq $stored ? 1 : 0;
+}
+
+# ---------------------------------------------------------------------------
 # Login endpoint
 # ---------------------------------------------------------------------------
 sub register_login {
@@ -419,8 +440,9 @@ sub register_login {
                 );
             }
 
-            # Verify local password
-            if (bcrypt($password, substr($local_user->{password_hash}, 0, 29)) eq $local_user->{password_hash}) {
+            # Verify local password. A legacy non-bcrypt hash is a miss,
+            # not an exception, so LDAP (if enabled) still runs.
+            if (_local_password_matches($password, $local_user->{password_hash})) {
                 $dbh->do(
                     "UPDATE users SET last_login = CURRENT_TIMESTAMP,
                                       failed_attempts = 0,

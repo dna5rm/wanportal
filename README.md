@@ -163,6 +163,10 @@ admins.
 `AUTH_LDAP_REQUIRE_GROUPS` is passed into CGI via Apache `PassEnv`. A
 compose env change is not enough until the image is rebuilt so that
 directive exists. LDAP failures return a normal login error, not HTTP 500.
+A pre-LDAP `users` row whose `password_hash` is not bcrypt (`$2a$` / `$2y$` /
+`$2b$`) is a local miss, not HTTP 500: login falls through to LDAP when LDAP
+is enabled. Do not delete those rows to get past a 500; deactivate them
+(`is_active=0`) only on a build that still dies inside `bcrypt()`.
 
 ## config.json
 
