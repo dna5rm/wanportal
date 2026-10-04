@@ -65,7 +65,7 @@ wanportal_render_header_row('Credentials Management', [
                             </select>
                         </div>
                         <div class="col-md-3">
-                            <input type="text" id="siteFilter" class="form-control" placeholder="Filter by site...">
+                            <input type="text" id="siteFilter" class="form-control" placeholder="Filter name, username, site, owner...">
                         </div>
 <div class="col-md-3">
     <select id="activeFilter" class="form-select form-select-sm">
@@ -171,15 +171,18 @@ document.getElementById('activeFilter').addEventListener('change', function() {
 
 function filterCredentials() {
     const type = document.getElementById('typeFilter').value.toLowerCase();
-    const site = document.getElementById('siteFilter').value.toLowerCase();
+    const q = document.getElementById('siteFilter').value.toLowerCase();
 
     const rows = document.querySelectorAll('tbody tr');
 
     rows.forEach(row => {
         const typeMatch = !type || row.querySelector('td:nth-child(2)').textContent.toLowerCase().includes(type);
-        const siteMatch = !site || row.querySelector('td:nth-child(3)').textContent.toLowerCase().includes(site);
+        const cells = [1, 3, 4, 5].map(function (n) {
+            return row.querySelector('td:nth-child(' + n + ')').textContent.toLowerCase();
+        });
+        const textMatch = !q || cells.some(function (text) { return text.includes(q); });
 
-        row.style.display = (typeMatch && siteMatch) ? '' : 'none';
+        row.style.display = (typeMatch && textMatch) ? '' : 'none';
     });
 }
 

@@ -7,14 +7,16 @@
   secret to protect: the columns are identity and metadata only, the
   same set the classic page shows.
 
-  Filters split the way the classic page splits them: type and site
-  narrow the already-loaded rows client-side, while active/inactive is
+  Filters split the way the classic page splits them: type narrows the
+  already-loaded rows client-side, the text box does too (name,
+  username, site, and owner — not site alone), while active/inactive is
   the one filter the api answers (is_active only takes 0 or 1, and
   there is no combined listing), so that one refetches. All three
   persist like the trio listings' text filter (listingFilter.js, key
   'wanportal-filter-credentials'): re-read on mount and saved as the
-  user changes them — site typing debounced, the selects at once —
-  until the clear button wipes the boxes and the key. View and edit
+  user changes them — text typing debounced, the selects at once —
+  until the clear button wipes the boxes and the key. The text box is
+  still stored as siteFilter so a saved site string keeps applying. View and edit
   moved into the app, and admins get a delete door beside edit
   (confirm first, then the soft-delete aware api path, then a
   refetch) — the classic console no longer owns that step.
@@ -38,12 +40,14 @@ const loading = ref(false)
 const loadedAt = ref(null)
 const redirected = ref(false)    // signed-out walk to /login in flight
 
-/* Type + site narrow what is already on the page; active/inactive is
- * answered by the api, so picking it refetches. All three ride the
+/* Type + the text box narrow what is already on the page; active/inactive
+ * is answered by the api, so picking it refetches. All three ride the
  * listingFilter key 'wanportal-filter-credentials' and are seeded
  * from it — a stored type outside the select's values reads as the
  * all-types default and a non-'0' active reads as '1', so junk
- * storage cannot blank the listing by accident. */
+ * storage cannot blank the listing by accident. The text box is stored
+ * as siteFilter (older saves were site-only) and matches name,
+ * username, site, and owner. */
 const FILTER_PAGE = 'credentials'
 const CRED_TYPES = ['', 'ACCOUNT', 'CERTIFICATE', 'API', 'PSK', 'CODE']
 const savedFilter = loadFilter(FILTER_PAGE)
@@ -51,9 +55,9 @@ const typeFilter = ref(CRED_TYPES.includes(savedFilter.typeFilter) ? savedFilter
 const siteFilter = ref(typeof savedFilter.siteFilter === 'string' ? savedFilter.siteFilter : '')
 const activeFilter = ref(savedFilter.activeFilter === '0' ? '0' : '1')
 
-/* Persist all three as the user changes them: site typing debounces
+/* Persist all three as the user changes them: text typing debounces
  * (500ms, same cadence the users listing gives its text filter), the
- * selects save at once and supersede a pending site save. The clear
+ * selects save at once and supersede a pending text save. The clear
  * button swallows the one watch tick its resets trigger, so the key
  * it just removed is not rewritten with the defaults. */
 let saveTimer = null
@@ -151,7 +155,7 @@ function refetch() {
 /* The clear button only renders while a filter is off its default. It
  * resets the boxes, removes the stored key, and refetches — but only
  * when the active select actually moved, because that is the one
- * filter the api answers; type and site narrow loaded rows alone. */
+ * filter the api answers; type and the text box narrow loaded rows alone. */
 function clearCredFilters() {
     clearTimeout(saveTimer)
     saveTimer = null
@@ -202,13 +206,18 @@ async function deleteCredentialRow(c) {
     }
 }
 
-/* Type matches exactly (the select carries canonical values), site is
- * a substring match — the same narrowing the classic table does. */
+/* Type matches exactly (the select carries canonical values). The text
+ * box is a substring match across name, username, site, and owner —
+ * nulls are empty, never the word "null". */
 const visible = computed(() => rows.value.filter((c) => {
     const t = typeFilter.value.toLowerCase()
     if (t && String(c.type || '').toLowerCase() !== t) return false
-    const s = siteFilter.value.trim().toLowerCase()
-    if (s && String(c.site || '').toLowerCase().includes(s) === false) return false
+    const q = siteFilter.value.trim().toLowerCase()
+    if (q) {
+        const hay = [c.name, c.username, c.site, c.owner]
+            .map((v) => (v == null ? '' : String(v).toLowerCase()))
+        if (!hay.some((v) => v.includes(q))) return false
+    }
     return true
 }))
 
@@ -224,7 +233,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-    // A site-debounce still running at leave time holds the user's
+    // A text-debounce still running at leave time holds the user's
     // last edit — flush it so the filter survives navigation intact.
     if (saveTimer) {
         saveCredsFilter()
@@ -274,8 +283,9 @@ onBeforeUnmount(() => {
                     <option value="PSK">pre-shared key</option>
                     <option value="CODE">code/license</option>
                 </select>
-                <input v-model="siteFilter" type="search" placeholder="filter by site..."
-                       aria-label="site filter">
+                <input v-model="siteFilter" type="search"
+                       placeholder="filter name, username, site, owner…"
+                       aria-label="filter name, username, site, or owner">
                 <select v-model="activeFilter" aria-label="active filter" @change="refetch">
                     <option value="1">active</option>
                     <option value="0">inactive</option>
@@ -355,7 +365,7 @@ onBeforeUnmount(() => {
 }
 
 .filters input[type="search"] {
-    min-width: 200px;
+    min-width: 280px;
 }
 
 /* Per-type chips, dark-mode-safe rgba tints in the base palette's

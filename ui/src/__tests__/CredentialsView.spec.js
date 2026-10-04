@@ -2,9 +2,10 @@
  * CredentialsView is the ported credentials.php listing behind the
  * login wall: the session probe runs first, a signed-out visitor is
  * walked to /login before the vault ever loads, and any signed-in
- * user may read it (the api gates writes, not reads). Type and site
- * narrow the loaded rows client-side; active/inactive is the one
- * filter the api answers, so it refetches with ?is_active=.
+ * user may read it (the api gates writes, not reads). Type and the
+ * text box narrow the loaded rows client-side (the box matches name,
+ * username, site, and owner); active/inactive is the one filter the
+ * api answers, so it refetches with ?is_active=.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
@@ -146,6 +147,32 @@ describe('CredentialsView for a signed-in user', () => {
         await wrapper.find('input[type=search]').setValue('')
         await flushPromises()
         expect(wrapper.findAll('tbody tr')).toHaveLength(2)
+    })
+
+    it('matches the text box against name, username, and owner, not only site', async () => {
+        const { wrapper, credUrls } = await mountListing()
+        const box = wrapper.find('input[type=search]')
+        expect(box.attributes('placeholder')).toContain('username')
+        expect(box.attributes('placeholder')).not.toContain('by site')
+
+        await box.setValue('admin')
+        await flushPromises()
+        expect(credUrls).toHaveLength(1)
+        expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+        expect(wrapper.find('tbody tr').text()).toContain('core router')
+
+        await box.setValue('netops')
+        await flushPromises()
+        expect(wrapper.find('tbody tr').text()).toContain('core router')
+
+        await box.setValue('router')
+        await flushPromises()
+        expect(wrapper.find('tbody tr').text()).toContain('core router')
+
+        // A blank username must not match the word "null".
+        await box.setValue('null')
+        await flushPromises()
+        expect(wrapper.find('tbody tr').text()).toContain('no credentials match')
     })
 
     it('reports a dead api with a banner instead of fake rows', async () => {
