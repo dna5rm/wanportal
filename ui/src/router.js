@@ -222,7 +222,9 @@ const routes = [
     // (no new tab). Public, like the classic pages they frame — no
     // meta.auth.
     { path: '/addons/certs', name: 'addon-certs', component: AddonFrame, props: { src: '/nb/' } },
+    { path: '/addons/vips', name: 'addon-vips', component: AddonFrame, props: { src: '/nb/vip.php' } },
     { path: '/addons/sites', name: 'addon-sites', component: AddonFrame, props: { src: '/nb/reports/sites.php' } },
+    { path: '/addons/nat', name: 'addon-nat', component: AddonFrame, props: { src: '/nb/reports/nat.php' } },
     /* route:login */
     {
         // Sign-in lives in the app now: the form posts JSON to the

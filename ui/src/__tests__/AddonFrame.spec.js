@@ -145,10 +145,12 @@ describe('AddonFrame', () => {
 })
 
 describe('addon routes', () => {
-    it('resolves the two addon doors to AddonFrame with their sidecar srcs', () => {
+    it('resolves the four addon doors to AddonFrame with their sidecar srcs', () => {
         const doors = [
             ['/addons/certs', 'addon-certs', '/nb/'],
-            ['/addons/sites', 'addon-sites', '/nb/reports/sites.php']
+            ['/addons/vips', 'addon-vips', '/nb/vip.php'],
+            ['/addons/sites', 'addon-sites', '/nb/reports/sites.php'],
+            ['/addons/nat', 'addon-nat', '/nb/reports/nat.php']
         ]
         for (const [path, name, src] of doors) {
             const resolved = router.resolve(path)
@@ -161,7 +163,7 @@ describe('addon routes', () => {
     })
 
     it('keeps the addon doors public — no meta.auth anywhere on them', () => {
-        for (const path of ['/addons/certs', '/addons/sites']) {
+        for (const path of ['/addons/certs', '/addons/vips', '/addons/sites', '/addons/nat']) {
             const resolved = router.resolve(path)
             expect(resolved.meta.auth, path).toBeUndefined()
             // No matched segment may carry the gate: the sidecars sit
