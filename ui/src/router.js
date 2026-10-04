@@ -224,6 +224,7 @@ const routes = [
     { path: '/addons/certs', name: 'addon-certs', component: AddonFrame, props: { src: '/nb/' } },
     { path: '/addons/vips', name: 'addon-vips', component: AddonFrame, props: { src: '/nb/vip.php' } },
     { path: '/addons/sites', name: 'addon-sites', component: AddonFrame, props: { src: '/nb/reports/sites.php' } },
+    { path: '/addons/zones', name: 'addon-zones', component: AddonFrame, props: { src: '/nb/reports/zones.php' } },
     { path: '/addons/nat', name: 'addon-nat', component: AddonFrame, props: { src: '/nb/reports/nat.php' } },
     /* route:login */
     {
