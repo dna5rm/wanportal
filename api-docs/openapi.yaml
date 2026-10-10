@@ -4,12 +4,13 @@ info:
   title: NetOPS Monitoring API
   description: |
     API for managing network monitoring agents, targets, monitors,
-    credentials, and users. The read-only listing endpoints (agents,
-    targets, monitors, RRD data) and the health check are public. The
+    services, credentials, and users. The read-only listing endpoints
+    (agents, targets, monitors, services, RRD data) and the health
+    check are public. The
     OpenAPI file is served at /api-docs/openapi.yaml, not under /cgi-bin/api.
     Agent polling uses the agent's password; everything else needs a
     bearer token from /login, and writes are admin-only.
-  version: 1.1.0
+  version: 1.2.0
 
 servers:
   - url: /
@@ -28,10 +29,14 @@ tags:
     description: Monitoring agent management endpoints for creating, updating, and managing monitoring agents.
   - name: Agent Monitors
     description: Endpoints used by monitoring agents to retrieve assignments and submit results.
+  - name: Agent Services
+    description: Endpoints used by monitoring agents to retrieve HTTP(S) service assignments and submit service check results.
   - name: Targets
     description: Target management endpoints for creating and managing monitoring targets.
   - name: Monitors
     description: Monitor configuration endpoints for setting up and managing monitoring assignments.
+  - name: Services
+    description: Service check configuration endpoints for creating and managing HTTP(S) service checks alongside the reachability monitors.
   - name: Credentials
     description: Secure credential management endpoints for storing and retrieving various types of credentials.
 
@@ -187,6 +192,210 @@ components:
           minimum: 0
           maximum: 1
           description: 1 when the target is active, 0 when not
+
+    Service:
+      type: object
+      description: |
+        Full service-check configuration row, as GET /service/{id}
+        returns it to a caller presenting a valid bearer token (the
+        anonymous detail response strips it down to the display-safe
+        subset). Auth is reference-only: a service carries
+        auth_credential_id, never a secret.
+      properties:
+        id:
+          type: string
+          format: uuid
+        description:
+          type: string
+        agent_id:
+          type: string
+          format: uuid
+        target_id:
+          type: string
+          format: uuid
+        scheme:
+          type: string
+          enum: [http, https]
+        port:
+          type: integer
+          minimum: 0
+          maximum: 65535
+          description: 0 means the scheme default port
+        uri_path:
+          type: string
+          description: Request path, starting with /
+        uri_query:
+          type: string
+        http_method:
+          type: string
+          enum: [GET, POST, PUT, PATCH, HEAD, OPTIONS, DELETE]
+        http_headers:
+          type: string
+          description: JSON-encoded header map (stored MariaDB JSON column returned as text), or null
+        body_encoding:
+          type: string
+          enum: [text, json, base64, form]
+          description: Required when a request body is set, null otherwise
+        body:
+          type: string
+          description: Request body, or null
+        send_string:
+          type: string
+          description: F5-style send string; when set it IS the request body, or null
+        receive_string:
+          type: string
+          description: F5-style receive string (substring or regex per receive_regex), or null
+        receive_regex:
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 when receive_string is a Perl regex, 0 for substring match
+        disable_string:
+          type: string
+          description: F5-style disable string - a match marks the check DOWN even when receive matched, or null
+        disable_regex:
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 when disable_string is a Perl regex, 0 for substring match
+        expected_status:
+          type: string
+          description: Comma-separated NNN or NNN-NNN tokens (100..599), e.g. 200-299,301; null means any 2xx/3xx
+        follow_redirects:
+          type: integer
+          minimum: 0
+          maximum: 1
+        verify_tls:
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 verifies the TLS certificate; 0 is allowed but recorded
+        timeout:
+          type: integer
+          minimum: 1
+          maximum: 120
+        auth_type:
+          type: string
+          enum: [none, basic, bearer, header]
+          description: null means no auth
+        auth_header_name:
+          type: string
+          description: Header name when auth_type is header, or null
+        auth_credential_id:
+          type: string
+          format: uuid
+          description: Reference into the credentials table the secret resolves from at delivery time; never a secret itself, or null
+        pollcount:
+          type: integer
+          minimum: 1
+          description: Fixed after creation
+        pollinterval:
+          type: integer
+          minimum: 1
+          description: Seconds between checks (services default to 300); fixed after creation
+        is_active:
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: The service's own enabled flag; the /services listing rolls the agent and target flags in
+        last_state:
+          type: string
+          enum: [UP, DOWN, DISABLED, UNKNOWN]
+        last_status_code:
+          type: integer
+          description: Last HTTP response code, or 0 when none was heard
+        last_reason:
+          type: string
+          description: Closed reason token set (status_ok, status_mismatch, receive_match, receive_miss, disable_match, empty_body, transport_error, tls_error, timeout, bad_regex, agent_unsupported, auth_error); may be null
+        last_message:
+          type: string
+          description: Short agent-supplied detail, never the response body; may be null
+        last_check:
+          type: string
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS), or null
+        last_change:
+          type: string
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS) when the state last changed, or null
+        total_down:
+          type: integer
+          description: Count of down polls since the last reset
+
+    ServiceListRow:
+      type: object
+      description: |
+        Display-safe service row from the public /services listing -
+        identity, agent and target names, the URI triple, the effective
+        active flag and the rolled-up live state, plus the joined
+        agent/target liveness aliases and the agent's services
+        capability bit. The auth reference, request shaping and
+        assertion strings never appear on the anonymous listing.
+      properties:
+        id:
+          type: string
+          format: uuid
+        description:
+          type: string
+        agent_id:
+          type: string
+          format: uuid
+        target_id:
+          type: string
+          format: uuid
+        agent_name:
+          type: string
+        agent_is_active:
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 when the agent is active, 0 when not
+        agent_supports_services:
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 when the agent has made an authenticated call to the services module; 0 means the old monitor-only agent
+        target_address:
+          type: string
+        target_is_active:
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: 1 when the target is active, 0 when not
+        scheme:
+          type: string
+          enum: [http, https]
+        port:
+          type: integer
+          minimum: 0
+          maximum: 65535
+          description: 0 means the scheme default port
+        uri_path:
+          type: string
+          description: Request path, starting with /
+        uri_query:
+          type: string
+        is_active:
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: Effective active state - 1 only when the service, its agent and its target are all enabled
+        last_state:
+          type: string
+          enum: [UP, DOWN, DISABLED, UNKNOWN]
+        last_status_code:
+          type: integer
+          description: Last HTTP response code, or 0 when none was heard
+        last_reason:
+          type: string
+          description: Closed reason token set (status_ok, status_mismatch, receive_match, receive_miss, disable_match, empty_body, transport_error, tls_error, timeout, bad_regex, agent_unsupported, auth_error); may be null
+        last_check:
+          type: string
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS), or null
+        last_change:
+          type: string
+          description: Server timestamp (YYYY-MM-DD HH:MM:SS) when the state last changed, or null
+        total_down:
+          type: integer
+          description: Count of down polls since the last reset
 
     User:
       type: object
@@ -793,6 +1002,232 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /cgi-bin/api/agent/{id}/services:
+    get:
+      tags:
+        - Agent Services
+      summary: Get agent's service assignments
+      description: |
+        Returns a list of the ACTIVE HTTP(S) service checks assigned to
+        the specified agent that are due for polling (active service,
+        active target, last_check NULL or older than pollinterval).
+        Agents authenticate with their agent password (sent in the
+        request body), not with a user JWT - the same password the agent
+        was created with. If the agent exists but is inactive, the
+        response is success with an empty list. Each entry carries the
+        full URI plus the assertion config, and the auth secret resolved
+        from the credentials table at delivery time - a missing, inactive
+        or expired credential is refused, so the entry carries
+        auth_error instead of a secret. The request body may still
+        carry supports_services / version, but those keys are ignored
+        on this GET (and on every request); nothing from a request
+        body is ever recorded. The agent's version is recorded from
+        the `NetPing-Agent/<version>` User-Agent header on every
+        authenticated check-in, and capability (supports_services) is
+        derived from the agent's first authenticated contact with the
+        services module.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Agent ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  description: Agent password for authentication
+                supports_services:
+                  type: boolean
+                  description: Accepted for compatibility but ignored - capability is derived from this authenticated contact with the services module, not from this body
+                version:
+                  type: string
+                  description: Accepted for compatibility but ignored - the agent version is recorded from the `NetPing-Agent/<version>` User-Agent header on every authenticated request
+              required:
+                - password
+      responses:
+        '200':
+          description: List of service checks due for polling
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  services:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        address:
+                          type: string
+                          description: Target host (IP or hostname) from the targets table
+                        scheme:
+                          type: string
+                        port:
+                          type: integer
+                        uri_path:
+                          type: string
+                        uri_query:
+                          type: string
+                        http_method:
+                          type: string
+                        http_headers:
+                          type: object
+                          description: Header map decoded by the portal, or the raw text if it does not decode, or null
+                        body_encoding:
+                          type: string
+                        body:
+                          type: string
+                        send_string:
+                          type: string
+                        receive_string:
+                          type: string
+                        receive_regex:
+                          type: integer
+                        disable_string:
+                          type: string
+                        disable_regex:
+                          type: integer
+                        expected_status:
+                          type: string
+                        follow_redirects:
+                          type: integer
+                        verify_tls:
+                          type: integer
+                        timeout:
+                          type: integer
+                        auth_type:
+                          type: string
+                        auth_header_name:
+                          type: string
+                        auth_username:
+                          type: string
+                          description: Resolved credential username when auth applies
+                        auth_secret:
+                          type: string
+                          description: Resolved credential secret when auth applies; never logged
+                        auth_error:
+                          type: integer
+                          description: 1 when the auth reference could not be resolved (missing, inactive or expired credential) and no secret ships
+        '401':
+          description: Invalid agent credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - Agent Services
+      summary: Submit service results
+      description: |
+        Accepts a batch of HTTP check results from an agent and updates
+        each service's rolled-up state and its service RRD. Base fields
+        id, loss and median are required; unknown extra result fields
+        are ignored for forward compatibility, and an empty or omitted
+        results array succeeds without filing anything. Results are only
+        filed against services that belong to the authenticated agent -
+        another agent's id fails exactly like a bogus one. The posted
+        state wins when it is UP, DOWN or DISABLED and is otherwise
+        derived from loss (loss=100 DOWN, else UP). Nothing is recorded
+        from the request body: supports_services / version are accepted
+        and ignored. The agent's version is recorded from its
+        `NetPing-Agent/<version>` User-Agent header on every
+        authenticated agent request, and capability (supports_services)
+        is derived from the agent's first authenticated contact with
+        this module.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Agent ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                supports_services:
+                  type: boolean
+                  description: Accepted for compatibility but ignored - capability is derived from the agent's first authenticated contact with this module, not from this body
+                version:
+                  type: string
+                  description: Accepted for compatibility but ignored - the agent version is recorded from the `NetPing-Agent/<version>` User-Agent header on every authenticated request
+                results:
+                  type: array
+                  description: Batch of check results. May be empty or omitted - the call then succeeds without filing anything.
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      loss:
+                        type: number
+                        description: 0 on success, 100 on failure or DISABLED
+                      median:
+                        type: number
+                        description: Measured request time in ms on success, 0 on failure
+                      state:
+                        type: string
+                        enum: [UP, DOWN, DISABLED]
+                      status_code:
+                        type: integer
+                        description: HTTP response code; a value outside 100..599 is recorded as 0
+                      reason:
+                        type: string
+                        description: Closed reason token, truncated to 64 chars
+                      message:
+                        type: string
+                        description: Short detail, never the response body, truncated to 255 chars
+                    required:
+                      - id
+                      - loss
+                      - median
+              required:
+                - password
+      responses:
+        '200':
+          description: Results submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+        '400':
+          description: Invalid input (missing required fields or a service ID not owned by this agent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid agent credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /cgi-bin/api/netping-script:
     get:
       tags:
@@ -1332,6 +1767,438 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /cgi-bin/api/service:
+    post:
+      tags:
+        - Services
+      summary: Create new service
+      description: |
+        Creates a new HTTP(S) service check for an agent and target,
+        including the URI (scheme, port, path, query), the request
+        options, the F5 assertion triple and the optional
+        credential-backed auth reference. pollcount and pollinterval are
+        fixed at creation. Admin-only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                agent_id:
+                  type: string
+                  format: uuid
+                target_id:
+                  type: string
+                  format: uuid
+                scheme:
+                  type: string
+                  enum: [http, https]
+                  default: http
+                port:
+                  type: integer
+                  minimum: 0
+                  maximum: 65535
+                  default: 0
+                  description: 0 means the scheme default port
+                uri_path:
+                  type: string
+                  default: /
+                  description: Empty or starting with /; no scheme or host inside
+                uri_query:
+                  type: string
+                  default: ''
+                http_method:
+                  type: string
+                  enum: [GET, POST, PUT, PATCH, HEAD, OPTIONS, DELETE]
+                  default: GET
+                http_headers:
+                  type: object
+                  description: Header map, stored as a JSON object
+                body_encoding:
+                  type: string
+                  enum: [text, json, base64, form]
+                  description: Required when body is present
+                body:
+                  type: string
+                  description: Request body; send_string and body cannot both be set
+                send_string:
+                  type: string
+                  description: When set, IS the request body (F5 semantics)
+                receive_string:
+                  type: string
+                receive_regex:
+                  type: boolean
+                  default: false
+                  description: True when receive_string is a Perl regex; the regex must compile
+                disable_string:
+                  type: string
+                disable_regex:
+                  type: boolean
+                  default: false
+                  description: True when disable_string is a Perl regex; the regex must compile
+                expected_status:
+                  type: string
+                  description: Comma-separated NNN or NNN-NNN tokens (100..599); null or omitted means any 2xx/3xx
+                follow_redirects:
+                  type: boolean
+                  default: false
+                verify_tls:
+                  type: boolean
+                  default: true
+                  description: Verifying is the default; turning it off is allowed but recorded
+                timeout:
+                  type: integer
+                  minimum: 1
+                  maximum: 120
+                  default: 10
+                auth_type:
+                  type: string
+                  enum: [none, basic, bearer, header]
+                  description: header requires auth_header_name; anything beyond none requires auth_credential_id
+                auth_header_name:
+                  type: string
+                  description: Header name carried when auth_type is header
+                auth_credential_id:
+                  type: string
+                  format: uuid
+                  description: Reference into the credentials table - never inline a secret; attaching a HIGH or CRITICAL sensitivity credential requires admin
+                pollcount:
+                  type: integer
+                  minimum: 1
+                  default: 1
+                  description: Fixed after creation
+                pollinterval:
+                  type: integer
+                  minimum: 1
+                  default: 300
+                  description: Seconds between checks (services default to 300); fixed after creation
+                is_active:
+                  type: boolean
+                  default: true
+              required:
+                - agent_id
+                - target_id
+      responses:
+        '200':
+          description: Service created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Invalid input or duplicate service (an identical agent, target, scheme, port, path and query combination already exists)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Agent or target not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required, or the referenced credential has HIGH or CRITICAL sensitivity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /cgi-bin/api/service/{id}:
+    get:
+      tags:
+        - Public API
+      summary: Get service details
+      description: |
+        Public detail behind the SPA service page. Anonymous callers
+        receive the display-safe field set (identity, agent and target
+        names, the URI triple, the schedule and tolerance knobs
+        pollcount, pollinterval, timeout, follow_redirects, verify_tls
+        and expected_status, and the rolled-up live state including
+        last_message) - the request body and header map, assertion
+        strings and HTTP method are stripped. A caller presenting a
+        valid bearer JWT receives the full configuration row instead,
+        the same access the signed-in editor uses to prefetch before a
+        PUT; an invalid or expired bearer token simply degrades to the
+        anonymous view rather than a 401. The is_active on detail rows
+        is the service's own flag - the /services listing applies the
+        effective rollup across service, agent and target.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Service ID
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  service:
+                    allOf:
+                      - $ref: '#/components/schemas/Service'
+                      - type: object
+                        properties:
+                          agent_name:
+                            type: string
+                          target_address:
+                            type: string
+        '400':
+          description: Invalid service ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - Services
+      summary: Update service configuration
+      description: |
+        Updates an existing service check's URI, request options,
+        assertion triple, auth reference and active flag. pollcount and
+        pollinterval cannot be modified after creation - the service
+        RRD's archives are sized from them at create time; delete and
+        recreate the service to change them. Admin-only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Service ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                agent_id:
+                  type: string
+                  format: uuid
+                target_id:
+                  type: string
+                  format: uuid
+                scheme:
+                  type: string
+                  enum: [http, https]
+                port:
+                  type: integer
+                  minimum: 0
+                  maximum: 65535
+                uri_path:
+                  type: string
+                  description: Empty or starting with /; no scheme or host inside
+                uri_query:
+                  type: string
+                http_method:
+                  type: string
+                  enum: [GET, POST, PUT, PATCH, HEAD, OPTIONS, DELETE]
+                http_headers:
+                  type: object
+                  description: Header map, stored as a JSON object; null clears it
+                body_encoding:
+                  type: string
+                  enum: [text, json, base64, form]
+                body:
+                  type: string
+                  description: Request body; send_string and body cannot both be set
+                send_string:
+                  type: string
+                  description: When set, IS the request body (F5 semantics)
+                receive_string:
+                  type: string
+                receive_regex:
+                  type: boolean
+                disable_string:
+                  type: string
+                disable_regex:
+                  type: boolean
+                expected_status:
+                  type: string
+                  description: Comma-separated NNN or NNN-NNN tokens (100..599); null means any 2xx/3xx
+                follow_redirects:
+                  type: boolean
+                verify_tls:
+                  type: boolean
+                timeout:
+                  type: integer
+                  minimum: 1
+                  maximum: 120
+                auth_type:
+                  type: string
+                  enum: [none, basic, bearer, header]
+                auth_header_name:
+                  type: string
+                auth_credential_id:
+                  type: string
+                  format: uuid
+                  description: Reference into the credentials table - never inline a secret; attaching a HIGH or CRITICAL sensitivity credential requires admin
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Service updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Invalid input, no update data, or polling parameters supplied (pollcount/pollinterval are fixed after creation, or duplicate service)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required, or the referenced credential has HIGH or CRITICAL sensitivity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Services
+      summary: Delete service
+      description: |
+        Removes a service check. This operation cannot be undone.
+        Deleting the service's target or agent cascades here too, so
+        this route only handles the explicit case. Admin-only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Service ID
+      responses:
+        '200':
+          description: Service deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /cgi-bin/api/service/{id}/reset:
+    post:
+      tags:
+        - Services
+      summary: Reset service counters
+      description: |
+        Clears the rolled-up state for a service - last_state back to
+        UNKNOWN, the status code, reason, message and last_check
+        cleared, last_change re-stamped, and total_down back to 0.
+        Admin-only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Service ID
+      responses:
+        '200':
+          description: Service statistics reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '404':
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /cgi-bin/api/agents:
     get:
       tags:
@@ -1619,6 +2486,71 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /cgi-bin/api/services:
+    get:
+      tags:
+        - Public API
+      summary: List services
+      description: |
+        Public listing of the HTTP(S) service checks beside the
+        reachability monitors: display-safe fields only - identity,
+        agent and target names, the URI triple, the effective active
+        flag (service, agent and target all enabled, the same rule
+        /monitors applies) and the rolled-up live state. For parity
+        with /monitors the rows also carry the joined liveness aliases
+        (agent_is_active, target_is_active) and the agent's
+        services capability bit (agent_supports_services), so a client
+        can name which side is disabled - the capability pair is
+        already public on /agents. The auth reference, request body
+        and header map, assertion strings and HTTP method never appear
+        - that is the config an attacker would aim at a target with,
+        while an anonymous visitor only needs the status tables.
+        Supports filtering by owning agent or target, the effective
+        active state, and free-text search, mirroring /monitors.
+      parameters:
+        - in: query
+          name: agent_id
+          schema:
+            type: string
+            format: uuid
+          description: Filter to services owned by this agent (bound as a query parameter, so junk ids simply match nothing)
+        - in: query
+          name: target_id
+          schema:
+            type: string
+            format: uuid
+          description: Filter to services pointed at this target
+        - in: query
+          name: is_active
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1
+          description: Filter by effective active state (1 = active, 0 = inactive; a service under a paused agent is not active)
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: |
+            Free-text substring filter across service description, URI
+            path and target address; % and _ inside the value keep
+            acting as SQL wildcards.
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  services:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServiceListRow'
+
   /cgi-bin/api/dashboard:
     get:
       tags:
@@ -1629,7 +2561,12 @@ paths:
         below 1%), degraded (1% to 99%), and down (loss at 100%) counts
         with percents rounded half-up, plus the top five slowest links
         by current median. Down monitors sort last so the slowest slots
-        go to live links first.
+        go to live links first. Additive service side: effectively
+        active services bucketed by check state (UP; DOWN or DISABLED;
+        anything else unknown) plus the five most recently changed down
+        services - services_total and services_down stay authoritative
+        when more than five are down, and the full listing lives on the
+        services route.
       responses:
         '200':
           description: Successful operation
@@ -1687,6 +2624,52 @@ paths:
                               type: number
                             current_loss:
                               type: number
+                      services_up:
+                        type: integer
+                        description: Effectively-active services last seen UP
+                      services_down:
+                        type: integer
+                        description: Effectively-active services last seen DOWN or DISABLED
+                      services_unknown:
+                        type: integer
+                        description: Effectively-active services in any other state (UNKNOWN or no check yet)
+                      services_total:
+                        type: integer
+                        description: Effectively-active services; the three service buckets always sum to this
+                      down_services:
+                        type: array
+                        maxItems: 5
+                        description: Five most recently changed down services, newest change first; rows without a last_change timestamp sort last
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+                            description:
+                              type: string
+                            agent_id:
+                              type: string
+                              format: uuid
+                            target_id:
+                              type: string
+                              format: uuid
+                            agent_name:
+                              type: string
+                            target_address:
+                              type: string
+                            last_state:
+                              type: string
+                              enum: [DOWN, DISABLED]
+                            last_status_code:
+                              type: integer
+                              description: Last HTTP response code, or 0 when none was heard
+                            last_reason:
+                              type: string
+                              description: Closed reason token, may be null
+                            last_check:
+                              type: string
+                              description: Server timestamp (YYYY-MM-DD HH:MM:SS), may be null
 
   /cgi-bin/api/rrd:
     get:
@@ -1825,6 +2808,153 @@ paths:
                         title:
                           type: string
                           description: First "# " heading of the file
+
+  /cgi-bin/api/runtime-stats:
+    get:
+      tags:
+        - System
+      summary: Runtime stats (host + monitoring health)
+      description: |
+        JWT-protected system readout the deliberately minimal public
+        /health must not expose: host uptime/load/memory/disk (host
+        figures - this container shares the host kernel and mounts, so
+        the numbers describe the HOST, and the scope field says so) and
+        monitoring freshness (agents reporting within the last hour vs
+        stale, newest monitor collection, newest service check, and the
+        agent version census). Any valid token may read it; admin is
+        not required, the same policy as GET /session. Nothing secret
+        is returned - capacity and freshness numbers only. The route
+        takes no parameters and is designed to fail soft: every field
+        degrades to null when its source (database or /proc) cannot be
+        read, so the snapshot itself never 500s.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Runtime snapshot; fail-soft - unreadable sources render as null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  runtime:
+                    type: object
+                    properties:
+                      host:
+                        type: object
+                        description: |
+                          Host figures from /proc plus one fixed df -kP read.
+                          The CGI process runs in a container that shares the
+                          host kernel and mounts, so these numbers describe
+                          the HOST, not the container - the scope field
+                          labels them so. Each field renders null when its
+                          own source cannot be read or parsed; the rest of
+                          the block still answers.
+                        properties:
+                          scope:
+                            type: string
+                            example: host (container shares the host kernel and mounts)
+                          uptime_seconds:
+                            type: integer
+                            description: Host uptime in whole seconds from /proc/uptime; null when the read fails (distinct from 0, a just-booted host)
+                          loadavg:
+                            type: object
+                            description: Load averages from /proc/loadavg; the whole object is null when the file cannot be read or parsed
+                            properties:
+                              one_min:
+                                type: number
+                                description: 1-minute load average
+                              five_min:
+                                type: number
+                                description: 5-minute load average
+                              fifteen_min:
+                                type: number
+                                description: 15-minute load average
+                          memory:
+                            type: object
+                            description: Memory in kB from /proc/meminfo; the whole object is null when the file cannot be read
+                            properties:
+                              total_kb:
+                                type: integer
+                                description: MemTotal in kB
+                              available_kb:
+                                type: integer
+                                description: MemAvailable in kB (counts reclaimable caches, not just free); null on kernels without a MemAvailable row
+                          disk:
+                            type: object
+                            description: Disk usage from df -kP on the fixed /srv mount point; the whole object is null when the df read fails or no /srv row is found
+                            properties:
+                              path:
+                                type: string
+                                example: /srv
+                              total_kb:
+                                type: integer
+                                description: Total size in 1024-byte blocks
+                              used_kb:
+                                type: integer
+                                description: Used space in 1024-byte blocks
+                              avail_kb:
+                                type: integer
+                                description: Available space in 1024-byte blocks
+                              use_pct:
+                                type: integer
+                                description: Used percent without the percent sign; null when it cannot be parsed
+                      monitoring:
+                        type: object
+                        description: |
+                          Monitoring freshness from the database. The
+                          connection and every query fail separately and
+                          quietly - whatever cannot be read stays null
+                          while the rest still answers; an empty agents
+                          table still reports the counters as 0/0/0, not
+                          null.
+                        properties:
+                          agents_total:
+                            type: integer
+                            description: All agents; agents_reporting plus agents_stale always equals this
+                          agents_reporting:
+                            type: integer
+                            description: Agents whose last_seen is within the reporting window (the last hour)
+                          agents_stale:
+                            type: integer
+                            description: Agents not seen within the window, never-seen agents included
+                          reporting_window:
+                            type: string
+                            example: 1h
+                          last_collection:
+                            type: string
+                            description: Newest monitor collection (MAX(last_update)), server timestamp (YYYY-MM-DD HH:MM:SS); null when nothing has ever collected or the DB is unreachable
+                          last_service_check:
+                            type: string
+                            description: Newest service check (MAX(last_check)), server timestamp (YYYY-MM-DD HH:MM:SS); null when nothing has ever checked or the DB is unreachable
+                      agent_versions:
+                        type: array
+                        description: |
+                          Agent version census: the self-reported
+                          agent_version each upgraded agent stamps at
+                          check-in, grouped with counts. Null only when the
+                          census query itself fails; an empty fleet is an
+                          empty array. Agents that never reported a version
+                          group under a null agent_version and sort last,
+                          so consumers can spot a not-yet-upgraded fleet.
+                        items:
+                          type: object
+                          properties:
+                            agent_version:
+                              type: string
+                              description: Self-reported agent version; may be null for agents that never reported one
+                            count:
+                              type: integer
+                              description: Number of agents reporting that version
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /cgi-bin/api/credentials:
     get:

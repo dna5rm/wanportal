@@ -3,9 +3,10 @@
   renders it as a page (SearchView is a thin wrapper around this), and
   the dashboard embeds it in compact mode — one bare input+submit row
   with no heading and no empty-state hint, and results only after a
-  term is submitted. It runs the same public /monitors?q= sweep the
-  classic search.php calls through api_get(), so both front ends always
-  see the same hits. Read-only by design: the app lists what the API
+  term is submitted. One term sweeps both estates: the public
+  /monitors?q= the classic search.php calls plus /services?q= fired
+  together, so both front ends always see the same hits for any given
+  name. Read-only by design: the app lists what the API
   returns and links into its own detail routes; the classic console
   still owns everything that changes data.
 -->
@@ -26,6 +27,8 @@ const rows = ref([])
 const error = ref(null)
 const loading = ref(false)
 const searched = ref(false)   // separates "nothing searched yet" from "no hits"
+const svcRows = ref([])       // the /services?q= half of the same term
+const svcError = ref(null)    // set on its own: one dead sweep must not bury the other's hits
 
 async function runSearch() {
     // The classic page just redirects home on an empty term; here an
@@ -34,17 +37,30 @@ async function runSearch() {
     if (!term) return
     loading.value = true
     error.value = null
-    try {
-        const res = await getJson('/cgi-bin/api/monitors?q=' + encodeURIComponent(term))
-        rows.value = res.monitors || []
-        searched.value = true
-    } catch (e) {
-        error.value = (e && e.message) || 'search failed'
+    svcError.value = null
+    // Both sweeps fire together and settle together, so the results
+    // area paints once instead of monitors-first-then-services. Each
+    // half keeps its own failure: the api serving services is a
+    // separate build, and a miss there must not hide monitor hits the
+    // other half still delivered.
+    const [mon, svc] = await Promise.allSettled([
+        getJson('/cgi-bin/api/monitors?q=' + encodeURIComponent(term)),
+        getJson('/cgi-bin/api/services?q=' + encodeURIComponent(term))
+    ])
+    if (mon.status === 'fulfilled') {
+        rows.value = mon.value.monitors || []
+    } else {
+        error.value = (mon.reason && mon.reason.message) || 'search failed'
         rows.value = []
-        searched.value = true
-    } finally {
-        loading.value = false
     }
+    if (svc.status === 'fulfilled') {
+        svcRows.value = svc.value.services || []
+    } else {
+        svcError.value = (svc.reason && svc.reason.message) || 'search failed'
+        svcRows.value = []
+    }
+    searched.value = true
+    loading.value = false
 }
 
 /* is_active on a row is already the effective flag (monitor AND agent
@@ -63,6 +79,32 @@ function protocolLabel(m) {
     const proto = String(m.protocol || '').toUpperCase()
     return proto === 'ICMP' ? proto : proto + '/' + (m.port ?? '-')
 }
+
+/* Service hits read like the down-services table: UP green, DOWN red,
+ * everything else amber — an unreadable state never renders healthy. */
+function svcStateCls(s) {
+    const st = String(s.last_state || 'UNKNOWN')
+    if (st === 'UP') return 'chip-ok'
+    if (st === 'DOWN') return 'chip-danger'
+    return 'chip-warn'
+}
+
+/* A service-level disable dims the row the way is_active dims monitor
+ * rows; agent/target liveness rides no q= payload, so nothing deeper
+ * is claimed here. */
+function svcInactive(s) {
+    return Number(s.is_active) === 0
+}
+
+/* scheme://host[:port]/path[?query] — the port prints when the row
+ * carries a non-zero one (0 = scheme default), the same uri text the
+ * services listing's cell builds. */
+function svcUri(s) {
+    const port = Number(s.port)
+    return String(s.scheme || '') + '://' + (s.target_address || '')
+        + (port ? ':' + port : '')
+        + (s.uri_path || '/') + (s.uri_query ? '?' + s.uri_query : '')
+}
 </script>
 
 <template>
@@ -70,8 +112,8 @@ function protocolLabel(m) {
         <h2 v-if="!compact">search</h2>
 
         <form class="search-form" @submit.prevent="runSearch">
-            <input v-model="q" type="search" placeholder="search monitors..."
-                   aria-label="Search monitors">
+            <input v-model="q" type="search" placeholder="search monitors and services..."
+                   aria-label="Search monitors and services">
             <button class="btn" type="submit" :disabled="loading">
                 {{ loading ? 'searching…' : 'search' }}
             </button>
@@ -81,14 +123,15 @@ function protocolLabel(m) {
 
         <p v-if="searched && !error" class="muted">
             {{ stats.total }} results · {{ stats.active }} effectively active ·
-            {{ stats.inactive }} effectively inactive
+            {{ stats.inactive }} effectively inactive<span v-if="!svcError">
+            · {{ svcRows.length }} service{{ svcRows.length === 1 ? '' : 's' }}</span>
         </p>
 
         <!-- The sweep hint only belongs on the /search page; the compact
              embed stays one bare row until results exist. -->
         <p v-if="!searched && !compact" class="muted search-hint">
             Sweeps monitor descriptions, agent names and addresses, and target
-            addresses.
+            addresses, plus service descriptions and url paths.
         </p>
 
         <table v-if="searched && !error">
@@ -136,6 +179,56 @@ function protocolLabel(m) {
             </tr>
             </tbody>
         </table>
+
+        <!-- The services half of the sweep reports itself where the
+             monitor table ends: hits get their own table under a
+             one-word label, a failed services sweep says so without
+             touching the monitor results above. -->
+        <div v-if="svcError" class="err-note block">service search failed — {{ svcError }}</div>
+
+        <template v-if="searched && !error && svcRows.length">
+            <p class="muted svc-label">services</p>
+            <table>
+                <thead>
+                <tr>
+                    <th>service</th>
+                    <th>agent</th>
+                    <th>target</th>
+                    <th>uri</th>
+                    <th>state</th>
+                    <th>last check</th>
+                </tr>
+                </thead>
+                <tbody>
+                <!-- Same link rules as the monitor sweep: a cell with an
+                     id rides its detail route, one without stays plain
+                     text instead of a dead link. -->
+                <tr v-for="s in svcRows" :key="s.id" :class="{ dim: svcInactive(s) }">
+                    <td>
+                        <router-link v-if="s.id" :to="{ name: 'service', params: { id: s.id } }" :title="s.id">
+                            {{ s.description || s.id }}
+                        </router-link>
+                        <template v-else>{{ s.description || '-' }}</template>
+                    </td>
+                    <td>
+                        <router-link v-if="s.agent_id" :to="{ name: 'agent', params: { id: s.agent_id } }">
+                            {{ s.agent_name || '-' }}
+                        </router-link>
+                        <template v-else>{{ s.agent_name || '-' }}</template>
+                    </td>
+                    <td>
+                        <router-link v-if="s.target_id" :to="{ name: 'target', params: { id: s.target_id } }">
+                            {{ s.target_address || '-' }}
+                        </router-link>
+                        <template v-else>{{ s.target_address || '-' }}</template>
+                    </td>
+                    <td class="svc-uri" :title="svcUri(s)">{{ svcUri(s) }}</td>
+                    <td><span class="chip" :class="svcStateCls(s)" :title="s.last_reason || ''">{{ s.last_state || 'UNKNOWN' }}</span></td>
+                    <td>{{ s.last_check || '-' }}</td>
+                </tr>
+                </tbody>
+            </table>
+        </template>
     </section>
 </template>
 
@@ -167,5 +260,22 @@ function protocolLabel(m) {
 /* Effectively inactive rows keep their place but read as greyed out. */
 tr.dim td {
     color: var(--muted);
+}
+
+/* Hits from the /services sweep follow the monitor table: a one-word
+ * label keeps the two groups reading apart (the section heading stays
+ * 'search'), and the uri cell matches the services listing's mono
+ * treatment — clamped, with the full value on hover. */
+.svc-label {
+    margin: 14px 0 6px;
+}
+
+.svc-uri {
+    font-family: ui-monospace, monospace;
+    font-size: 11.5px;
+    max-width: 340px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 </style>

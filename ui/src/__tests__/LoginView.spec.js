@@ -2,9 +2,10 @@
  * LoginView specs: the form posts to the JSON login endpoint, parks
  * the token in sessionStorage (never localStorage), re-probes the
  * session through the probe App provides (so the account menu lights
- * before the redirect), flips to the dashboard on success, and shows
- * a clean message on bad credentials. A memory-history router backs
- * the push, so no real navigation runs.
+ * before the redirect), returns to the ?redirect= path the sign-in
+ * gate parked — sanitized to same-app paths only — and shows a clean
+ * message on bad credentials. A memory-history router backs the push,
+ * so no real navigation runs.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -22,18 +23,30 @@ function makeRouter() {
         history: createMemoryHistory(),
         routes: [
             { path: '/', name: 'dashboard', component: { template: '<div>dash</div>' } },
+            // A fenced in-app landing so the redirect specs can prove
+            // the query survives; the login route itself is the form.
+            { path: '/monitors', name: 'monitors', component: { template: '<div>m</div>' } },
             { path: '/login', name: 'login', component: LoginView }
         ]
     })
 }
 
-async function mountLogin() {
+async function mountLoginAt(location = '/login') {
     const router = makeRouter()
-    await router.push('/login')
+    await router.push(location)
     await router.isReady()
     const wrapper = mount(LoginView, { global: { plugins: [router] } })
     return { wrapper, router }
 }
+
+const mountLogin = () => mountLoginAt()
+
+/* The success body every sign-in spec answers fetch with. */
+const okLogin = () => vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ status: 'success', token: 'jwt-lv', username: 'ops', is_admin: 1, exp: 1781 })
+}))
 
 describe('LoginView', () => {
     it('renders the fields with no classic log-in door linked', async () => {
@@ -104,6 +117,42 @@ describe('LoginView', () => {
         expect(probe).toHaveBeenCalledTimes(1)
         expect(probedAt).toBe('/login')
         expect(router.currentRoute.value.path).toBe('/')
+    })
+
+    it('returns the signed-in user to the ?redirect= path the gate parked', async () => {
+        vi.stubGlobal('fetch', okLogin())
+
+        const { wrapper, router } = await mountLoginAt({
+            path: '/login', query: { redirect: '/monitors' }
+        })
+        await wrapper.find('#login-user').setValue('ops')
+        await wrapper.find('#login-pass').setValue('secret')
+        await wrapper.find('form').trigger('submit')
+        await flushPromises()
+
+        expect(router.currentRoute.value.fullPath).toBe('/monitors')
+        expect(wrapper.find('.err-note').exists()).toBe(false)
+    })
+
+    it('reads the dashboard when ?redirect= points outside the app', async () => {
+        vi.stubGlobal('fetch', okLogin())
+
+        // A query string is attacker writable: each of these would
+        // walk the freshly signed-in session off the app (absolute
+        // url, protocol-relative host) or carry a scheme, so every
+        // one falls back to '/' rather than navigating there.
+        for (const bad of ['https://evil.example/phish', '//evil.example/phish',
+            'javascript:alert(1)', '']) {
+            const { wrapper, router } = await mountLoginAt({
+                path: '/login', query: { redirect: bad }
+            })
+            await wrapper.find('#login-user').setValue('ops')
+            await wrapper.find('#login-pass').setValue('secret')
+            await wrapper.find('form').trigger('submit')
+            await flushPromises()
+
+            expect(router.currentRoute.value.fullPath).toBe('/')
+        }
     })
 
     it('shows the wrong-credentials message on 401 and stores nothing', async () => {

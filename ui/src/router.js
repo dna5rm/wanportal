@@ -26,6 +26,9 @@ import UsersView from './components/UsersView.vue'
 import UserEditView from './components/UserEditView.vue'
 import MonitorDetailView from './components/MonitorDetailView.vue'
 import MonitorEditView from './components/MonitorEditView.vue'
+import ServicesView from './components/ServicesView.vue'
+import ServiceDetailView from './components/ServiceDetailView.vue'
+import ServiceEditView from './components/ServiceEditView.vue'
 import AgentDetailView from './components/AgentDetailView.vue'
 import AgentEditView from './components/AgentEditView.vue'
 import NetpingView from './components/NetpingView.vue'
@@ -153,6 +156,22 @@ const routes = [
         meta: { auth: true }
     },
     /* route:target */ detail('/targets/:id', 'target', TargetDetailView, '/target.php', 'targets', { alias: '/target/:id' }),
+    /* route:services — service checks (HTTP/S) beside the reachability
+     * monitors (spec §8.3), in their own namespace: a flat listing, one
+     * shared new/edit editor and a monitor-style detail. The listing
+     * and both editor doors wait for a sign-in — every service route
+     * sits in the JWT group, so unlike the monitor table there is no
+     * public read to show anyway. The detail route stays open like the
+     * other drill-downs: it fetches the record, and a refusal reads as
+     * the loud banner rather than a login bounce the visitor cannot
+     * explain. new/edit sit above :id so the static segment never
+     * parses as an id, and the /service/:id alias carries the
+     * '#/service/<uuid>' hops. No classic page mirrors this one
+     * (services are SPA-only, §8.4), so legacy is null. */
+    { path: '/services', name: 'services', component: ServicesView, meta: { auth: true } },
+    { path: '/services/new', name: 'service-new', component: ServiceEditView, meta: { auth: true } },
+    { path: '/services/:id/edit', name: 'service-edit', component: ServiceEditView, props: true, meta: { auth: true } },
+    detail('/services/:id', 'service', ServiceDetailView, null, 'services', { alias: '/service/:id' }),
     /* route:search */ { path: '/search', name: 'search', component: SearchView },
     /* route:latency */ { path: '/latency', name: 'latency', component: LatencyView },
     /* route:credentials */

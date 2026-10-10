@@ -4,29 +4,52 @@
     {
       "label": "Guides",
       "children": [
-        { "label": "Agent image", "to": "/guides/agent-image.md" },
-        { "label": "TCP dump", "to": "/guides/tcpdump.md" },
-        { "label": "DB schema", "to": "/guides/db_schema.md" }
+        {
+          "label": "Agent image",
+          "to": "/guides/agent-image.md"
+        },
+        {
+          "label": "TCP dump",
+          "to": "/guides/tcpdump.md"
+        },
+        {
+          "label": "DB schema",
+          "to": "/guides/db_schema.md"
+        }
       ]
     },
     {
       "label": "NetBox",
       "children": [
-        { "label": "Certs", "to": "/addons/certs" },
-        { "label": "Sites", "to": "/addons/sites" }
+        {
+          "label": "CertMgr",
+          "to": "/addons/certs"
+        },
+        {
+          "label": "VIP Builder",
+          "to": "/addons/vips"
+        },
+        {
+          "label": "Sites",
+          "to": "/addons/sites"
+        },
+        {
+          "label": "Zones",
+          "to": "/addons/zones"
+        },
+        {
+          "label": "Public IPs",
+          "to": "/addons/nat"
+        }
       ]
     },
     {
-      "label": "IPControl",
-      "children": [
-        { "label": "Zones", "href": "/ipc/zones.php" },
-        { "label": "CIDRs", "href": "/ipc/cidr.php" },
-        { "label": "Sites", "href": "/ipc/ipc_sites.php" },
-        { "label": "Devices", "href": "/ipc/devices.php" },
-        { "label": "Public", "href": "/ipc/public.php" },
-        { "label": "Infrastructure", "href": "/ipc/infrastructure.php" }
-      ]
+      "label": "Catalog",
+      "href": "/catalog/"
     },
-    { "label": "Classic UI", "href": "/classic/" }
+    {
+      "label": "Classic UI",
+      "href": "/classic/"
+    }
   ]
 }

@@ -5,7 +5,7 @@
  * No data fetching lives here — each detail component owns its own
  * requests and its own failure banners.
  */
-import { lossClass } from '../format'
+import { lossClass, parseApiUtc } from '../format'
 
 export { lossClass }
 
@@ -127,13 +127,14 @@ export function inactiveReasons(m) {
  * update is older than three poll intervals — the same freshness gate
  * public_api applies before raising the latency flag. Poll interval is
  * in seconds and the DB default is 60. Stamps are written with MySQL
- * NOW() (server wall clock) and are parsed like the existing format.js
- * helpers do, so this is only exact when viewer and server share a
- * timezone — which is why the verbatim stamp is always shown next to
- * it and this is treated as advisory, never as data.
+ * NOW() on a db that runs UTC, so they read as UTC — the same way
+ * format.js's duration helpers parse them — and the age math stays
+ * right no matter which timezone the viewer sits in. The chip stays
+ * advisory, with the verbatim stamp always shown next to it, never as
+ * data.
  */
 export function isDataFresh(m, now = Date.now()) {
-    const t = Date.parse(String((m && m.last_update) || '').replace(' ', 'T'))
+    const t = parseApiUtc((m && m.last_update) || '')
     if (Number.isNaN(t)) return false
     const interval = Number(m && m.pollinterval) > 0 ? Number(m.pollinterval) : 60
     return now - t <= 3 * interval * 1000

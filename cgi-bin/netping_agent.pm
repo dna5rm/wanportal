@@ -62,10 +62,23 @@ sub register_netping_script {
                 status => 404,
             );
         };
+        binmode $fh, ':raw';
         local $/;
         my $content = <$fh>;
         close $fh;
         $content = '' unless defined $content;
+
+        # The script file is UTF-8 text. The slurp above reads raw octets,
+        # so decode them in place as UTF-8 before handing the string to
+        # the JSON layer: an octet string is treated as Latin-1 characters
+        # by the encoder, which would double-encode every non-ASCII byte
+        # (C2 A7 for section sign leaves the server as C3 82 C2 A7).
+        # Decoding first makes the JSON re-encode each character exactly
+        # once, so the served bytes match the file on disk. If the body
+        # is not valid UTF-8 utf8::decode leaves it untouched and the
+        # response simply degrades to the historical byte-as-Latin-1
+        # behaviour; pure ASCII is unaffected either way.
+        utf8::decode($content);
 
         # No logging here, deliberately: the file body is secret-ish
         # source material and must never land in container logs - it

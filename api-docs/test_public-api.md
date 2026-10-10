@@ -103,8 +103,8 @@ inactive.
 
 ## Filter monitors
 
-`/monitors` is the only listing that supports filters, which are
-passed as query parameters:
+`/monitors` and `/services` are the listings that support filters,
+which are passed as query parameters:
 
 ```bash
 # Monitors currently at exactly 0% loss
@@ -115,6 +115,79 @@ curl -s "http://localhost/cgi-bin/api/monitors?is_active=1" | jq '.'
 ```
 
 `/agents` and `/targets` accept no filters.
+
+## List all services
+
+```bash
+curl -s http://localhost/cgi-bin/api/services | jq '.'
+```
+
+The public service listing shows the URI triple and the rolled-up live
+state for each HTTP(S) check, plus the agent and target names. Like
+the monitors listing, `is_active` is the effective value: a service
+counts as inactive when its agent or its target is also inactive. For
+parity with the monitor rows the joined agent/target liveness aliases
+(`agent_is_active`, `target_is_active`) and the agent's services
+capability bit (`agent_supports_services`) ride along, so a client
+can name which side is disabled. No
+auth field, assertion string, header, request body or HTTP method ever
+appears — the row carries the state, not the probe recipe.
+
+### Expected response
+
+```json
+{
+  "status": "success",
+  "services": [
+    {
+      "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      "description": "Example web check",
+      "agent_id": "00000000-0000-0000-0000-000000000000",
+      "target_id": "12345678-1234-5678-1234-567812345678",
+      "scheme": "https",
+      "port": 443,
+      "uri_path": "/health",
+      "uri_query": "",
+      "is_active": 1,
+      "last_state": "UP",
+      "last_status_code": 200,
+      "last_reason": "status_ok",
+      "last_check": "2025-06-13 23:40:00",
+      "last_change": "2025-06-10 08:12:31",
+      "total_down": 0,
+      "agent_name": "LOCAL",
+      "agent_is_active": 1,
+      "agent_supports_services": 1,
+      "target_address": "www.example.com",
+      "target_is_active": 1
+    }
+  ]
+}
+```
+
+### Filters
+
+`/services` takes `agent_id`, `target_id`, `is_active` and a free-text
+`q` (matched against description, path and the target address), the
+same query-parameter style as `/monitors`:
+
+```bash
+curl -s "http://localhost/cgi-bin/api/services?is_active=0" | jq '.'
+curl -s "http://localhost/cgi-bin/api/services?q=example" | jq '.'
+```
+
+## Get service details
+
+```bash
+curl -s http://localhost/cgi-bin/api/service/:id | jq '.'
+```
+
+Anonymous callers get the display-safe subset of the row (identity,
+URI, schedule and tolerance knobs, state): the assertion strings,
+headers, request body and auth fields are stripped. With a valid
+bearer token the full config row returns — still never a secret value,
+because a service holds only the `auth_credential_id` reference into
+the credentials vault.
 
 ## List the API documentation files
 

@@ -24,12 +24,34 @@ The agent does not verify TLS certificates: `netping-agent.pl` sets
 `SSL_VERIFY_NONE` intentionally, because agents are permitted to
 communicate with a server that presents a self-signed certificate.
 
+## Service checks
+
+The image carries the agent's services capability: after the
+reachability cycle it polls `GET /agent/:id/services` for due HTTP(S)
+checks and POSTs the results to the same path, authenticated with the
+same agent password as the monitor endpoints. Both request bodies
+declare `supports_services` and the agent `version`; the portal
+records the declaration only from the result POST - the services GET
+never records it. Against an older portal the services fetch answers
+404: the agent logs it and finishes the cycle, leaving reachability
+polling untouched.
+
+HTTPS service checks depend on `perl-lwp-protocol-https` (already
+declared in `agent/Dockerfile` beside `perl-libwww`): without the
+protocol handler LWP fails every `https://` probe with a bogus 501
+rather than a TLS error. The wanportal stack image ships the same pair
+because the LOCAL agent runs inside it, so rebuilding the agent image
+needs no extra packages for service checks.
+
 ## Building and distributing the image
 
 `agent/build_agent.sh`, run from the repository root, tags the image
-`netping:<YYYYMMDD>` and `netping:latest`, then writes
-`htdocs/assets/netping_latest.tar.gz` from the `:latest` tag. The archive
-is gitignored and is offered as a download on the dashboard's netping page
+`netping:<agent version>` (read from the `our $VERSION` line of
+`agent/netping-agent.pl` at build time), `netping:<YYYYMMDD>`, and
+`netping:latest`, then writes `htdocs/assets/netping_latest.tar.gz`
+from the version tag together with `latest`. The archive carries both
+tags, so `docker load` restores both. The archive is gitignored and is
+offered as a download on the dashboard's netping page
 (`/assets/netping_latest.tar.gz`).
 
 On the target host:
@@ -44,8 +66,14 @@ gunzip -c netping_latest.tar.gz | docker load
 docker run -d --name netping-agent --network host --restart unless-stopped \
     -e SERVER="https://<SERVER>/cgi-bin/api" \
     -e PASSWORD="<PASSWORD>" -e AGENT_ID="<AGENT_ID>" \
-    netping:latest
+    netping:<agent version>
 ```
+
+Run the version tag: `docker load` above prints exactly which tags it
+restored, and the version one states which agent the container
+carries. `netping:latest` (also in the archive, as the alias) works
+but hides the version; the dashboard's netping page renders its run
+command with the version tag it parses from the agent script.
 
 - `--network host`: probes originate from the host's own network stack, so
   the measurements reflect what the host observes and the agent's source

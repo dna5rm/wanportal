@@ -13,7 +13,8 @@ import {
     downAge,
     downRowClass,
     fmtDownSince,
-    lossClass
+    lossClass,
+    parseApiUtc
 } from '../format'
 import { localStamp } from './stubs'
 
@@ -98,6 +99,66 @@ describe('down-age formatting', () => {
         expect(downAge('')).toBe('-')
         // A timestamp slightly in the future clamps to zero minutes.
         expect(downAge(localStamp(-3 * 60000))).toBe('0m')
+    })
+})
+
+describe('api stamps are read as UTC, not as the viewer zone', () => {
+    // The fake clock sits exactly on the literal stamp 2026-09-07
+    // 12:00:00 UTC, so every expected duration below is a round
+    // number of the api contract — no dependence on the box's zone.
+    const NOW_UTC = Date.parse('2026-09-07T12:00:00Z')
+    const priorTz = process.env.TZ
+    beforeEach(() => {
+        vi.useFakeTimers({ now: NOW_UTC })
+    })
+    afterEach(() => {
+        // Put the runner zone back exactly as found (unset stays
+        // unset) so nothing leaks into another spec file's worker.
+        if (priorTz === undefined) delete process.env.TZ
+        else process.env.TZ = priorTz
+    })
+
+    it('a stamp that is right now reads 0m from a Manila runner too', () => {
+        // The old local reading put this same literal 8 hours in the
+        // past for UTC+8 and answered '8h 0m' — that was the bug.
+        process.env.TZ = 'Asia/Manila'
+        expect(downAge('2026-09-07 12:00:00')).toBe('0m')
+        expect(downRowClass({ last_down: '2026-09-07 12:00:00' })).toBe('')
+        process.env.TZ = 'UTC'
+        expect(downAge('2026-09-07 12:00:00')).toBe('0m')
+    })
+
+    it('ages and rows land on the same answers from Manila as from UTC', () => {
+        process.env.TZ = 'Asia/Manila'
+        expect(downAge('2026-09-07 10:30:00')).toBe('1h 30m')
+        expect(downRowClass({ last_down: '2026-09-07 10:00:00' })).toBe('')
+        expect(downRowClass({ last_down: '2026-09-07 09:00:00' })).toBe('row-warn')
+        expect(downRowClass({ last_down: '2026-09-07 07:00:00' })).toBe('row-danger')
+        expect(agentClass({ last_seen: '2026-09-07 11:01:00' })).toBe('chip-ok')
+        expect(agentClass({ last_seen: '2026-09-07 10:59:00' })).toBe('chip-stale')
+        process.env.TZ = 'UTC'
+        expect(downAge('2026-09-07 10:30:00')).toBe('1h 30m')
+        expect(downRowClass({ last_down: '2026-09-07 10:00:00' })).toBe('')
+        expect(downRowClass({ last_down: '2026-09-07 09:00:00' })).toBe('row-warn')
+        expect(downRowClass({ last_down: '2026-09-07 07:00:00' })).toBe('row-danger')
+        expect(agentClass({ last_seen: '2026-09-07 11:01:00' })).toBe('chip-ok')
+        expect(agentClass({ last_seen: '2026-09-07 10:59:00' })).toBe('chip-stale')
+    })
+
+    it('parseApiUtc tags the zone and refuses what the api would never send', () => {
+        // Every flavor of the api shape lands on the same epoch, the
+        // one UTC says the stamp names.
+        const epoch = Date.parse('2026-08-03T01:03:04Z')
+        expect(parseApiUtc('2026-08-03 01:03:04')).toBe(epoch)
+        expect(parseApiUtc('2026-08-03T01:03:04')).toBe(epoch)
+        expect(parseApiUtc('2026-08-03T01:03:04Z')).toBe(epoch)
+        expect(parseApiUtc('2026-08-03T01:03:04+05:30')).toBe(Date.parse('2026-08-03T01:03:04+05:30'))
+        // Junk keeps the callers' dash/no-color fallbacks alive.
+        expect(parseApiUtc('garbage')).toBeNaN()
+        expect(parseApiUtc('not-a-date')).toBeNaN()
+        expect(parseApiUtc('')).toBeNaN()
+        expect(parseApiUtc(null)).toBeNaN()
+        expect(parseApiUtc(undefined)).toBeNaN()
     })
 })
 

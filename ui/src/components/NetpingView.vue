@@ -7,13 +7,21 @@
   endpoint is jwt-gated (the api counterpart of the classic dump's
   sign-in rule), so the fetch waits for the session probe and a
   signed-out tab gets a sign-in note instead of the source. The docker
-  notes keep the established netping-<name> container naming and leave
-  the agent password a placeholder — the bundle never carries it.
+  notes keep the established netping-<name> container naming, and the
+  agent password in their commands is a placeholder unless this tab is
+  a signed-in admin: admins get it fetched at runtime from the
+  jwt-gated GET /cgi-bin/api/agent/<id> route and rendered inside the
+  PASSWORD flags — the built bundle never carries the value. Neither
+  is the image tag a second copy of the number: it is parsed from the
+  fetched script's own `our $VERSION` declaration (imageTag below), so
+  the run command cannot drift stale when the agent version bumps, and
+  netping:latest marks the honest gap when no version is parsable.
 -->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getJson } from '../api'
 import { getSession } from '../session'
+import { shellSingleQuote } from '../shellQuote'
 import { humanErr, idFromLocation } from './detailShared'
 
 const props = defineProps({
@@ -90,6 +98,12 @@ onMounted(async () => {
     sessionReady.value = true
     await fetchAgent()
     if (session.value.authenticated) await fetchScript()
+    // Admin-only, best-effort enrichment: fills the PASSWORD slot in
+    // the commands with the real value, and stays banner-less when it
+    // cannot.
+    if (session.value.authenticated && session.value.isAdmin) {
+        await fetchAgentPassword()
+    }
 })
 
 /*
@@ -157,6 +171,36 @@ const serverUrl = computed(() =>
     window.location.protocol + '//' + window.location.host + '/cgi-bin/api'
 )
 
+/*
+ * The version this agent last declared, for the header. This is the
+ * page an operator lands on to install or verify the agent, so having
+ * the version in view is directly useful — it says whether the host is
+ * already running the current script. An agent that never declared a
+ * version (an old agent, or one not yet reporting) leaves the field
+ * null: the header then states that in words — "version not reported",
+ * the same wording the agent detail page uses — instead of showing
+ * nothing, because blank silence reads to the operator like a broken
+ * page rather than an old, not-yet-declared agent. No version number
+ * is ever invented for it.
+ */
+const agentVersion = computed(() =>
+    String((agent.value && agent.value.agent_version) || '').trim()
+)
+
+/*
+ * Service-check capability, read the way AgentDetailView reads it:
+ * only an explicit 1 means the agent can be handed service checks, so
+ * an absent flag (a payload or api build from before the capability
+ * columns existed) still reads as the old monitor-only agent. This
+ * page is where that agent gets upgraded, so the note sits in the
+ * header instead of costing a trip to the agent detail page to learn
+ * it — and it stays a muted line, not a chip, because it is context
+ * rather than a state.
+ */
+const monitorOnly = computed(() =>
+    !!agent.value && Number(agent.value.supports_services) !== 1
+)
+
 /* The container is named after the agent (lowercased), mirroring the
  * naming the docker image flow established, so the ps and logs
  * commands agree across pages; fall back to the plain default when the
@@ -168,29 +212,122 @@ const containerName = computed(() =>
 )
 
 /*
- * The run command with SERVER and AGENT_ID filled in. The password is
- * deliberately left a placeholder: the API only hands it to admins and
- * the bundle should never carry it.
+ * The agent password as the commands render it. A signed-in admin gets
+ * the real value, fetched at runtime from the jwt-gated singular
+ * /agent/:id route — the public /agents/:id lookup above never carries
+ * it, and neither does the built bundle; getJson attaches the stored
+ * bearer token and the route answers with the password field only when
+ * the token belongs to an admin. Everyone else — signed out, a plain
+ * user, or the fetch failing / coming back without the field (an
+ * expired token mid-page, a demoted admin) — keeps the *** placeholder,
+ * and the failure stays silent: the fallback is the placeholder the
+ * page always had, so there is no banner and never an empty PASSWORD
+ * flag in a copy-paste command. Both commands that carry the value
+ * quote it through shellSingleQuote — see the run command below.
+ */
+const agentPassword = ref(null)
+
+async function fetchAgentPassword() {
+    if (!agentId.value) return
+    try {
+        const r = await getJson('/cgi-bin/api/agent/' + encodeURIComponent(agentId.value))
+        const pw = r && r.agent ? r.agent.password : null
+        // Only a non-empty string replaces the placeholder; anything
+        // else (missing field, empty value) leaves it standing.
+        if (typeof pw === 'string' && pw !== '') agentPassword.value = pw
+    } catch {
+        // Swallowed on purpose — no logging, no banner, no empty flag.
+    }
+}
+
+/* The password slot the commands build from: the real value once the
+ * gated fetch handed one over, the *** placeholder otherwise. */
+const passwordToken = computed(() => agentPassword.value || '***')
+
+const showingRealPassword = computed(() => !!agentPassword.value)
+
+/*
+ * The docker image tag, parsed from the script this page already
+ * fetched: the perl source declares `our $VERSION = '0.2.0';` and
+ * build_agent.sh tags the image with that same number. Reading it out
+ * of the fetched text keeps the run command locked to whatever the
+ * endpoint serves, so an agent version bump re-renders the tag on the
+ * next script load with no page edit — a hardcoded copy here would go
+ * stale in exactly the way the build script just stopped doing. No
+ * parsable declaration (fetch failed, empty payload) leaves the
+ * version empty, and imageTag falls back rather than ever rendering a
+ * bare `netping:` with nothing after the colon.
+ */
+const scriptVersion = computed(() => {
+    if (script.value == null) return ''
+    const m = script.value.match(/our \$VERSION\s*=\s*'([^']+)'/)
+    return m ? m[1].trim() : ''
+})
+
+/*
+ * The tag the run command ends with. `netping:<version>` once the
+ * fetched script declared one: the same tag build_agent.sh applies and
+ * the download archive loads, so what the operator pastes matches what
+ * docker load installed. Until the script lands (or when it carries no
+ * parsable version) `netping:latest` is the honest placeholder — the
+ * archive also carries that alias, so the fallback stays runnable,
+ * not just honest.
+ */
+const imageTag = computed(() =>
+    scriptVersion.value ? 'netping:' + scriptVersion.value : 'netping:latest'
+)
+
+/*
+ * The run command with SERVER, AGENT_ID and PASSWORD filled in. The
+ * password slot carries the real value only for a signed-in admin
+ * (fetchAgentPassword above) and the *** placeholder for everyone
+ * else. SERVER and AGENT_ID stay double-quoted — a url and a uuid are
+ * safe there — but the password goes out single-quoted, because agent
+ * passwords are randomly generated and can carry shell metacharacters
+ * ($, backticks, backslashes, parens): inside double quotes the shell
+ * would expand them before the command ever ran and hand the agent a
+ * silently corrupted secret (a real install pasted such a command and
+ * answered 401). shellSingleQuote keeps every byte literal and escapes
+ * the one character single quotes cannot carry as '\''.
  */
 const runCommand = computed(() => [
     'docker run -d --name ' + containerName.value + ' --network host --restart unless-stopped \\',
     '    -e SERVER="' + serverUrl.value + '" \\',
     '    -e AGENT_ID="' + (agentId.value || '<AGENT_ID>') + '" \\',
-    '    -e PASSWORD="***" \\',
-    '    netping:latest'
+    '    -e PASSWORD=' + shellSingleQuote(passwordToken.value) + ' \\',
+    '    ' + imageTag.value
 ].join('\n'))
 
 /*
  * Cron line for a host without docker: the same three env vars ride
  * the crontab entry exactly like the container's -e flags, because the
- * perl script reads the same environment. Password stays a placeholder
- * for the same reason as the run command; the script path is wherever
- * the download above was saved.
+ * perl script reads the same environment. SERVER and AGENT_ID keep
+ * their double quotes (a url and a uuid, safe there); the PASSWORD
+ * slot is single-quoted exactly like the run command above — a crontab
+ * entry is parsed by the same shell that would expand $ inside double
+ * quotes, and a random password may be nothing but metacharacters. The
+ * slot stays the real value for a signed-in admin, the *** placeholder
+ * otherwise; the script path is wherever the download above was saved.
  */
 const cronCommand = computed(() =>
     '* * * * * SERVER="' + serverUrl.value + '" AGENT_ID="' +
-    (agentId.value || '<AGENT_ID>') + '" PASSWORD="***" perl netping-agent.pl'
+    (agentId.value || '<AGENT_ID>') + '" PASSWORD=' +
+    shellSingleQuote(passwordToken.value) + ' perl netping-agent.pl'
 )
+
+/*
+ * The note under the run block tracks the password slot: with the
+ * placeholder it asks to replace it before starting; with the real
+ * admin value it drops that ask and says why the value is on screen at
+ * all — the signed-in admin is the reason, and the screen itself is
+ * what to treat carefully. The DEBUG tip rides along in both states
+ * because it is about logging, not the password.
+ */
+const passwordNote = computed(() => showingRealPassword.value
+    ? 'password is shown because you are signed in as admin — anyone ' +
+      'who can read this screen can read it; treat it as a secret. ' +
+      '-e DEBUG=1 for verbose logs.'
+    : 'PASSWORD placeholder — replace before starting. -e DEBUG=1 for verbose logs.')
 
 const scriptBytes = computed(() =>
     script.value == null ? 0 : new Blob([script.value]).size
@@ -201,10 +338,11 @@ const scriptBytes = computed(() =>
     <header class="bar">
         <div class="bar-title">
             <h1>netping</h1>
-            <span v-if="agent" class="muted">{{ agent.name || agent.id }}</span>
+            <span v-if="agent" class="muted">{{ agent.name || agent.id }}<template v-if="agentVersion"> · v{{ agentVersion }}</template><template v-else> · <span class="small">version not reported</span></template></span>
         </div>
         <div class="bar-right">
             <span v-if="loading" class="muted">loading…</span>
+            <span v-if="monitorOnly" class="muted small">monitor-only agent (no service checks)</span>
             <a v-if="agentId" class="btn" :href="'#/agents/' + encodeURIComponent(agentId)">back to agent</a>
         </div>
     </header>
@@ -249,7 +387,7 @@ const scriptBytes = computed(() =>
                 <p class="muted small">verify / logs</p>
                 <pre class="code"><code>docker ps | grep {{ containerName }}</code></pre>
                 <pre class="code"><code>docker logs {{ containerName }}</code></pre>
-                <p class="muted small">PASSWORD placeholder — replace before starting. -e DEBUG=1 for verbose logs.</p>
+                <p class="muted small">{{ passwordNote }}</p>
             </section>
 
             <section class="panel">

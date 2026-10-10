@@ -48,6 +48,43 @@ foreach (($monitorsResponse['monitors'] ?? []) as $row) {
     $monitors[] = $row;
 }
 
+// Service checks (HTTP(S)) sit beside the monitors: same api proxy,
+// same counter semantics, same table conventions. GET /services takes
+// ?agent_id= server-side (mirroring /monitors), and the client-side
+// drop below stays as the guard for an api build without the filter —
+// another agent's checks must never bleed onto this page.
+$servicesResponse = api_get('/services?agent_id=' . rawurlencode($id));
+$services = [];
+
+// A service counts as active only when the service, its agent and its
+// target are all enabled — the same triple the monitors route and the
+// SPA services listing use. Absent joined flags count as on: a payload
+// that omits them must never mislabel a row as disabled.
+$service_is_effective = static function (array $s) use ($agent): bool {
+    return ($s['is_active'] ?? 1) && $agent['is_active'] && ($s['target_is_active'] ?? 1);
+};
+
+$service_stats = [
+    'total'    => 0,
+    'active'   => 0,
+    'inactive' => 0
+];
+
+foreach (($servicesResponse['services'] ?? []) as $row) {
+    if (($row['agent_id'] ?? '') !== $id) {
+        continue;
+    }
+
+    $service_stats['total']++;
+    if ($service_is_effective($row)) {
+        $service_stats['active']++;
+    } else {
+        $service_stats['inactive']++;
+    }
+
+    $services[] = $row;
+}
+
 // Action buttons. "Agent" is hidden for LOCAL agents (no netping
 // script); Edit is always available for authenticated users.
 $actions = [];
@@ -94,6 +131,20 @@ wanportal_render_header_row(
                             <strong>Description:</strong><br/>
                             <?= htmlspecialchars($agent['description']) ?>
                         </li>
+                        <?php /* The agent self-declares version and service
+                               support on the periodic fetch it already makes.
+                               Agents older than the services build send
+                               neither: a missing version shows "-" (never
+                               declared, not an error) and a missing flag is
+                               the old monitor-only agent. */ ?>
+                        <li class="list-group-item">
+                            <strong>Version:</strong><br/>
+                            <?= !empty($agent['agent_version']) ? htmlspecialchars($agent['agent_version']) : '-' ?>
+                        </li>
+                        <li class="list-group-item">
+                            <strong>Service Checks:</strong><br/>
+                            <?= (int) ($agent['supports_services'] ?? 0) === 1 ? 'supported' : 'not supported' ?>
+                        </li>
                         <li class="list-group-item">
                             <strong>Status:</strong><br/>
                             <?php if ($agent['is_active']): ?>
@@ -115,6 +166,9 @@ wanportal_render_header_row(
                 ['Inactive Monitors',       $monitor_stats['inactive'],            'warning'],
                 ['Effectively Inactive',    $monitor_stats['effectively_inactive'], 'secondary'],
                 ['Total Monitors',          $monitor_stats['total'],               'primary'],
+                ['Active Services',         $service_stats['active'],              'success'],
+                ['Inactive Services',       $service_stats['inactive'],            'warning'],
+                ['Total Services',          $service_stats['total'],               'primary'],
             ]); ?>
         </div>
 
@@ -198,6 +252,107 @@ wanportal_render_header_row(
                                               title="Last Down: <?= htmlspecialchars($m['last_down']) ?>" 
                                               data-bs-toggle="tooltip">
                                             <?= htmlspecialchars($m['last_update']) ?>
+                                        </span>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="table-responsive">
+                <table id="tablePager" class="table table-bordered table-striped table-hover" data-empty-message="No services found" data-state-save="false">
+                    <thead>
+                        <tr>
+                            <th>Service</th>
+                            <th>Target</th>
+                            <th>URI</th>
+                            <th class="text-center">State</th>
+                            <th class="text-center">Last Check</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (!empty($services)): ?>
+                        <?php foreach ($services as $s): ?>
+                            <?php
+                            $effectively_active = $service_is_effective($s);
+                            if (!$effectively_active && !$show_inactive) {
+                                continue;
+                            }
+
+                            // scheme://host[:port]/path[?query]: port 0 is a
+                            // scheme default and prints bare, an empty path is
+                            // "/" — the SPA services listing builds it the same.
+                            $service_port = (int) ($s['port'] ?? 0);
+                            $service_path = (string) ($s['uri_path'] ?? '');
+                            $service_query = (string) ($s['uri_query'] ?? '');
+                            $service_uri = ($s['scheme'] ?? 'http') . '://' . ($s['target_address'] ?? '')
+                                . ($service_port ? ':' . $service_port : '')
+                                . ($service_path !== '' ? $service_path : '/')
+                                . ($service_query !== '' ? '?' . $service_query : '');
+
+                            // UP green, DOWN red, everything else amber — an
+                            // unreadable state must never read as healthy.
+                            $service_state = (string) ($s['last_state'] ?? '');
+                            if ($service_state === '') {
+                                $service_state = 'UNKNOWN';
+                            }
+                            $service_state_badge = 'bg-warning';
+                            if ($service_state === 'UP') {
+                                $service_state_badge = 'bg-success';
+                            } elseif ($service_state === 'DOWN') {
+                                $service_state_badge = 'bg-danger';
+                            }
+                            $service_state_title = (string) ($s['last_reason'] ?? '');
+                            ?>
+                                <tr class="<?= $effectively_active ? '' : 'bg-secondary-subtle' ?>">
+                                    <td>
+                                        <?php if (!$effectively_active): ?>
+                                            <del class="text-muted">
+                                        <?php endif; ?>
+
+                                        <span class="<?= $effectively_active ? 'text-decoration-none' : 'text-muted' ?>"
+                                              title="<?= htmlspecialchars($s['id'] ?? '') ?>"
+                                              data-bs-toggle="tooltip">
+                                            <?= !empty($s['description']) ? htmlspecialchars($s['description']) : htmlspecialchars($s['id'] ?? '') ?>
+                                        </span>
+
+                                        <?php if (!$effectively_active): ?>
+                                            </del>
+                                            <?php
+                                            $inactive_reason = [];
+                                            if (!$agent['is_active']) $inactive_reason[] = "Agent disabled";
+                                            if (!($s['target_is_active'] ?? 1)) $inactive_reason[] = "Target disabled";
+                                            if (!($s['is_active'] ?? 1)) $inactive_reason[] = "Service disabled";
+                                            ?>
+                                            <i class="bi bi-info-circle text-muted"
+                                               data-bs-toggle="tooltip"
+                                               title="Inactive: <?= implode(', ', $inactive_reason) ?>"></i>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <a href="/classic/target.php?id=<?= htmlspecialchars($s['target_id'] ?? '') ?>"
+                                           class="<?= $effectively_active ? 'text-decoration-none' : 'text-muted' ?>">
+                                            <?= htmlspecialchars($s['target_address'] ?? '') ?>
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="<?= $effectively_active ? '' : 'text-muted' ?>"
+                                              title="<?= htmlspecialchars($service_uri) ?>">
+                                            <?= htmlspecialchars($service_uri) ?>
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge <?= $service_state_badge ?>"
+                                              title="<?= htmlspecialchars($service_state_title) ?>"
+                                              data-bs-toggle="tooltip">
+                                            <?= htmlspecialchars($service_state) ?>
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="<?= $effectively_active ? '' : 'text-muted' ?>">
+                                            <?= empty($s['last_check']) ? 'Never' : htmlspecialchars($s['last_check']) ?>
                                         </span>
                                     </td>
                                 </tr>

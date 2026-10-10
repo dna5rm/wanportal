@@ -6,7 +6,7 @@
   a single username button — one plain label, no nested chip; the
   admin claim and the token expiry live in its tooltip — that toggles
   the account dropdown: the gated listing pages — Agents, Targets,
-  Monitors, Credentials, plus Users for admins — then the muted
+  Monitors, Services, Credentials, plus Users for admins — then the muted
   Runtime door #/runtime, and log out. The dropdown carries no classic
   console door: classic lives at /classic and is linked only where the
   operator's config.json menu places it. The API swagger is not a
@@ -73,6 +73,7 @@ async function signOut() {
                 <router-link class="menu-link" to="/agents">Agents</router-link>
                 <router-link class="menu-link" to="/targets">Targets</router-link>
                 <router-link class="menu-link" to="/monitors">Monitors</router-link>
+                <router-link class="menu-link" to="/services">Services</router-link>
                 <router-link class="menu-link" to="/credentials">Credentials</router-link>
                 <router-link v-if="session.isAdmin" class="menu-link" to="/users">Users</router-link>
                 <router-link class="menu-link menu-muted" to="/runtime">Runtime</router-link>

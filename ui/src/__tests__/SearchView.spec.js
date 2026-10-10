@@ -1,9 +1,11 @@
 /*
- * SearchView is a listing page: one GET to /cgi-bin/api/monitors?q=,
- * rows out, loss chips colored, inactive rows dimmed, and every row
- * linking into the app's own detail routes. The fetch is stubbed per
- * URL, same as the dashboard spec does, and the router is a memory
- * twin of the production table so <router-link> resolves for real.
+ * SearchView is a listing page: one GET each to /cgi-bin/api/monitors?q=
+ * and /cgi-bin/api/services?q= per submitted term, monitor rows then
+ * service hits out, loss and state chips colored, inactive rows dimmed,
+ * and every row linking into the app's own detail routes. The fetch is
+ * stubbed per URL, same as the dashboard spec does, and the router is
+ * a memory twin of the production table so <router-link> resolves for
+ * real.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
@@ -27,6 +29,16 @@ const hits = {
     ]
 }
 
+/* The service half of the same term: one live hit with a port
+ * override, so the uri cell, the state chip and the service detail
+ * link all get exercised. */
+const svcHits = {
+    status: 'success',
+    services: [
+        { id: 12, description: 'payments health', agent_id: 1, agent_name: 'edge-a', target_id: 5, target_address: 'branch-gw.example', scheme: 'https', port: 8443, uri_path: '/health', uri_query: '', last_state: 'UP', last_check: '2026-09-07 20:01:00', is_active: 1 }
+    ]
+}
+
 async function searchFor(wrapper, term) {
     await wrapper.find('input[type=search]').setValue(term)
     await wrapper.find('form.search-form').trigger('submit')
@@ -44,7 +56,8 @@ async function mountSearch(stub) {
             { path: '/', name: 'dashboard', component: { render: () => null } },
             { path: '/monitors/:id', name: 'monitor', component: { render: () => null }, props: true },
             { path: '/agents/:id', name: 'agent', component: { render: () => null }, props: true },
-            { path: '/targets/:id', name: 'target', component: { render: () => null }, props: true }
+            { path: '/targets/:id', name: 'target', component: { render: () => null }, props: true },
+            { path: '/services/:id', name: 'service', component: { render: () => null }, props: true }
         ]
     })
     await router.push('/')
@@ -70,19 +83,23 @@ describe('SearchView', () => {
     })
 
     it('lists hits with stats, protocol labels and loss colors', async () => {
-        const stub = makeFetchStub({ down: hits })
+        const stub = makeFetchStub({ down: hits, services: svcHits })
         const wrapper = await mountSearch(stub)
 
         await searchFor(wrapper, 'branch')
 
         expect(stub.mock.calls[0][0]).toBe('/cgi-bin/api/monitors?q=branch')
+        expect(stub.mock.calls.some((c) => c[0] === '/cgi-bin/api/services?q=branch')).toBe(true)
         expect(wrapper.find('table').exists()).toBe(true)
         expect(wrapper.text()).toContain('2 results')
         expect(wrapper.text()).toContain('1 effectively active')
         expect(wrapper.text()).toContain('1 effectively inactive')
+        // The services count rides the same stats line — singular here.
+        expect(wrapper.text()).toContain('1 service')
+        expect(wrapper.text()).not.toContain('1 services')
 
         const rows = wrapper.findAll('tbody tr')
-        expect(rows).toHaveLength(2)
+        expect(rows).toHaveLength(3)
         // Active row reads normally, inactive one is dimmed.
         expect(rows[0].classes()).not.toContain('dim')
         expect(rows[1].classes()).toContain('dim')
@@ -97,6 +114,35 @@ describe('SearchView', () => {
         expect(rows[0].findAll('td a').map((a) => a.attributes('href'))).toEqual([
             '/monitors/3', '/agents/1', '/targets/5'
         ])
+
+        // The service hit follows in its own table: same link rules,
+        // the services listing's uri cell, state chip green.
+        expect(rows[2].text()).toContain('payments health')
+        expect(rows[2].text()).toContain('https://branch-gw.example:8443/health')
+        expect(rows[2].find('.chip').classes()).toContain('chip-ok')
+        expect(rows[2].findAll('td a').map((a) => a.attributes('href'))).toEqual([
+            '/services/12', '/agents/1', '/targets/5'
+        ])
+    })
+
+    it('names a failed services sweep without disturbing monitor hits', async () => {
+        const wrapper = await mountSearch(makeFetchStub({
+            down: hits,
+            fail: { services: new Error('HTTP 500') }
+        }))
+
+        await searchFor(wrapper, 'branch')
+
+        const note = wrapper.find('.err-note')
+        expect(note.exists()).toBe(true)
+        expect(note.text()).toContain('service search failed')
+        expect(note.text()).toContain('HTTP 500')
+        // The monitor half of the sweep stands untouched; only the
+        // services count drops out of the stats line.
+        expect(wrapper.text()).toContain('2 results')
+        expect(wrapper.findAll('tbody tr')).toHaveLength(2)
+        const stats = wrapper.find('p.muted')
+        expect(stats.text()).not.toContain('service')
     })
 
     it('names the failure and hides the table when the search errors', async () => {

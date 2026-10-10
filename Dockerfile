@@ -16,9 +16,13 @@ RUN apk -q update && apk -q upgrade
 RUN apk add --no-cache bash cronie mariadb-client rrdtool curl jq tzdata
 
 ## Perl Lang
+# perl-libwww + perl-lwp-protocol-https: the LOCAL polling agent runs in
+# this image (see /usr/local/sbin/cron-run-agent) and its service checks
+# speak HTTPS. IO::Socket::SSL alone is not enough - LWP needs the
+# protocol-https handler or every https probe fails with a bogus 501.
 RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-regexp-common perl-email-mime \
     perl-dbd-mysql perl-dbi perl-crypt-jwt perl-mojolicious perl-try-tiny perl-timedate perl-yaml-xs \
-    perl-lwp-useragent-determined perl-io-socket-ssl perl-rrd perl-parallel-forkmanager perl-sys-cpu \
+    perl-lwp-useragent-determined perl-libwww perl-lwp-protocol-https perl-io-socket-ssl perl-rrd perl-parallel-forkmanager perl-sys-cpu \
     perl-net-ldap perl-crypt-eksblowfish
 
 ## Web Server + PHP

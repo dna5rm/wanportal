@@ -40,5 +40,12 @@ ProxyPassReverse /nb/ http://wanportal-addon-nb:80/nb/
 # ProxyPass        /catalog/ http://wanportal-addon-catalog:80/catalog/
 # ProxyPassReverse /catalog/ http://wanportal-addon-catalog:80/catalog/
 
+# Example: wanportal-addon-transfer (private work lookup). Uncomment to enable.
+# <Location /transfer/>
+#     RequestHeader set X-Forwarded-Prefix "/transfer"
+# </Location>
+# ProxyPass        /transfer/ http://wanportal-addon-transfer:80/transfer/
+# ProxyPassReverse /transfer/ http://wanportal-addon-transfer:80/transfer/
+
 # Optional extra host-only rules:
 # IncludeOptional /srv/conf/addons-site.conf

@@ -7,10 +7,11 @@
 -->
 <script setup>
 import { inject, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { login } from '../session'
 
 const router = useRouter()
+const route = useRoute()
 /* App provides its session probe; re-running it right after a
  * successful sign-in is what flips the account menu on. When the
  * form is mounted outside the shell (specs, classic embeds) there is
@@ -32,7 +33,20 @@ async function submit() {
         // Light the account menu before the redirect: the probe reads
         // the token login() just parked, so the chip shows the user.
         if (sessionProbe) await sessionProbe()
-        router.push('/')
+        // Sign-in parks the caller's intended path in ?redirect= —
+        // send them back where they were going. The value is attacker
+        // writable, so only a same-app path survives: it must start
+        // with a single '/', never '//' (protocol-relative hop to
+        // another host) and never contain '://' (an absolute off-app
+        // url catches the freshly signed-in user). Anything else,
+        // including a missing or empty redirect, reads the dashboard.
+        const wanted = typeof route.query.redirect === 'string'
+            ? route.query.redirect : ''
+        const redirect = wanted.startsWith('/') &&
+            !wanted.startsWith('//') && !wanted.includes('://')
+            ? wanted
+            : '/'
+        router.push(redirect)
     } catch (err) {
         error.value = err && err.message === 'HTTP 401'
             ? 'Wrong username or password.'

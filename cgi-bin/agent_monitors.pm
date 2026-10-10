@@ -36,6 +36,7 @@ use RRDs;
 use List::Util qw(min max sum);
 use Socket qw(AF_INET AF_INET6 inet_pton);
 use Mojo::Util qw(secure_compare);
+use agent_checkin qw(parse_agent_ua_version);
 
 our @EXPORT_OK = qw(register_agent_monitors);
 
@@ -119,12 +120,33 @@ sub register_agent_monitors {
         $ip =~ s/^\s+|\s+$//g;
         $ip = $c->tx->remote_address // '' unless _is_valid_ip($ip);
         $ip = ''                           unless _is_valid_ip($ip);
-        if ($ip eq '') {
-            $dbh->do("UPDATE agents SET last_seen=NOW() WHERE id=?", undef, $agent->{id});
+        # I1 amendment: an agent's version is a property of every
+        # authenticated check-in, not of a payload - each agent generation
+        # sends "NetPing-Agent/<version>" in its User-Agent on every
+        # request. Parse it here (agent_checkin.pm) and fold the optional
+        # clause into the same self-announcement UPDATE as the address:
+        # one statement, no second failure path. Set-only-when-present - a
+        # request without the header, with an unparsable one, or from a
+        # non-agent client (curl, a browser) writes NOTHING for version,
+        # so a stored version is refreshed, never cleared, exactly like
+        # the address rule above. The write is envelope-derived (no
+        # request body is read), scoped to the authenticated row, and
+        # lands before any payload is built: the monitor endpoints'
+        # responses stay byte- for byte identical.
+        my $ua_version = parse_agent_ua_version($c->req->headers->user_agent);
+        # One UPDATE: SET [address=?,] last_seen=NOW() [, agent_version=?]
+        my @sets = ('last_seen=NOW()');
+        my @vals;
+        if ($ip ne '') {
+            push @sets, 'address=?';
+            push @vals, $ip;
         }
-        else {
-            $dbh->do("UPDATE agents SET address=?, last_seen=NOW() WHERE id=?", undef, $ip, $agent->{id});
+        if (defined $ua_version) {
+            push @sets, 'agent_version=?';
+            push @vals, $ua_version;    # already truncated to 32 (varchar(32))
         }
+        $dbh->do('UPDATE agents SET ' . join(', ', @sets) . ' WHERE id=?',
+            undef, @vals, $agent->{id});
         $dbh->disconnect;
         return $agent->{id};
     }

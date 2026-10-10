@@ -33,6 +33,7 @@ use warnings;
 use Exporter 'import';
 use DBI;
 use JSON qw(encode_json);
+use Crypt::JWT qw(decode_jwt);
 use RRDs;
 use File::Temp;
 use Time::Local;
@@ -60,6 +61,56 @@ sub _uptime_seconds {
     close $fh;
     my ($up) = split ' ', ($line // '');
     return ($up && looks_like_number($up)) ? int($up) : 0;
+}
+
+# ---------------------------------------------------------------------------
+# Services read routes: the row carries the check's configuration, and parts
+# of it - the auth reference, the send/receive/disable assertion strings, the
+# request body and header map, the HTTP method - are exactly the config an
+# attacker would aim at a target with. Anonymous viewers therefore get the
+# display-safe allow-list below (identity, URI, schedule, rolled-up live
+# state), the same field budget the public /monitors rows ride under. A
+# caller presenting a valid Bearer JWT keeps the full row: that is the same
+# access the JWT detail route always gave signed-in users, and the SPA
+# editor prefetches the full config there before a PUT.
+# ---------------------------------------------------------------------------
+sub _has_valid_bearer {
+    my ($c) = @_;
+
+    my $auth_header = $c->req->headers->authorization // '';
+    return 0 unless $auth_header =~ /^Bearer\s+(.+)/;
+
+    # Same verification the JWT middleware runs (auth.pm): HS256 against
+    # the shared secret, expiry honoured. Any failure means anonymous.
+    my $payload = eval {
+        decode_jwt(
+            token => $1,
+            key   => $c->app->defaults('jwt_secret'),
+            alg   => 'HS256'
+        );
+    };
+    return 0 if $@ || !ref($payload);
+    return 0 unless defined $payload->{exp};
+    return $payload->{exp} >= time ? 1 : 0;
+}
+
+# Reduce a fetched services row to the display-safe allow-list. The row
+# itself never holds a secret (auth resolves to a credential id reference
+# only), but the assertion strings and request shaping stay out anyway:
+# they describe how to construct a probe, not how a check is doing.
+sub _strip_service_profile {
+    my ($row) = @_;
+
+    my %public = map { $_ => 1 } qw(
+        id description agent_id target_id agent_name target_address
+        scheme port uri_path uri_query
+        pollcount pollinterval timeout follow_redirects verify_tls expected_status
+        is_active
+        last_state last_status_code last_reason last_message
+        last_check last_change total_down
+    );
+    delete $row->{$_} for grep { !$public{$_} } keys %$row;
+    return $row;
 }
 
 # Perl twin of wanportal_is_latency_issue() in
@@ -132,10 +183,18 @@ sub register_public_endpoints {
         my $c = shift;
         my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
         
+        # agent_version + supports_services ride here too: the agent's
+        # check-in facts (spec I3/6.2) - agent_version from the User-Agent
+        # of every authenticated agent contact, supports_services derived
+        # from the agent's first authenticated contact with the services
+        # module. Not secret. Defaults (supports_services 0 /
+        # agent_version NULL) read as an agent that has not checked in
+        # since the feature landed.
         my $sth = $dbh->prepare(q{
-            SELECT 
-                id, name, address, description, last_seen, is_active
-            FROM agents 
+            SELECT
+                id, name, address, description, last_seen, is_active,
+                agent_version, supports_services
+            FROM agents
             ORDER BY name
         });
         $sth->execute();
@@ -165,8 +224,14 @@ sub register_public_endpoints {
         }, status => 400) unless $id =~ /\A[0-9a-fA-F-]{36}\z/;
 
         my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+        # Same check-in facts as the /agents list (spec I3/6.2) - agent
+        # version from the User-Agent, supports_services derived at first
+        # services contact; not secret, and the agent detail pages need it
+        # to explain service state. Defaults read as an agent that has not
+        # checked in since the feature landed.
         my $sth = $dbh->prepare(q{
-            SELECT id, name, address, description, last_seen, is_active
+            SELECT id, name, address, description, last_seen, is_active,
+                   agent_version, supports_services
             FROM agents
             WHERE id = ?
         });
@@ -414,13 +479,167 @@ sub register_public_endpoints {
         });
     };
 
+    # @summary List services
+    # @description Public listing of the HTTP(S) service checks beside the
+    # reachability monitors: display-safe fields only - identity, agent and
+    # target names, the URI triple, the effective active flag (service,
+    # agent and target all enabled, the same CASE /monitors applies) and
+    # the rolled-up live state. Rows also carry the agent/target liveness
+    # aliases and the agent's services capability bit (agent_is_active,
+    # target_is_active, agent_supports_services) so the SPA can name which
+    # side is off the way the monitor listing does - nothing secret in the
+    # set: /agents already publishes the capability pair. The auth
+    # reference, request body and header map, assertion strings and HTTP
+    # method never appear: that is the config an attacker would aim at a
+    # target with, while an anonymous visitor only needs the status
+    # tables. Supports agent_id, target_id, is_active and q filters,
+    # mirroring /monitors.
+    # @tags Public API
+    main::get '/services' => sub {
+        my $c = shift;
+
+        my $agent_id  = $c->param('agent_id');
+        my $target_id = $c->param('target_id');
+        my $is_active = $c->param('is_active');
+        my $q         = $c->param('q');
+
+        my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+
+        my $sql = q{
+            SELECT
+                s.id, s.description, s.agent_id, s.target_id,
+                s.scheme, s.port, s.uri_path, s.uri_query,
+                CASE
+                    WHEN s.is_active = 0 OR a.is_active = 0 OR t.is_active = 0 THEN 0
+                    ELSE 1
+                END as is_active,
+                s.last_state, s.last_status_code, s.last_reason,
+                s.last_check, s.last_change, s.total_down,
+                a.name as agent_name,
+                a.is_active as agent_is_active,
+                a.supports_services as agent_supports_services,
+                t.address as target_address,
+                t.is_active as target_is_active
+            FROM services s
+            JOIN agents a ON s.agent_id = a.id
+            JOIN targets t ON s.target_id = t.id
+            WHERE 1=1
+        };
+
+        my @params;
+
+        # Add query conditions if parameters are provided. Both ids are
+        # char(36) uuid columns bound as parameters, so junk ids just
+        # match nothing - the same deal /monitors gives them.
+        if (defined $agent_id && length $agent_id) {
+            $sql .= " AND s.agent_id = ?";
+            push @params, $agent_id;
+        }
+
+        if (defined $target_id && length $target_id) {
+            $sql .= " AND s.target_id = ?";
+            push @params, $target_id;
+        }
+
+        # is_active means EFFECTIVELY active: service, agent and target
+        # all enabled - a service under a paused agent is not polling, so
+        # it must not answer to is_active=1.
+        if (defined $is_active && length $is_active) {
+            $sql .= " AND (CASE
+                WHEN s.is_active = 0 OR a.is_active = 0 OR t.is_active = 0 THEN 0
+                ELSE 1
+            END) = ?";
+            push @params, $is_active;
+        }
+
+        # Free-text q over what the console displays: description, path
+        # and the target host. % and _ inside $q keep acting as SQL
+        # wildcards, exactly as in monitors.
+        if (defined $q && length $q) {
+            $sql .= " AND (s.description LIKE ? OR s.uri_path LIKE ?"
+                  . " OR t.address LIKE ?)";
+            my $like = "%$q%";
+            push @params, $like, $like, $like;
+        }
+
+        $sql .= " ORDER BY s.description, s.id";
+
+        my $sth = $dbh->prepare($sql);
+        $sth->execute(@params);
+        my $services = $sth->fetchall_arrayref({});
+        $sth->finish;
+        $dbh->disconnect;
+
+        return $c->render(json => {
+            status => 'success',
+            services => $services
+        });
+    };
+
+    # @summary Get service details
+    # @description Public detail behind the SPA service page: the display-safe
+    # field set (identity, URI, schedule and tolerance knobs, the rolled-up
+    # live state) for anonymous visitors, with the auth reference, body and
+    # header map, assertion strings and HTTP method stripped. A caller
+    # presenting a valid Bearer JWT - the signed-in editor - receives the
+    # full configuration row instead, the same access the JWT detail route
+    # has always given signed-in users; the editor prefetches it before a
+    # PUT so a save cannot null the request config it did not receive.
+    # @tags Public API
+    main::get '/service/:id' => sub {
+        my $c = shift;
+        my $id = $c->param('id');
+
+        # Service ids are char(36) UUIDs; same allow-list as /rrd.
+        return $c->render(json => {
+            status => 'error',
+            message => 'Invalid service ID format'
+        }, status => 400) unless $id =~ /\A[0-9a-fA-F-]{36}\z/;
+
+        my $full = _has_valid_bearer($c);
+
+        my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+        my $sth = $dbh->prepare(q{
+            SELECT s.*,
+                   a.name as agent_name,
+                   t.address as target_address
+            FROM services s
+            JOIN agents a ON s.agent_id = a.id
+            JOIN targets t ON s.target_id = t.id
+            WHERE s.id = ?
+        });
+        $sth->execute($id);
+        my $service = $sth->fetchrow_hashref;
+        $sth->finish;
+        $dbh->disconnect;
+
+        unless ($service) {
+            return $c->render(json => {
+                status => 'error',
+                message => 'Service not found'
+            }, status => 404);
+        }
+
+        # Anonymous callers get the display-safe allow-list only. The row
+        # holds no secret (auth resolves to a credential id reference,
+        # spec 5.4), but the assertion strings and request shaping go too.
+        _strip_service_profile($service) unless $full;
+
+        return $c->render(json => {
+            status => 'success',
+            service => $service
+        });
+    };
+
     # @summary Dashboard rollup
     # @description Aggregated health over effectively-active monitors:
     # up (loss below 1%), degraded (1% to 99%), and down (loss at 100%)
     # counts with percents rounded half-up, plus the five slowest links
     # by current median. Down monitors sort last so the slowest slots
     # go to live links first - they already get their own table on the
-    # console page.
+    # console page. Additive service side: the same effectively-active
+    # rule, state-based buckets (UP; DOWN or DISABLED; anything else
+    # unknown) and the five most recently changed down services.
     # @tags Public API
     main::get '/dashboard' => sub {
         my $c = shift;
@@ -485,6 +704,70 @@ sub register_public_endpoints {
             }
         } @top_five;
 
+        # Service side of the rollup, additive to the monitor keys.
+        # Effectively active only - service, agent and target all
+        # enabled, the same CASE the services route applies to its
+        # is_active filter. The buckets are state-based (services
+        # carry no loss model): UP is up, DOWN or DISABLED is down,
+        # and anything else (UNKNOWN, NULL) is unknown - counted in
+        # the total, in neither bucket.
+        my $svc_dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
+        my $svc_sth = $svc_dbh->prepare(q{
+            SELECT
+                s.id, s.description, s.agent_id, s.target_id,
+                s.last_state, s.last_status_code, s.last_reason,
+                s.last_check, s.last_change,
+                a.name as agent_name,
+                t.address as target_address
+            FROM services s
+            JOIN agents a ON s.agent_id = a.id
+            JOIN targets t ON s.target_id = t.id
+            WHERE (CASE
+                WHEN s.is_active = 0 OR a.is_active = 0 OR t.is_active = 0 THEN 0
+                ELSE 1
+            END) = 1
+        });
+        $svc_sth->execute();
+        my $services = $svc_sth->fetchall_arrayref({});
+        $svc_sth->finish;
+        $svc_dbh->disconnect;
+
+        my ($services_up, $services_down, $services_unknown) = (0, 0, 0);
+        for my $s (@$services) {
+            my $state = uc($s->{last_state} // '');
+            if    ($state eq 'UP')                            { $services_up++ }
+            elsif ($state eq 'DOWN' || $state eq 'DISABLED')  { $services_down++ }
+            else                                              { $services_unknown++ }
+        }
+        my $services_total = scalar @$services;
+
+        # Down services only, most recently changed first; rows with
+        # no last_change timestamp sort last. Five slots, matching the
+        # monitor list's limit above - services_total and
+        # services_down stay authoritative when more than five are
+        # down, and the full listing lives on the services route.
+        my @down_sorted = sort {
+            ($b->{last_change} // '') cmp ($a->{last_change} // '')
+        } grep {
+            my $state = uc($_->{last_state} // '');
+            $state eq 'DOWN' || $state eq 'DISABLED';
+        } @$services;
+        my @down_limited = @down_sorted > 5 ? @down_sorted[0 .. 4] : @down_sorted;
+        my @down_services = map {
+            {
+                id               => $_->{id},
+                description      => $_->{description},
+                agent_id         => $_->{agent_id},
+                target_id        => $_->{target_id},
+                agent_name       => $_->{agent_name},
+                target_address   => $_->{target_address},
+                last_state       => $_->{last_state},
+                last_status_code => _num($_->{last_status_code}),
+                last_reason      => $_->{last_reason},
+                last_check       => $_->{last_check},
+            }
+        } @down_limited;
+
         return $c->render(json => {
             status => 'success',
             dashboard => {
@@ -496,6 +779,11 @@ sub register_public_endpoints {
                 percent_degraded => $pct->($degraded),
                 percent_down     => $pct->($down),
                 top_slow         => \@top_slow,
+                services_up      => $services_up,
+                services_down    => $services_down,
+                services_unknown => $services_unknown,
+                services_total   => $services_total,
+                down_services    => \@down_services,
             },
         });
     };
@@ -527,19 +815,38 @@ sub register_public_endpoints {
             message => 'Invalid monitor ID format'
         }, status => 400) unless $id =~ /\A[0-9a-fA-F-]{36}\z/;
 
-        # Get monitor description from database
+        # Resolve the RRD file and the row that describes it. Monitors
+        # and services share this endpoint but not the filename layout:
+        # monitors use <id>.rrd while services (spec 3.4) use
+        # service-<id>.rrd -- services keep a service- prefix so the two
+        # domains never collide in one flat RRD directory. The reader
+        # tries the monitor layout first so monitor requests keep their
+        # exact prior behaviour, then falls back to the service layout,
+        # and 404s below when neither file exists. $id passed the UUID
+        # allowlist above, so neither concat can escape $datadir.
         my $dbh = DBI->connect(@{$db_config}{qw/dsn username password/}, { RaiseError => 1, AutoCommit => 1 });
-        my $sth = $dbh->prepare("SELECT description FROM monitors WHERE id = ?");
-        $sth->execute($id);
-        my $monitor = $sth->fetchrow_hashref();
-        $dbh->disconnect;
-        
-        my $metric_type = $ds eq 'rtt' ? 'Response Time: ' : 'Packet Loss: ';
-        my $monitor_name = ($monitor && $monitor->{description}) ? $monitor->{description} : $id;
-        my $title = $metric_type . $monitor_name;
-        # $id passed the UUID allowlist above, so this concat cannot
-        # escape $datadir.
         my $rrdfile = $datadir . '/' . $id . '.rrd';
+        my $row;
+        if (-f $rrdfile) {
+            # Monitor layout: description lookup unchanged.
+            my $sth = $dbh->prepare("SELECT description FROM monitors WHERE id = ?");
+            $sth->execute($id);
+            $row = $sth->fetchrow_hashref();
+        }
+        else {
+            # Service layout: description comes from the services table.
+            $rrdfile = $datadir . '/service-' . $id . '.rrd';
+            if (-f $rrdfile) {
+                my $sth = $dbh->prepare("SELECT description FROM services WHERE id = ?");
+                $sth->execute($id);
+                $row = $sth->fetchrow_hashref();
+            }
+        }
+        $dbh->disconnect;
+
+        my $metric_type = $ds eq 'rtt' ? 'Response Time: ' : 'Packet Loss: ';
+        my $monitor_name = ($row && $row->{description}) ? $row->{description} : $id;
+        my $title = $metric_type . $monitor_name;
         
         # Check if RRD file exists
         return $c->render(json => {

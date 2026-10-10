@@ -5,23 +5,28 @@
  * the slim toolbar carries no second title (the nav already
  * underlines Dashboard, so "bundled vue" and the page h1 are gone),
  * the page orders toolbar → agent chips → compact search → rollup
- * donut → down table, the rollup renders as an inline SVG donut (no
+ * donut → down tables, the rollup renders as an inline SVG donut (no
  * chart library) with the total in its hole and a counts legend —
- * or a muted note when the estate is empty — inactive agents are
- * dropped, names link into the SPA detail pages carrying the row's
- * uuids, and when one endpoint fails the page says so with a banner
- * and an error note — without wiping the numbers the healthy
- * endpoints still delivered. The old top-5-slowest table is gone, so
- * the down table is the only one until the embedded MonitorSearch is
- * used; compact mode asks for nothing until a term is submitted, then
- * renders the /monitors?q= sweep with its stats line, dimmed inactive
- * rows and detail links.
+ * or a muted note when the estate is empty — a second services ring
+ * reads the same payload's service counts, each donut names itself
+ * with a leading sec-label the empty state keeps, the down-services
+ * table mirrors the down-monitors one (and both show an honest empty
+ * state when a payload from an api build without the services keys
+ * arrives),
+ * inactive agents are dropped, names link into the SPA detail pages
+ * carrying the row's uuids, and when one endpoint fails the page says
+ * so with a banner and an error note — without wiping the numbers the
+ * healthy endpoints still delivered. The old top-5-slowest table is
+ * gone, so the down tables are the only ones until the embedded
+ * MonitorSearch is used; compact mode asks for nothing until a term is
+ * submitted, then renders the /monitors?q= and /services?q= sweeps with
+ * the stats line, dimmed inactive rows and detail links.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import DashboardView from '../components/DashboardView.vue'
-import { A1, downBody, jsonReply, localStamp, M7, makeFetchStub, T5 } from './stubs'
+import { A1, downBody, jsonReply, localStamp, M7, makeFetchStub, S1, T5 } from './stubs'
 import { fmtDownSince } from '../format'
 
 enableAutoUnmount(afterEach)
@@ -35,9 +40,11 @@ afterEach(() => {
  * looking at the DOM. Options is read on every fetch, so a test can
  * flip endpoints to failing between two refreshes. The dashboard's
  * three endpoints answer through the shared stub; the embedded
- * search's /monitors?q=<term> sweep is answered here too, from
- * options.search (options.failSearch makes it throw) — the ?q= urls
- * never collide with the down-list's current_loss filter. */
+ * search's two sweeps for one submitted term (/monitors?q= and
+ * /services?q=) are answered here too, from options.search and
+ * options.searchServices (options.failSearch / options.failSvcSearch
+ * make either throw) — the ?q= urls never collide with the down-list's
+ * current_loss filter. */
 async function mountDashboard(options = {}) {
     const router = createRouter({
         history: createMemoryHistory(),
@@ -48,7 +55,11 @@ async function mountDashboard(options = {}) {
             { path: '/targets', name: 'targets', component: { render: () => null } },
             { path: '/monitors/:id', name: 'monitor', component: { render: () => null }, props: true },
             { path: '/agents/:id', name: 'agent', component: { render: () => null }, props: true },
-            { path: '/targets/:id', name: 'target', component: { render: () => null }, props: true }
+            { path: '/targets/:id', name: 'target', component: { render: () => null }, props: true },
+            // The down-services rows link the service detail page, so
+            // the twin carries it the way production's route table does.
+            { path: '/services', name: 'services', component: { render: () => null } },
+            { path: '/services/:id', name: 'service', component: { render: () => null }, props: true }
         ]
     })
     await router.push('/')
@@ -59,6 +70,10 @@ async function mountDashboard(options = {}) {
         if (url.startsWith('/cgi-bin/api/monitors?q=')) {
             if (options.failSearch) throw options.failSearch
             return jsonReply(options.search || { status: 'success', monitors: [] })
+        }
+        if (url.startsWith('/cgi-bin/api/services?q=')) {
+            if (options.failSvcSearch) throw options.failSvcSearch
+            return jsonReply(options.searchServices || { status: 'success', services: [] })
         }
         return inner(url)
     })
@@ -97,6 +112,24 @@ function searchBody() {
     }
 }
 
+/* The services half of the same term: one live hit with a real port
+ * override and one disabled service under no agent, so the uri cell,
+ * the state chips, the dim pass and every link rule get exercised on
+ * the service table too. Uuid-shaped like the fake estate (services
+ * dddddddd-). */
+const SS1 = 'dddddddd-0000-4000-8000-000000000021'
+const SS2 = 'dddddddd-0000-4000-8000-000000000022'
+
+function searchServicesBody() {
+    return {
+        status: 'success',
+        services: [
+            { id: SS1, description: 'payments health', agent_id: SA1, agent_name: 'edge-a', target_id: ST1, target_address: 'hq-gw.example', scheme: 'https', port: 8443, uri_path: '/health', uri_query: '', last_state: 'UP', last_check: '2026-09-07 20:01:00', is_active: 1 },
+            { id: SS2, description: null, agent_id: null, agent_name: 'edge-b', target_id: ST2, target_address: 'legacy-gw.example', scheme: 'http', port: 0, uri_path: '/', uri_query: '', last_state: 'DOWN', last_check: null, is_active: 0 }
+        ]
+    }
+}
+
 /* Assert the page's section order: every listed element must sit
  * before the next one in the document (4 = Node.DOCUMENT_POSITION_
  * FOLLOWING). */
@@ -119,9 +152,9 @@ describe('DashboardView with a healthy api', () => {
 
         // No banner when everything came back.
         expect(wrapper.find('.banner').exists()).toBe(false)
-        // The top-5-slowest panel is gone; only the down table remains.
+        // The top-5-slowest panel is gone; the down tables remain.
         expect(wrapper.text()).not.toContain('top 5 slowest')
-        expect(wrapper.findAll('tbody')).toHaveLength(1)
+        expect(wrapper.findAll('tbody')).toHaveLength(2)
     })
 
     it('keeps the toolbar slim: no second dashboard title anywhere', async () => {
@@ -153,6 +186,12 @@ describe('DashboardView with a healthy api', () => {
             '.pie-row',
             'section.panel:not(.search-compact)'
         ])
+
+        // The two down tables close the page in order: monitors first,
+        // services mirrored under it, same panel chrome for both.
+        const panels = wrapper.findAll('section.panel')
+        expect(panels[1].find('h2').text()).toBe('down monitors')
+        expect(panels[2].find('h2').text()).toBe('down services')
     })
 
     it('renders the rollup as an svg donut with the counts beside it', async () => {
@@ -181,6 +220,102 @@ describe('DashboardView with a healthy api', () => {
         expect(legend.find('.legend-up .legend-num').text()).toBe('7')
         expect(legend.find('.legend-degraded .legend-num').text()).toBe('2')
         expect(legend.find('.legend-down .legend-num').text()).toBe('1')
+
+        // Both donuts carry their naming label as the cluster's first
+        // child — the empty state relies on that order staying put, so
+        // the structure is pinned here in the healthy render too.
+        const monLabel = wrapper.find('.pie-mon .sec-label')
+        expect(monLabel.exists()).toBe(true)
+        expect(monLabel.text()).toBe('monitors')
+        expect(monLabel.element).toBe(wrapper.find('.pie-mon').element.firstElementChild)
+        expect(wrapper.find('.pie-svc .sec-label').text()).toBe('services')
+    })
+
+    it('renders the services ring and down-services table from the same payload', async () => {
+        const base = Date.now()
+        const checked = localStamp(2 * 60000, base)
+        const { wrapper } = await mountDashboard({
+            dashboard: {
+                status: 'success',
+                dashboard: {
+                    total: 1, up: 1, degraded: 0, down: 0,
+                    percent_up: 100, percent_degraded: 0, percent_down: 0,
+                    services_total: 4, services_up: 3, services_down: 1,
+                    down_services: [
+                        {
+                            id: S1, description: 'payments portal',
+                            agent_id: A1, agent_name: 'edge-a',
+                            target_id: T5, target_address: 'branch-gw.example',
+                            last_state: 'DOWN', last_status_code: 503,
+                            last_reason: 'http_status', last_check: checked
+                        }
+                    ]
+                }
+            }
+        })
+
+        // Second ring, same arc math: 3 of 4 services up paints three
+        // quarters of the circumference, the down quarter follows it,
+        // and the services total sits in the hole like the monitor's.
+        const cluster = wrapper.find('.pie-svc')
+        const svcPie = cluster.find('svg.pie')
+        expect(svcPie.exists()).toBe(true)
+        expect(svcPie.attributes('aria-label')).toBe('up 3, down 1 of 4 services')
+        expect(svcPie.find('.pie-total').text()).toBe('4')
+        const svcUp = svcPie.find('.slice-up')
+        expect(svcUp.attributes('stroke-dasharray')).toBe('75 25')
+        expect(svcUp.attributes('stroke-dashoffset')).toBe('25')
+        const svcDown = svcPie.find('.slice-down')
+        expect(svcDown.attributes('stroke-dasharray')).toBe('25 75')
+        expect(svcDown.attributes('stroke-dashoffset')).toBe('-50')
+        expect(cluster.find('.legend-up .legend-num').text()).toBe('3')
+        expect(cluster.find('.legend-down .legend-num').text()).toBe('1')
+
+        // Down-services row mirrors the down-monitors linking: every
+        // name with an id opens its detail page, the state chip reads
+        // DOWN in the danger color with the reason on hover.
+        const svcPanel = wrapper.findAll('section.panel')[2]
+        const svcRows = svcPanel.findAll('tbody tr')
+        expect(svcRows).toHaveLength(1)
+        const cells = svcRows[0].findAll('td')
+        expect(cells[0].find('a').attributes('href')).toBe('/services/' + S1)
+        expect(cells[0].text()).toBe('payments portal')
+        expect(cells[1].find('a').attributes('href')).toBe('/agents/' + A1)
+        expect(cells[2].find('a').attributes('href')).toBe('/targets/' + T5)
+        const chip = cells[3].find('.chip')
+        expect(chip.classes()).toContain('chip-danger')
+        expect(chip.text()).toBe('DOWN')
+        expect(chip.attributes('title')).toBe('http_status')
+        expect(cells[4].text()).toBe('503')
+        // The last-check stamp reformats through the same helper the
+        // down-since column uses.
+        expect(cells[5].text()).toBe(fmtDownSince(checked))
+    })
+
+    it('shows zeros and empty states, not a throw, when the api predates services', async () => {
+        const { wrapper } = await mountDashboard({
+            dashboard: {
+                status: 'success',
+                dashboard: {
+                    total: 1, up: 1, degraded: 0, down: 0,
+                    percent_up: 100, percent_degraded: 0, percent_down: 0
+                }
+            }
+        })
+
+        // No services keys in the rollup: the monitor donut still
+        // renders untouched, the services cluster says so instead of
+        // drawing an empty ring, the down-services table opens with its
+        // honest empty row — and nothing banners or blanks the page.
+        expect(wrapper.find('svg.pie').exists()).toBe(true)
+        expect(wrapper.find('.pie-svc svg').exists()).toBe(false)
+        expect(wrapper.find('.pie-svc').text()).toContain('no services tracked yet')
+        // The services label is part of the empty state, not hidden
+        // behind the ring's v-if.
+        expect(wrapper.find('.pie-svc .sec-label').text()).toBe('services')
+        expect(wrapper.findAll('section.panel')[2].find('tbody').text())
+            .toContain('no down services')
+        expect(wrapper.find('.banner').exists()).toBe(false)
     })
 
     it('shows a muted note, not a broken pie, when the rollup is empty', async () => {
@@ -196,6 +331,9 @@ describe('DashboardView with a healthy api', () => {
 
         expect(wrapper.find('svg.pie').exists()).toBe(false)
         expect(wrapper.find('.pie-row').text()).toContain('no monitors')
+        // The naming rides out the empty estate: the label sits above
+        // the muted note, not inside the template branch.
+        expect(wrapper.find('.pie-mon .sec-label').text()).toBe('monitors')
     })
 
     it('shows only active agents as chips', async () => {
@@ -218,10 +356,10 @@ describe('DashboardView with a healthy api', () => {
         const base = Date.now()
         const { wrapper } = await mountDashboard({ down: downBody(base) })
 
-        // Only the down table exists now: the compact search panel
-        // stays rowless until a term is submitted.
+        // The compact search panel stays rowless until a term is
+        // submitted, so the two down tables are the only bodies now.
         const bodies = wrapper.findAll('tbody')
-        expect(bodies).toHaveLength(1)
+        expect(bodies).toHaveLength(2)
 
         // Down table: four hours down paints warn, six hours danger,
         // and the since/duration cells come from the formatters.
@@ -291,13 +429,13 @@ describe('DashboardView embedded search panel', () => {
         expect(wrapper.find('form.search-form').exists()).toBe(true)
         expect(wrapper.find('.search-compact h2').exists()).toBe(false)
         expect(wrapper.find('.search-hint').exists()).toBe(false)
-        expect(wrapper.findAll('tbody')).toHaveLength(1)
+        expect(wrapper.findAll('tbody')).toHaveLength(2)
 
         // An empty (or whitespace) submit is a no-op, matching what
         // the classic page does with a blank term.
         await searchFor(wrapper, '   ')
         expect(stub).toHaveBeenCalledTimes(3)
-        expect(wrapper.findAll('tbody')).toHaveLength(1)
+        expect(wrapper.findAll('tbody')).toHaveLength(2)
     })
 
     it('renders the sweep with stats, dimming and detail links', async () => {
@@ -307,9 +445,9 @@ describe('DashboardView embedded search panel', () => {
 
         expect(stub.mock.calls.some((c) => c[0] === '/cgi-bin/api/monitors?q=hq')).toBe(true)
 
-        // The results table rides above the down table.
+        // The results table rides above the down tables.
         const bodies = wrapper.findAll('tbody')
-        expect(bodies).toHaveLength(2)
+        expect(bodies).toHaveLength(3)
         expect(wrapper.text()).toContain('2 results')
         expect(wrapper.text()).toContain('1 effectively active')
         expect(wrapper.text()).toContain('1 effectively inactive')
@@ -331,6 +469,78 @@ describe('DashboardView embedded search panel', () => {
 
         // The dashboard's own rollup is untouched by the sweep.
         expect(wrapper.find('svg.pie').exists()).toBe(true)
+
+        // Default stub services answer empty: the stats line still
+        // reports the zero, and no services table renders for it.
+        expect(wrapper.text()).toContain('0 services')
+        expect(wrapper.find('.svc-label').exists()).toBe(false)
+    })
+
+    it('adds the services sweep: each hit links its service detail route', async () => {
+        const { wrapper, stub } = await mountDashboard({
+            search: searchBody(),
+            searchServices: searchServicesBody()
+        })
+
+        await searchFor(wrapper, 'hq')
+
+        expect(stub.mock.calls.some((c) => c[0] === '/cgi-bin/api/services?q=hq')).toBe(true)
+
+        // One stats line covers both halves of the sweep, and the
+        // services table rides under the monitor one — four bodies now:
+        // sweep tables, then the two down tables.
+        const bodies = wrapper.findAll('tbody')
+        expect(bodies).toHaveLength(4)
+        expect(wrapper.text()).toContain('2 results')
+        expect(wrapper.text()).toContain('2 services')
+
+        const rows = bodies[1].findAll('tr')
+        expect(rows).toHaveLength(2)
+        // Live service: uri carries the port override, state chip reads
+        // UP, and every named cell opens its detail page.
+        expect(rows[0].text()).toContain('payments health')
+        expect(rows[0].text()).toContain('https://hq-gw.example:8443/health')
+        expect(rows[0].text()).toContain('2026-09-07 20:01:00')
+        expect(rows[0].find('.chip').classes()).toContain('chip-ok')
+        expect(rows[0].findAll('td a').map((a) => a.attributes('href'))).toEqual([
+            '/services/' + SS1, '/agents/' + SA1, '/targets/' + ST1
+        ])
+        // Disabled service keeps its place, dimmed, state still
+        // readable; a blank description falls back to the id and only
+        // the cells that carry an id link anywhere.
+        expect(rows[1].classes()).toContain('dim')
+        expect(rows[1].find('.chip').classes()).toContain('chip-danger')
+        expect(rows[1].find('.chip').text()).toBe('DOWN')
+        expect(rows[1].text()).toContain(SS2)
+        expect(rows[1].text()).toContain('http://legacy-gw.example/')
+        expect(rows[1].findAll('td a').map((a) => a.attributes('href'))).toEqual([
+            '/services/' + SS2, '/targets/' + ST2
+        ])
+    })
+
+    it('names a failed services sweep without hiding the monitor hits', async () => {
+        const { wrapper } = await mountDashboard({
+            search: searchBody(),
+            failSvcSearch: new Error('HTTP 500')
+        })
+
+        await searchFor(wrapper, 'hq')
+
+        const note = wrapper.find('.search-compact .err-note')
+        expect(note.exists()).toBe(true)
+        expect(note.text()).toContain('service search failed')
+        expect(note.text()).toContain('HTTP 500')
+
+        // The monitor half stands untouched — its table keeps its rows
+        // and the stats line just drops the services count — while no
+        // services table appears either.
+        const bodies = wrapper.findAll('tbody')
+        expect(bodies).toHaveLength(3)
+        expect(bodies[0].text()).toContain('hq uplink')
+        const stats = wrapper.find('.search-compact p.muted')
+        expect(stats.text()).toContain('2 results')
+        expect(stats.text()).not.toContain('services')
+        expect(wrapper.find('.svc-label').exists()).toBe(false)
     })
 
     it('names a failed sweep without disturbing the dashboard', async () => {
@@ -343,7 +553,7 @@ describe('DashboardView embedded search panel', () => {
         expect(note.text()).toContain('search failed')
         expect(note.text()).toContain('HTTP 503')
         // The failed sweep hides its table and leaves the rollup alone.
-        expect(wrapper.findAll('tbody')).toHaveLength(1)
+        expect(wrapper.findAll('tbody')).toHaveLength(2)
         expect(wrapper.find('svg.pie').exists()).toBe(true)
     })
 })

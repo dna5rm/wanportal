@@ -22,9 +22,25 @@ export function fmtDownSince(s) {
     return m ? m[2] + '/' + m[3] + ' ' + m[4] + ':' + m[5] + ':' + m[6] : (s || '-');
 }
 
+/* The api writes naive UTC stamps — '2026-08-03 01:03:04', straight
+ * from a db and container that run UTC. Parsing a bare string like
+ * that reads it as the viewer's own wall clock, so the duration math
+ * drifted by the tab's zone: a Manila viewer padded every down time
+ * by its own +8h (a fresh outage read '8h'), a west-of-GMT one shaved
+ * it down. Tagging the zone before Date.parse puts the math back on
+ * real elapsed time; stamps that already carry a zone parse as-is.
+ * Junk and empty strings return NaN so callers keep their dash and
+ * no-color fallbacks. */
+export function parseApiUtc(s) {
+    const str = String(s || '');
+    if (!/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(str)) return NaN;
+    return Date.parse(str.replace(' ', 'T') +
+        (/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(str) ? '' : 'Z'));
+}
+
 /* Human duration since a down event: minutes, then hours, then days. */
 export function downAge(s) {
-    const t = Date.parse((s || '').replace(' ', 'T'));
+    const t = parseApiUtc(s);
     if (isNaN(t)) return '-';
     const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
     if (mins < 60) return mins + 'm';
@@ -34,7 +50,7 @@ export function downAge(s) {
 }
 
 export function downRowClass(m) {
-    const t = Date.parse((m.last_down || '').replace(' ', 'T'));
+    const t = parseApiUtc(m.last_down);
     if (isNaN(t)) return '';
     const hours = (Date.now() - t) / 3600000;
     if (hours >= DANGER_HOURS) return 'row-danger';
@@ -43,7 +59,7 @@ export function downRowClass(m) {
 }
 
 export function agentClass(a) {
-    const t = Date.parse((a.last_seen || '').replace(' ', 'T'));
+    const t = parseApiUtc(a.last_seen);
     if (!isNaN(t) && (Date.now() - t) > AGENT_STALE_MS) return 'chip-stale';
     return 'chip-ok';
 }

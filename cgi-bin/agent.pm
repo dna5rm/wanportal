@@ -95,7 +95,15 @@ sub register_agent {
         # Password is secret material (audit item 7): only admins may
         # read it back. Non-admin tokens get the agent without it.
         my $is_admin = $c->stash('jwt_payload') && $c->stash('jwt_payload')->{is_admin};
-        my $fields = 'id, name, address, description, last_seen, is_active';
+        # agent_version + supports_services are the agent's check-in facts
+        # (spec I3/6.2): agent_version is parsed from the User-Agent of
+        # every authenticated agent contact (agent_checkin.pm, both agent
+        # modules); supports_services is derived from the agent's first
+        # authenticated contact with the services module. Not secret -
+        # safe for any authenticated caller. The defaults
+        # (supports_services 0 / agent_version NULL) read as an agent
+        # that has not checked in since the feature landed.
+        my $fields = 'id, name, address, description, last_seen, is_active, agent_version, supports_services';
         $fields .= ', password' if $is_admin;
         
         my $sth = $dbh->prepare("SELECT $fields FROM agents WHERE id = ?");

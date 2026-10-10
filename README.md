@@ -10,11 +10,13 @@ per monitor. The operator UI is a Vue 3 single-page app.
   `htdocs/classic/` and served at `/classic`. Archive-only: no new features;
   parity work happens in the SPA.
 - **API** — `cgi-bin/api`, aliased at `/cgi-bin/`. The public topology
-  endpoints (`/agents`, `/targets`, `/monitors`, `/rrd`) and the agent
-  polling endpoints are unauthenticated; every mutating and credential route
-  needs a JWT. The spec is `api-docs/openapi.yaml`, browsable in Swagger UI
-  at `/api-docs/` and in-app at `/#/api`; operator guides render at
-  `/#/guides/<file>`.
+  endpoints (`/agents`, `/targets`, `/monitors`, `/services`, `/rrd`) and the
+  agent polling endpoints are unauthenticated; every mutating and credential
+  route needs a JWT, as does the gated `/runtime-stats` readout (host
+  metrics and monitoring freshness) the deliberately minimal public
+  `/health` must not expose. The spec is `api-docs/openapi.yaml`, browsable
+  in Swagger UI at `/api-docs/` and in-app at `/#/api`; operator guides
+  render at `/#/guides/<file>`.
 
 ## Layout
 
@@ -97,14 +99,80 @@ and check that the served `index.html` references the new bundle hash.
 
 The probe agent ships as a cron container (Alpine + crond +
 `netping-agent.pl`). Build it from the repo root with `./agent/build_agent.sh`
-— that tags `netping:<date>` + `netping:latest` and packages
+— that tags `netping:<agent version>` (read from the script at build time),
+`netping:<date>` and `netping:latest`, and packages
 `htdocs/assets/netping_latest.tar.gz` for download. Run it with `--network
 host` and the `SERVER` / `PASSWORD` / `AGENT_ID` env vars. Build/run details
 and variants: [agent/README.md](agent/README.md).
 
 `notify/` is a separate thing: alert jobs — down/clear email via SMTP (when
 the SMTP vars are set) and push via an ntfy server — that run inside the
-wanportal container, not field agents.
+wanportal container, not field agents. The email alerting covers services
+alongside reachability monitors: services track their own down/clear state
+in a separate state file, under the same DOWN_THRESHOLD and exclude-word
+rules, and get their own sections in the email with links into the SPA's
+`#/services/<id>` routes; the ntfy push stays monitor-only.
+
+## Services
+
+Alongside the reachability monitors the agent can run **service checks**
+against the same targets: an HTTP(S) probe defined by a URI
+(scheme/port/path/query on the target host), a request method, headers,
+a body, an expected-status range and F5-style send/receive/disable
+assertion strings (substring match by default, regex opt-in). A monitor
+answers "is the host reachable and how far away is it"; a service
+answers "did the application return the right thing". Services live in
+their own `services` table and RRD layout — no monitor code path is
+touched.
+
+The agent contract is a second endpoint pair, deliberately separate
+from `/agent/:id/monitors`:
+
+- An upgraded agent polls `GET /agent/:id/services` for due checks and
+  POSTs results to the same path, authenticated with the same agent
+  password as the monitor endpoints, after its monitor cycle.
+- The agent's version rides the `NetPing-Agent/<version>` User-Agent
+  header on every request (set once at LWP construction, so even a
+  0.1.0 agent needs no upgrade), and the portal records it on every
+  authenticated check-in - monitor or services, GET or POST. A request
+  without a valid header writes nothing, so a stored version is
+  refreshed, never cleared. Capability is derived, not declared: an
+  agent's first authenticated contact with the services module sets
+  `supports_services=1`. Body keys `supports_services` / `version` are
+  accepted and ignored.
+- An un-upgraded agent never calls the services endpoint, so old agents
+  keep working unchanged — version skew is handled by the endpoint's
+  existence, not a capability gate. A service assigned to an agent that
+  has not yet contacted the services module never polls: it stays
+  UNKNOWN, and the UI explains it as `agent_unsupported`.
+- A new agent against an older portal gets a 404 on the services fetch
+  and finishes its reachability cycle anyway; a result POST carrying
+  unknown extra fields is ignored, not rejected.
+
+HTTPS service checks need `LWP::Protocol::https` (packages
+`perl-libwww` + `perl-lwp-protocol-https`): without the protocol
+handler LWP fails every `https://` probe with a bogus 501, not a TLS
+error. The stack image ships both because the LOCAL polling agent runs
+inside the wanportal container, and `agent/Dockerfile` already declares
+them for the field agent image — no package work is needed when you
+rebuild it with `./agent/build_agent.sh`.
+
+Service authentication is reference-only: a service stores
+`auth_credential_id`, a pointer into the same credentials vault the
+rest of the API uses — never an inline secret. The portal resolves the
+credential when the agent fetches its services and delivers the secret
+over the same HTTPS channel the agent password already travels; the
+agent uses it only to build request headers and scrubs every form of
+it (raw string, base64, Basic pair, Bearer payload) out of its logs.
+Attaching a HIGH or CRITICAL sensitivity credential to a service
+requires an admin (403).
+
+The read/write split mirrors the topology endpoints: `GET /services`
+and `GET /service/:id` are public reads, with anonymous responses
+reduced to a display-safe allow-list (the credential reference,
+assertion strings, headers and request body are stripped). Creating,
+updating, deleting and resetting services are JWT routes, admin-only
+(403 otherwise). All routes are in `api-docs/openapi.yaml`.
 
 ## Tests
 

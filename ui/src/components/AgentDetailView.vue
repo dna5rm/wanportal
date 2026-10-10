@@ -1,13 +1,16 @@
 <!--
   Agent detail page, ported from agent.php: identity card,
   the four monitor counters, and the agent's monitor table with current
-  median/loss per row. The edit button opens the in-app agent form;
-  the delete button (admin tokens only, like the api) is the one
+  median/loss per row. Below the monitors sit the agent's services,
+  SPA-only (spec §8.4): their own counters and a table of the HTTP/S
+  checks bound to this agent. The edit button opens the in-app agent
+  form; the delete button (admin tokens only, like the api) is the one
   mutation offered here.
 
-  The detail lookup and the monitor listing are fetched independently:
-  if the listing fails the identity card still shows, and the table
-  says it failed instead of implying the agent monitors nothing.
+  The detail lookup, the monitor listing and the services listing are
+  fetched independently: if a listing fails the identity card still
+  shows, and the table and its counters say which list failed instead
+  of implying the agent monitors nothing.
 -->
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
@@ -35,7 +38,8 @@ const agentId = computed(() => idFromLocation(props.id))
 
 const agent = ref(null)
 const mons = ref(null)          // null = not loaded / failed; [] = genuinely none
-const errors = reactive({ detail: null, mons: null })
+const svcs = ref(null)          // same convention as mons, for the services list
+const errors = reactive({ detail: null, mons: null, svcs: null })
 const loading = ref(false)
 const lastOk = ref(null)
 const session = ref(null)
@@ -67,12 +71,16 @@ async function fetchAll() {
     }
     errors.detail = null
     errors.mons = null
+    errors.svcs = null
     loading.value = true
 
-    /* Both calls at once; each one succeeds or fails on its own. */
-    const [agentR, monsR] = await Promise.allSettled([
+    /* All three calls at once; each one succeeds or fails on its own.
+     * The services list narrows by agent server-side — the api's
+     * agent_id filter exists for exactly this page. */
+    const [agentR, monsR, svcsR] = await Promise.allSettled([
         getJson('/cgi-bin/api/agents/' + encodeURIComponent(agentId.value)),
-        getJson('/cgi-bin/api/monitors?agent_id=' + encodeURIComponent(agentId.value))
+        getJson('/cgi-bin/api/monitors?agent_id=' + encodeURIComponent(agentId.value)),
+        getJson('/cgi-bin/api/services?agent_id=' + encodeURIComponent(agentId.value))
     ])
 
     if (agentR.status === 'fulfilled') {
@@ -92,6 +100,13 @@ async function fetchAll() {
     } else {
         mons.value = null
         errors.mons = (monsR.reason && monsR.reason.message) || 'unknown error'
+    }
+
+    if (svcsR.status === 'fulfilled') {
+        svcs.value = svcsR.value.services || []
+    } else {
+        svcs.value = null
+        errors.svcs = (svcsR.reason && svcsR.reason.message) || 'unknown error'
     }
 
     loading.value = false
@@ -127,9 +142,14 @@ async function deleteAgent() {
 
 /* Same counter rules as agent.php: a row is active only when the
  * combined flag is on and this agent is itself active; the own-flag
- * count tracks monitors that are individually disabled. */
+ * count tracks monitors that are individually disabled. The services
+ * follow the same effective-active rule with their single own flag:
+ * a service polls only when its own flag is on and this agent is
+ * active, and the own-flag count tracks individually disabled
+ * services. */
 const stats = computed(() => {
     const rows = mons.value || []
+    const srows = svcs.value || []
     const agentOn = agent.value && Number(agent.value.is_active) === 1
     let active = 0
     let ownInactive = 0
@@ -140,11 +160,23 @@ const stats = computed(() => {
             if (Number(m.monitor_is_active) !== 1) ownInactive++
         }
     }
+    let svcActive = 0
+    let svcOwnInactive = 0
+    for (const s of srows) {
+        if (Number(s.is_active) === 1 && agentOn) {
+            svcActive++
+        } else {
+            if (Number(s.is_active) !== 1) svcOwnInactive++
+        }
+    }
     return {
         total: rows.length,
         active,
         ownInactive,
-        effInactive: rows.length - active
+        effInactive: rows.length - active,
+        totalServices: srows.length,
+        activeServices: svcActive,
+        inactiveServices: svcOwnInactive
     }
 })
 
@@ -157,6 +189,58 @@ function rowActiveOn(m) {
 const visibleMons = computed(() =>
     (mons.value || []).filter((m) => showInactive.value || rowActiveOn(m))
 )
+
+/* Service rows come from the services list api, whose is_active is the
+ * service's own flag — this page's agent is their agent, so a row is
+ * effectively active when its own flag is on and the agent is active.
+ * The same rule drives the service counters, the toggle filter and the
+ * row styling; nothing here re-checks the target. */
+function svcActiveOn(s) {
+    return !!(agent.value && Number(agent.value.is_active) === 1
+        && Number(s.is_active) === 1)
+}
+
+/* Why a service row is not effectively active, in the monitor table's
+ * wording — one convention for every table on this page. */
+function svcReasons(s) {
+    const why = []
+    if (!s || Number(s.is_active) !== 1) why.push('Service disabled')
+    if (!agent.value || Number(agent.value.is_active) !== 1) why.push('Agent disabled')
+    return why
+}
+
+const visibleSvcs = computed(() =>
+    (svcs.value || []).filter((s) => showInactive.value || svcActiveOn(s))
+)
+
+/* The rolled-up check state, from the agent's last report — the same
+ * chip the services listing renders: UP green, DOWN red, and everything
+ * else (DISABLED, UNKNOWN, a missing value) amber, so an unreadable
+ * state never renders as healthy. */
+function stateChipCls(s) {
+    const st = String(s.last_state || 'UNKNOWN')
+    if (st === 'UP') return 'chip chip-ok'
+    if (st === 'DOWN') return 'chip chip-danger'
+    return 'chip chip-warn'
+}
+
+/* scheme://host[:port]/path[?query] — the port only prints when the
+ * service overrides the scheme default (0 means default), the same way
+ * the agent builds the URL it probes. */
+function uriText(s) {
+    const port = Number(s.port)
+    return String(s.scheme || '') + '://' + (s.target_address || '')
+        + (port ? ':' + port : '')
+        + (s.uri_path || '/') + (s.uri_query ? '?' + s.uri_query : '')
+}
+
+/* Service stamps render minute-resolution with the full value in a
+ * tooltip, as the services listing does; a check that never ran says
+ * so instead of dressing the gap up as a dash. */
+function fmtStamp(s) {
+    const m = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/.exec(s || '')
+    return m ? m[1] + ' ' + m[2] : (s || '')
+}
 
 const heartbeatStale = computed(() =>
     agent.value ? agentClass(agent.value) === 'chip-stale' : false
@@ -204,6 +288,18 @@ const heartbeatStale = computed(() =>
                 <div class="kv"><span class="k">id</span><span class="v mono wrap">{{ agent.id }}</span></div>
                 <div class="kv"><span class="k">address</span><span class="v mono">{{ agent.address || '-' }}</span></div>
                 <div class="kv"><span class="k">description</span><span class="v">{{ agent.description || '-' }}</span></div>
+                <!-- capability is self-declared on the periodic fetch the
+                     agent already makes (spec §6.2): a missing version is
+                     an agent that never declared one — announced as
+                     "not reported" (the same wording the netping header
+                     uses) rather than a bare "-", so the absence states
+                     itself instead of reading as broken data; missing
+                     support is the old monitor-only agent -->
+                <div class="kv"><span class="k">version</span><span class="v mono">{{ agent.agent_version || 'not reported' }}</span></div>
+                <div class="kv">
+                    <span class="k">service checks</span>
+                    <span class="v">{{ Number(agent.supports_services) === 1 ? 'supported' : 'not supported' }}</span>
+                </div>
                 <div class="kv">
                     <span class="k">status</span>
                     <span class="v">
@@ -226,6 +322,12 @@ const heartbeatStale = computed(() =>
                     <div class="kv"><span class="k">inactive monitors</span><span class="v">{{ stats.ownInactive }}</span></div>
                     <div class="kv"><span class="k">effectively inactive</span><span class="v">{{ stats.effInactive }}</span></div>
                     <div class="kv"><span class="k">total monitors</span><span class="v">{{ stats.total }}</span></div>
+                </template>
+                <div v-if="errors.svcs" class="err-note block">service list failed — counts not shown</div>
+                <template v-else>
+                    <div class="kv"><span class="k">active services</span><span class="v">{{ stats.activeServices }}</span></div>
+                    <div class="kv"><span class="k">inactive services</span><span class="v">{{ stats.inactiveServices }}</span></div>
+                    <div class="kv"><span class="k">total services</span><span class="v">{{ stats.totalServices }}</span></div>
                 </template>
             </section>
         </div>
@@ -282,6 +384,59 @@ const heartbeatStale = computed(() =>
                             </td>
                             <td class="num mono" :title="'last down: ' + stampOr(m.last_down)">
                                 {{ stampOr(m.last_update) }}
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </template>
+            </section>
+
+            <section class="panel">
+                <h2>services</h2>
+                <div v-if="errors.svcs" class="err-note block">
+                    service list fetch failed — this table is not trustworthy ({{ errors.svcs }})
+                </div>
+                <template v-else>
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>service</th>
+                            <th>target</th>
+                            <th>uri</th>
+                            <th>state</th>
+                            <th class="num">last check</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-if="!visibleSvcs.length">
+                            <td colspan="5" class="muted">no services</td>
+                        </tr>
+                        <tr v-for="s in visibleSvcs" :key="s.id" :class="{ inactive: !svcActiveOn(s) }">
+                            <td>
+                                <del v-if="!svcActiveOn(s)">
+                                    <a :href="detailLink('services', s.id)"
+                                       :title="'service ' + s.id">{{ s.description || s.id }}</a>
+                                </del>
+                                <a v-else :href="detailLink('services', s.id)"
+                                   :title="'service ' + s.id">{{ s.description || s.id }}</a>
+                                <span v-if="!svcActiveOn(s)" class="muted small">
+                                    ({{ svcReasons(s).join(', ') || 'inactive' }})
+                                </span>
+                            </td>
+                            <td>{{ s.target_address || '-' }}</td>
+                            <!-- David's sanctioned exception to the
+                                 no-new-tabs rule: the uri cell links the
+                                 live service itself; every other link
+                                 on this page stays in-tab. -->
+                            <td>
+                                <a :href="uriText(s)" target="_blank" rel="noopener noreferrer"
+                                   class="mono" :title="uriText(s)">{{ uriText(s) }}</a>
+                            </td>
+                            <td>
+                                <span class="chip" :class="stateChipCls(s)">{{ s.last_state || 'UNKNOWN' }}</span>
+                            </td>
+                            <td class="num mono" :title="s.last_check || ''">
+                                {{ s.last_check ? fmtStamp(s.last_check) : 'Never' }}
                             </td>
                         </tr>
                         </tbody>
