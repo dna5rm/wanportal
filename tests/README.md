@@ -21,8 +21,8 @@ tests/validate.sh
 ```
 
 `validate.sh` lint-checks Perl, hits live `/health` and login (password
-from container env, never hardcoded), checks `/` is the SPA and `/classic`
-is not a PHP page, then runs `run.sh`.
+from container env, never hardcoded), checks `/` is the SPA, then runs
+`run.sh`.
 
 `tests/perl/openapi_paths.t` requires every `cgi-bin` route to appear in
 `api-docs/openapi.yaml` in the same commit.

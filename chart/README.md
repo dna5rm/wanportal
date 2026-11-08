@@ -1,7 +1,7 @@
 # wanportal Helm chart
 
 K3s-friendly chart for the wanportal dashboard: one pod running the
-Apache/PHP/Perl image with a MariaDB sidecar on 127.0.0.1:3306, exposed
+Apache and Perl image with a MariaDB sidecar on 127.0.0.1:3306, exposed
 through a ClusterIP Service on port 80.
 
 ## Design

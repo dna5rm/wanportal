@@ -13,7 +13,7 @@ in-container alerter; that lives in `../notify/`.
 | `netping-agent.pl` | What ships. HTTPS client, `Net::Ping`. |
 | `run-agent.sh` | Cron wrapper inside the image (`/srv/agent/run-agent.sh`). |
 | `socket-agent.pl` | Raw-socket / DSCP variant. **Not** in the image; run from a checkout. |
-| `netping-legacy.pl` | Old `Net::Ping` fallback. **Not** in the image. |
+| `netping-legacy.pl` | **Not** in the image. |
 | `run-notify.sh` | Compat shim only. Real notify is `../notify/run-notify.sh`. Do not add alert logic here. |
 
 ## Build

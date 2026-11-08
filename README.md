@@ -117,44 +117,41 @@ a body, an expected-status range and F5-style send/receive/disable
 assertion strings (substring match by default, regex opt-in). A monitor
 answers "is the host reachable and how far away is it"; a service
 answers "did the application return the right thing". Services live in
-their own `services` table and RRD layout — no monitor code path is
+their own `services` table and RRD layout; no monitor code path is
 touched.
 
 The agent contract is a second endpoint pair, deliberately separate
 from `/agent/:id/monitors`:
 
-- An upgraded agent polls `GET /agent/:id/services` for due checks and
-  POSTs results to the same path, authenticated with the same agent
-  password as the monitor endpoints, after its monitor cycle.
+- After its monitor cycle the agent polls `GET /agent/:id/services`
+  for due checks and POSTs results to the same path, authenticated
+  with the same agent password as the monitor endpoints.
 - The agent's version rides the `NetPing-Agent/<version>` User-Agent
-  header on every request (set once at LWP construction, so even a
-  0.1.0 agent needs no upgrade), and the portal records it on every
-  authenticated check-in - monitor or services, GET or POST. A request
-  without a valid header writes nothing, so a stored version is
-  refreshed, never cleared. Capability is derived, not declared: an
-  agent's first authenticated contact with the services module sets
-  `supports_services=1`. Body keys `supports_services` / `version` are
-  accepted and ignored.
-- An un-upgraded agent never calls the services endpoint, so old agents
-  keep working unchanged — version skew is handled by the endpoint's
-  existence, not a capability gate. A service assigned to an agent that
-  has not yet contacted the services module never polls: it stays
-  UNKNOWN, and the UI explains it as `agent_unsupported`.
-- A new agent against an older portal gets a 404 on the services fetch
-  and finishes its reachability cycle anyway; a result POST carrying
-  unknown extra fields is ignored, not rejected.
+  header on every request (set once at LWP construction), and the
+  portal records it on every authenticated check-in - monitor or
+  services, GET or POST. A request without a valid header writes
+  nothing, so a stored version is refreshed, never cleared.
+- Capability is derived, not declared: an agent's first authenticated
+  contact with the services module sets `supports_services=1`, and the
+  `supports_services` / `version` body keys the requests carry are
+  accepted and ignored. A service assigned to an agent that has not
+  yet contacted the services module never polls: it stays UNKNOWN,
+  and the UI explains it as `agent_unsupported`.
+- The agent finishes its reachability cycle even when the services
+  fetch answers 404, and a result POST carrying unknown extra fields
+  is ignored, not rejected.
 
 HTTPS service checks need `LWP::Protocol::https` (packages
 `perl-libwww` + `perl-lwp-protocol-https`): without the protocol
 handler LWP fails every `https://` probe with a bogus 501, not a TLS
 error. The stack image ships both because the LOCAL polling agent runs
 inside the wanportal container, and `agent/Dockerfile` already declares
-them for the field agent image — no package work is needed when you
+them for the field agent image, so no package work is needed when you
 rebuild it with `./agent/build_agent.sh`.
 
 Service authentication is reference-only: a service stores
 `auth_credential_id`, a pointer into the same credentials vault the
-rest of the API uses — never an inline secret. The portal resolves the
+rest of the API uses, never an inline secret. The portal resolves the
 credential when the agent fetches its services and delivers the secret
 over the same HTTPS channel the agent password already travels; the
 agent uses it only to build request headers and scrubs every form of

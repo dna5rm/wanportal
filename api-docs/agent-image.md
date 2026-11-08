@@ -14,10 +14,10 @@ back to a wanportal server.
 - Two files from the repository: `agent/netping-agent.pl` and its cron
   wrapper, `agent/run-agent.sh` (installed at `/srv/agent/` in the image)
 
-Nothing else ships. `agent/netping-legacy.pl` and `agent/socket-agent.pl` are
-not included in the image; both run from a repository checkout with the host
-Perl installation when needed (`agent/socket-agent.pl` is the variant that marks
-packets with DSCP/TOS reliably). The image also omits `curl`
+Nothing else ships. `agent/netping-legacy.pl` is not included in the
+image. `agent/socket-agent.pl` is not included either; it runs from a
+repository checkout with the host Perl installation when needed (the
+variant that marks packets with DSCP/TOS reliably). The image also omits `curl`
 and `jq`; API requests are issued from outside the container.
 
 The agent does not verify TLS certificates: `netping-agent.pl` sets
