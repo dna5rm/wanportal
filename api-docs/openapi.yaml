@@ -1236,9 +1236,9 @@ paths:
       description: |
         Returns the source of the remote ping agent script
         (netping-agent.pl) as JSON so SPA clients can display, copy, and
-        download it - the API counterpart of the classic session-gated
-        netping.php download. Requires a valid bearer token; a missing or
-        unreadable script answers 404. The file body is never logged.
+        download it. A valid bearer token is required: callers without
+        one get 401, and a missing or unreadable script answers 404.
+        The file body is never logged.
       security:
         - bearerAuth: []
       responses:
@@ -2781,9 +2781,8 @@ paths:
       summary: List API documentation files
       description: |
         Public endpoint listing the markdown guides under /srv/api-docs,
-        the same directory Parsedown renders as
-        /api-docs/index.php?file=... Only .md basenames are returned
-        (Parsedown.php is never listed), sorted by name, each with the
+        the directory the SPA's guide view reads. Only .md basenames are
+        returned, sorted by name, each with the
         title from its first "# " heading. Read-only and parameter-free;
         a missing docs directory yields an empty list.
       responses:

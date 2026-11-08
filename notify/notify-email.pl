@@ -335,9 +335,9 @@ HTML
             }
 
             $html .= sprintf(
-                "<tr class='%s'><td><a href='$SITE_URL/monitor.php?id=%s'>%s</a></td>" .
-                "<td><a href='$SITE_URL/agent.php?id=%s'>%s</a></td>" .
-                "<td><a href='$SITE_URL/target.php?id=%s'>%s</a></td>" .
+                "<tr class='%s'><td><a href='$SITE_URL/#/monitors/%s'>%s</a></td>" .
+                "<td><a href='$SITE_URL/#/agents/%s'>%s</a></td>" .
+                "<td><a href='$SITE_URL/#/targets/%s'>%s</a></td>" .
                 "<td>%s</td></tr>\n",
                 $row_class,
                 $monitor->{id},
@@ -370,9 +370,9 @@ HTML
         for my $host (keys %$cleared_ups) {
             my $monitor = $cleared_ups->{$host};
             $html .= sprintf(
-                "<tr class='table-success'><td><a href='$SITE_URL/monitor.php?id=%s'>%s</a></td>" .
-                "<td><a href='$SITE_URL/agent.php?id=%s'>%s</a></td>" .
-                "<td><a href='$SITE_URL/target.php?id=%s'>%s</a></td>" .
+                "<tr class='table-success'><td><a href='$SITE_URL/#/monitors/%s'>%s</a></td>" .
+                "<td><a href='$SITE_URL/#/agents/%s'>%s</a></td>" .
+                "<td><a href='$SITE_URL/#/targets/%s'>%s</a></td>" .
                 "<td>%s</td></tr>\n",
                 $monitor->{id},
                 $monitor->{description},

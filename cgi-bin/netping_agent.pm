@@ -10,18 +10,16 @@ netping_agent - serve the netping-agent.pl source to JWT callers (SPA)
 
 =head1 DESCRIPTION
 
-htdocs/classic/netping.php hands the remote agent source to classic users by
-reading /srv/agent/netping-agent.pl straight off disk (file_get_contents).
-The SPA cannot read server paths, so GET /netping-script returns the
-same file to authenticated API clients as JSON:
+GET /netping-script returns the remote agent source
+(/srv/agent/netping-agent.pl, read straight off disk) to authenticated
+API clients as JSON:
 
     { "status": "success", "filename": "netping-agent.pl", "content": "..." }
 
 The route is registered inside the JWT group in cgi-bin/api, so the
-bearer-token gate is enforced by auth_middleware (401 without a valid
-token), the API counterpart of the classic session gate on
-netping.php. A missing or unreadable script answers 404 with a plain
-error message.
+bearer-token gate is enforced by auth_middleware: callers without a
+valid token get 401. A missing or unreadable script answers 404 with
+a plain error message.
 
 The file body is never logged: the handler contains no app->log call
 at all, so the source can only ever reach the authenticated caller.
@@ -37,8 +35,7 @@ our @EXPORT_OK = qw(register_netping_script);
 
 sub register_netping_script {
     # Optional argument: script path override (tests inject a temp
-    # file). Default is the same on-disk path htdocs/classic/netping.php
-    # reads - /srv/agent/netping-agent.pl, outside the webroot.
+    # file). Default is /srv/agent/netping-agent.pl, outside the webroot.
     my ($filename) = @_;
     $filename = '/srv/agent/netping-agent.pl' unless defined $filename && length $filename;
 

@@ -5,18 +5,14 @@ pull their monitor assignments, ping the targets, and post loss/latency back
 to a Perl (Mojolicious) CGI API, which stores state in MariaDB and RRD files
 per monitor. The operator UI is a Vue 3 single-page app.
 
-- **SPA (the product)** — served at the site root `/`, source in `ui/`.
-- **Classic console** — a PHP console kept as an archive under
-  `htdocs/classic/` and served at `/classic`. Archive-only: no new features;
-  parity work happens in the SPA.
+- **SPA** — the only UI, served at `/`. Source is `ui/`.
 - **API** — `cgi-bin/api`, aliased at `/cgi-bin/`. The public topology
   endpoints (`/agents`, `/targets`, `/monitors`, `/services`, `/rrd`) and the
   agent polling endpoints are unauthenticated; every mutating and credential
   route needs a JWT, as does the gated `/runtime-stats` readout (host
   metrics and monitoring freshness) the deliberately minimal public
   `/health` must not expose. The spec is `api-docs/openapi.yaml`, browsable
-  in Swagger UI at `/api-docs/` and in-app at `/#/api`; operator guides
-  render at `/#/guides/<file>`.
+  in Swagger UI at `/#/api`; operator guides render at `/#/guides/<file>`.
 
 ## Layout
 
@@ -25,23 +21,22 @@ ui/                 Vue 3 SPA source — the product. npm run build emits
                     htdocs/index.html plus hashed bundles into htdocs/spa/.
                     Vitest specs live in ui/src/__tests__/.
 htdocs/             Apache docroot: the SPA (index.html + spa/), the operator
-                    config.json, runtime assets/ (logo, agent image tarball),
-                    and the classic PHP console archive under classic/.
+                    config.json, runtime assets/ (logo, agent image tarball).
 cgi-bin/            Perl CGI API: api (Mojolicious::Lite dispatcher) plus one
                     *.pm module per resource.
-api-docs/           Docs tree served at /api-docs: openapi.yaml, Swagger UI,
-                    operator guides (*.md), branding, architecture.svg.
+api-docs/           Docs tree served at /api-docs: openapi.yaml, operator
+                    guides (*.md), branding, architecture.svg.
 agent/              Field probe agent (cron container): netping-agent.pl,
                     run-agent.sh, build_agent.sh, Dockerfile — see
                     agent/README.md.
 notify/             In-container alert jobs (not field agents):
                     notify-email.pl, notify-ntfy.pl, run-notify.sh.
-tests/              validate.sh (commit gate) + run.sh, with Perl and PHP
-                    suites under perl/ and php/. What the suites cover and
-                    how to add tests: tests/README.md.
+tests/              validate.sh (commit gate) + run.sh, with the Perl suite
+                    under perl/. What the suites cover and how to add tests:
+                    tests/README.md.
 chart/              Optional Helm chart for Kubernetes.
-Dockerfile          Stack image: Alpine with Apache + PHP + Perl CGI +
-                    MariaDB client + RRDtool + cron.
+Dockerfile          Stack image: Alpine with Apache + Perl CGI + MariaDB
+                    client + RRDtool + cron.
 docker-compose.yml  wanportal (app) + wandb (MariaDB).
 .env                Secrets. Gitignored; never commit.
 ```
@@ -82,7 +77,7 @@ cd ui && npm test && npm run build
 
 Vite builds straight into the live docroot (`base: '/'`, `outDir:
 '../htdocs'`, `assetsDir: 'spa'`, `emptyOutDir: false`): `htdocs/` also holds
-`classic/`, `config.json` and `assets/`, so the build only ever writes
+`config.json` and `assets/`, so the build only ever writes
 `index.html` and `spa/` bundles. Prune orphaned `htdocs/spa/index-*.{js,css}`
 hashes from old builds by hand.
 
@@ -122,44 +117,41 @@ a body, an expected-status range and F5-style send/receive/disable
 assertion strings (substring match by default, regex opt-in). A monitor
 answers "is the host reachable and how far away is it"; a service
 answers "did the application return the right thing". Services live in
-their own `services` table and RRD layout — no monitor code path is
+their own `services` table and RRD layout; no monitor code path is
 touched.
 
 The agent contract is a second endpoint pair, deliberately separate
 from `/agent/:id/monitors`:
 
-- An upgraded agent polls `GET /agent/:id/services` for due checks and
-  POSTs results to the same path, authenticated with the same agent
-  password as the monitor endpoints, after its monitor cycle.
+- After its monitor cycle the agent polls `GET /agent/:id/services`
+  for due checks and POSTs results to the same path, authenticated
+  with the same agent password as the monitor endpoints.
 - The agent's version rides the `NetPing-Agent/<version>` User-Agent
-  header on every request (set once at LWP construction, so even a
-  0.1.0 agent needs no upgrade), and the portal records it on every
-  authenticated check-in - monitor or services, GET or POST. A request
-  without a valid header writes nothing, so a stored version is
-  refreshed, never cleared. Capability is derived, not declared: an
-  agent's first authenticated contact with the services module sets
-  `supports_services=1`. Body keys `supports_services` / `version` are
-  accepted and ignored.
-- An un-upgraded agent never calls the services endpoint, so old agents
-  keep working unchanged — version skew is handled by the endpoint's
-  existence, not a capability gate. A service assigned to an agent that
-  has not yet contacted the services module never polls: it stays
-  UNKNOWN, and the UI explains it as `agent_unsupported`.
-- A new agent against an older portal gets a 404 on the services fetch
-  and finishes its reachability cycle anyway; a result POST carrying
-  unknown extra fields is ignored, not rejected.
+  header on every request (set once at LWP construction), and the
+  portal records it on every authenticated check-in - monitor or
+  services, GET or POST. A request without a valid header writes
+  nothing, so a stored version is refreshed, never cleared.
+- Capability is derived, not declared: an agent's first authenticated
+  contact with the services module sets `supports_services=1`, and the
+  `supports_services` / `version` body keys the requests carry are
+  accepted and ignored. A service assigned to an agent that has not
+  yet contacted the services module never polls: it stays UNKNOWN,
+  and the UI explains it as `agent_unsupported`.
+- The agent finishes its reachability cycle even when the services
+  fetch answers 404, and a result POST carrying unknown extra fields
+  is ignored, not rejected.
 
 HTTPS service checks need `LWP::Protocol::https` (packages
 `perl-libwww` + `perl-lwp-protocol-https`): without the protocol
 handler LWP fails every `https://` probe with a bogus 501, not a TLS
 error. The stack image ships both because the LOCAL polling agent runs
 inside the wanportal container, and `agent/Dockerfile` already declares
-them for the field agent image — no package work is needed when you
+them for the field agent image, so no package work is needed when you
 rebuild it with `./agent/build_agent.sh`.
 
 Service authentication is reference-only: a service stores
 `auth_credential_id`, a pointer into the same credentials vault the
-rest of the API uses — never an inline secret. The portal resolves the
+rest of the API uses, never an inline secret. The portal resolves the
 credential when the agent fetches its services and delivers the secret
 over the same HTTPS channel the agent password already travels; the
 agent uses it only to build request headers and scrubs every form of
@@ -178,7 +170,7 @@ updating, deleting and resetting services are JWT routes, admin-only
 
 ```sh
 bash tests/validate.sh   # syntax, live smoke, audit gates, unit tests — the commit gate
-bash tests/run.sh        # unit tests only (Perl prove + PHP)
+bash tests/run.sh        # unit tests only (Perl prove)
 ```
 
 Both drivers `docker exec` into the running `wanportal` container, so the
@@ -240,6 +232,5 @@ is enabled. Do not delete those rows to get past a 500; deactivate them
 
 `htdocs/config.json` is the operator site config: the brand logo and the nav
 menu. `logo` points at `assets/logo.png` and
-`menu` drives the SPA navigation. It is read by two parsers —
-`ui/src/siteConfig.js` and `htdocs/classic/lib/site_config.php` — so extend
-both when you add a config key.
+`menu` drives the SPA navigation. It is read by `ui/src/siteConfig.js`; a
+new config key means extending that parser.

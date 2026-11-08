@@ -34,18 +34,6 @@ if [ "$have_ctr" -eq 1 ]; then
   else
     echo "SKIP  prove (no prove or tests/perl in container)"
   fi
-  phpbin=/usr/bin/php84
-  if in_ctr test -x "$phpbin" && in_ctr sh -c 'ls /srv/tests/php/*.php >/dev/null 2>&1'; then
-    while IFS= read -r f; do
-      base=$(basename "$f")
-      if in_ctr "$phpbin" "/srv/tests/php/$base"; then
-        echo "PASS  php $base"
-      else
-        echo "FAIL  php $base"
-        fail=1
-      fi
-    done < <(ls "$ROOT/tests/php"/*.php 2>/dev/null || true)
-  fi
 else
   echo "SKIP  container $CTR not running"
   fail=1

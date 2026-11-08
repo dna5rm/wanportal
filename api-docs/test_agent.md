@@ -131,9 +131,8 @@ curl -s -X DELETE http://localhost/cgi-bin/api/agent/12345678-1234-5678-1234-567
 ## Fetch the agent script source
 
 The remote-agent install script itself is served to authenticated
-callers as JSON — the same source the classic console downloads from
-netping.php. Without a token the endpoint answers 401; a missing or
-unreadable script answers 404:
+callers as JSON. Without a token the endpoint answers 401; a missing
+or unreadable script answers 404:
 
 ```bash
 curl -s http://localhost/cgi-bin/api/netping-script \

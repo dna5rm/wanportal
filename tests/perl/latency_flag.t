@@ -1,10 +1,9 @@
 #!/usr/bin/env perl
-# latency_flag.t - the API-side latency spike rules match the PHP lib.
+# latency_flag.t - the API-side latency spike rules.
 #
-# public_api::add_latency_fields() is the Perl twin of
-# wanportal_is_latency_issue() in htdocs/classic/lib/monitor_metrics.php. The
-# API stamps latency_flag / latency_threshold_ms on every /monitors
-# row, so the two implementations must agree gate for gate:
+# public_api::add_latency_fields() (cgi-bin/public_api.pm) stamps
+# latency_flag / latency_threshold_ms on every /monitors row. The
+# tests pin those gates:
 #
 #   - effectively active (monitor, agent, and target all enabled)
 #   - fresh: last_update newer than 3 * pollinterval seconds
@@ -13,9 +12,6 @@
 #   - at least 2 samples so the median is real
 #   - threshold (avg_median + 2*avg_stddev) > 0, and
 #     current_median strictly above it
-#
-# The test rows mirror the cases in tests/php/lib_smoke.php so the
-# two suites pin the same behavior from both sides.
 #
 # Runs under tests/run.sh (prove -l -r /srv/tests/perl in the
 # wanportal container, where RRDs and the rest of the API's module

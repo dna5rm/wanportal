@@ -45,50 +45,6 @@ Header always set Content-Security-Policy "default-src 'self'; script-src 'self'
 # "Apache/2.4.67 (Unix)", set ServerTokens Prod in httpd.conf.
 ServerSignature Off
 
-# ---------------------------------------------------------------------------
-# Console cutover: the classic PHP pages are served at /classic
-# ---------------------------------------------------------------------------
-# The document root now belongs to the new UI (index.html); the classic
-# PHP console is reached under /classic/ while its files stay physically
-# in this directory. Keeping the files in place means relative includes
-# (require_once 'config.php', __DIR__ paths) and the PHP working
-# directory are untouched by the URL change.
-#
-# "/" must prefer the new UI's index.html over the classic index.php.
-DirectoryIndex index.html index.php
-
-RewriteEngine On
-
-# ---------------------------------------------------------------------------
-# Console cutover: the classic PHP console lives in htdocs/classic/
-# ---------------------------------------------------------------------------
-# The files are physically served from /srv/htdocs/classic now; the
-# document root itself belongs to the SPA (index.html + /spa + /config.json).
-# No internal rewrite maps /classic/X to a docroot path any more: a request
-# for /classic/<file> is served straight from classic/<file>.
-#
-# "/" must prefer the SPA's index.html. DirectoryIndex lists only
-# index.html, so the two rules below keep the classic dashboard reachable:
-# /classic/ and the pre-cutover bookmark /classic/index.html have no
-# index.html of their own and are pinned to classic/index.php.
-
+# The docroot serves the SPA (index.html): DirectoryIndex is index.html, and
+# there is no PHP under this tree.
 DirectoryIndex index.html
-
-RewriteEngine On
-
-# /classic and /classic/ are the console dashboard (classic/index.php).
-RewriteRule ^classic/?$ classic/index.php [L]
-
-# /classic/index.html stays a working bookmark for the dashboard.
-RewriteRule ^classic/index\.html$ classic/index.php [L]
-
-# Pre-cutover bookmarks: root-level *.php requests redirect (302) to
-# their /classic/ location. THE_REQUEST is the ORIGINAL client request
-# line, so this never fires on internally rewritten paths or on the
-# mod_dir subrequest for "/".
-# The substitution must be an ABSOLUTE URL path (/classic/$1): with an
-# [R] flag, mod_rewrite resolves a RELATIVE substitution against the
-# per-directory prefix, which leaks the filesystem path
-# (/var/www/localhost/htdocs/...) into the Location header.
-RewriteCond %{THE_REQUEST} "^[A-Z]+\s+/(?!classic/)[^?]*\.php[? ]"
-RewriteRule ^([^/]+\.php)$ /classic/$1 [R=302,L,NE]

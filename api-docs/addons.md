@@ -146,7 +146,7 @@ The catalog sidecar is linked the same way, with a top-level entry
 
 ## Rules of the road
 
-- **Prefixes must not collide with the portal.** Avoid `/cgi-bin`, `/classic`,
+- **Prefixes must not collide with the portal.** Avoid `/cgi-bin`,
   `/api-docs`, and the SPA routes at `/` and `/assets`. Give each addon one
   prefix and keep it stable.
 - **Same compose network.** A sidecar on a different network cannot be

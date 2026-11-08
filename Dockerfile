@@ -1,4 +1,4 @@
-# Dockerfile — lab image: Apache + PHP + Perl CGI + MariaDB client + RRD + cron.
+# Dockerfile — lab image: Apache + Perl CGI + MariaDB client + RRD + cron.
 # No work-plugin toolchain (no ansible, no CryFS, no WebDAV).
 FROM alpine:3.21
 
@@ -25,11 +25,10 @@ RUN apk add --no-cache perl perl-dev perl-app-cpanminus perl-data-uuid perl-rege
     perl-lwp-useragent-determined perl-libwww perl-lwp-protocol-https perl-io-socket-ssl perl-rrd perl-parallel-forkmanager perl-sys-cpu \
     perl-net-ldap perl-crypt-eksblowfish
 
-## Web Server + PHP
+## Web Server
 # apache2-proxy ships mod_proxy/mod_proxy_http for the addon reverse-proxy
 # hook in conf.d/proxy.conf below.
-RUN apk add --no-cache apache2 apache2-proxy apache2-utils php84 \
-    php84-apache2 php84-curl php84-mysqli php84-session php84-simplexml php84-xml
+RUN apk add --no-cache apache2 apache2-proxy apache2-utils
 
 # AllowOverride within DocumentRoot
 RUN sed -i '/<Directory "\/var\/www\/localhost\/htdocs">/,/<\/Directory>/s/AllowOverride None/AllowOverride All/' /etc/apache2/httpd.conf
@@ -130,7 +129,6 @@ RUN chmod 755 /usr/local/sbin/cron-run-agent /usr/local/sbin/cron-run-notify
 RUN cat <<EOF >>/etc/crontabs/root
 */1 * * * * /usr/local/sbin/cron-run-agent  > /proc/1/fd/1 2>/proc/1/fd/2
 */5 * * * * /usr/local/sbin/cron-run-notify > /proc/1/fd/1 2>/proc/1/fd/2
-* * */1 * * su -s /bin/sh apache -c 'find /tmp -name "sess_*" -type f -mmin +180 -delete'
 EOF
 
 # Fix Permissions & Cleanup

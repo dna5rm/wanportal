@@ -19,12 +19,12 @@ use FindBin;
 use File::Temp qw(tempdir);
 use Test::More;
 
-my $root     = "$FindBin::Bin/../..";
-my $src_file = "$root/cgi-bin/netping_agent.pm";
-my $php_file = "$root/htdocs/classic/netping.php";
+my $root       = "$FindBin::Bin/../..";
+my $src_file   = "$root/cgi-bin/netping_agent.pm";
+my $agent_file = "$root/agent/netping-agent.pl";
 
-ok(-f $src_file, 'cgi-bin/netping_agent.pm found')
-    or plan skip_all => 'cgi-bin/netping_agent.pm missing';
+plan skip_all => 'cgi-bin/netping_agent.pm missing' unless -f $src_file;
+plan skip_all => 'agent/netping-agent.pl missing'   unless -f $agent_file;
 my $src = do { local $/; open my $fh, '<', $src_file or die "$src_file: $!"; <$fh> };
 
 # ---- brace-balanced extraction of `sub register_netping_script` ------------
@@ -42,14 +42,15 @@ plan skip_all => 'brace-balanced extraction of register_netping_script failed'
     if $end < 0;
 my $sub_src = substr($src, $start, $end - $start + 1);
 
-# ---- path-parity guard: same file the classic page reads --------------------
-# htdocs/classic/netping.php serves $filename = '/srv/agent/netping-agent.pl' to classic
-# users; the API endpoint must read exactly that path by default.
-my $php_src = do { local $/; open my $fh, '<', $php_file or die "$php_file: $!"; <$fh> };
-my ($php_path) = $php_src =~ m{^\s*\$filename\s*=\s*'([^']+)'\s*;}m;
-plan skip_all => "could not find \$filename literal in htdocs/classic/netping.php"
-    unless defined $php_path;
-like($sub_src, qr{'\Q$php_path\E'}, "default script path matches netping.php ($php_path)");
+# ---- path guard: the endpoint serves the agent source of truth --------------
+# agent/netping-agent.pl is the one canonical script (shipped in the repo,
+# mounted at /srv in the container). The API endpoint must default to
+# reading exactly that path; a default pointing anywhere else is a broken
+# assertion, not a skip.
+my $agent_path = '/srv/agent/netping-agent.pl';
+ok(-f $agent_file, 'agent/netping-agent.pl exists in the repo');
+like($sub_src, qr{'\Q$agent_path\E'},
+    "default script path is the agent source of truth ($agent_path)");
 
 # ---- the file body must never be logged ------------------------------------
 unlike($sub_src, qr/->\s*log\b/, 'handler contains no logging call (file body never logged)');

@@ -10,17 +10,16 @@ api_docs - public catalog of the api-docs markdown guides
 
 =head1 DESCRIPTION
 
-GET /docs is the table of contents for the markdown guides rendered
-by api-docs/index.php (Parsedown): every *.md in the docs directory,
+GET /docs is the table of contents for the markdown guides the SPA
+fetches and renders: every *.md in the docs directory,
 as {name, title}. The title is the file's first "# " heading, with
 the basename minus .md as fallback.
 
-The directory is the one Parsedown reads, /srv/api-docs (docker-compose
-bind-mounts this tree at /srv inside the container, so that is the
-repo's api-docs/ directory). Like index.php, only .md basenames are
-ever listed - Parsedown.php is not markdown and can never appear, and
-no request input touches the path: the route takes no parameters, so
-nothing supplied by a caller reaches the filesystem.
+The directory is /srv/api-docs (docker-compose bind-mounts this tree
+at /srv inside the container, so that is the repo's api-docs/
+directory). Only .md basenames are ever listed, and no request input
+touches the path: the route takes no parameters, so nothing supplied
+by a caller reaches the filesystem.
 
 A missing or unreadable directory is simply an empty list, so a fresh
 install answers 200 with no files instead of erroring.
@@ -34,9 +33,8 @@ use Exporter 'import';
 
 our @EXPORT_OK = qw(register_api_docs list_api_docs);
 
-# The directory Parsedown reads (api-docs/index.php requires
-# /srv/api-docs/Parsedown.php), so /docs lists exactly what
-# ?file=... can render.
+# The docs directory itself: /srv/api-docs, the directory the SPA's
+# guide view reads through /docs.
 my $docsdir = '/srv/api-docs';
 
 # Title of a markdown doc: the first "# " (h1) heading, which every
@@ -62,7 +60,7 @@ sub _fallback_title {
 }
 
 # One {name, title} entry per *.md file in the docs directory, sorted
-# by name. The extension filter alone keeps Parsedown.php out; hidden
+# by name. The extension filter keeps non-markdown files out; hidden
 # dotfiles and anything that is not a plain file are skipped too.
 sub list_api_docs {
     my ($dir) = @_;
@@ -86,9 +84,8 @@ sub list_api_docs {
 sub register_api_docs {
     # @summary List API documentation files
     # @description Public endpoint listing the markdown guides under
-    # /srv/api-docs, the same directory Parsedown renders as
-    # /api-docs/index.php?file=... Only .md basenames are returned
-    # (Parsedown.php is never listed), sorted by name, each with the
+    # /srv/api-docs, the directory the SPA's guide view reads. Only
+    # .md basenames are returned, sorted by name, each with the
     # title from its first "# " heading. Read-only and parameter-free:
     # no request input ever reaches the filesystem.
     # @tags Public API
