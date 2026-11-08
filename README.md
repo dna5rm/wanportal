@@ -5,18 +5,14 @@ pull their monitor assignments, ping the targets, and post loss/latency back
 to a Perl (Mojolicious) CGI API, which stores state in MariaDB and RRD files
 per monitor. The operator UI is a Vue 3 single-page app.
 
-- **SPA (the product)** — served at the site root `/`, source in `ui/`.
-- **Classic console** — a PHP console kept as an archive under
-  `htdocs/classic/` and served at `/classic`. Archive-only: no new features;
-  parity work happens in the SPA.
+- **SPA** — the only UI, served at `/`. Source is `ui/`.
 - **API** — `cgi-bin/api`, aliased at `/cgi-bin/`. The public topology
   endpoints (`/agents`, `/targets`, `/monitors`, `/services`, `/rrd`) and the
   agent polling endpoints are unauthenticated; every mutating and credential
   route needs a JWT, as does the gated `/runtime-stats` readout (host
   metrics and monitoring freshness) the deliberately minimal public
   `/health` must not expose. The spec is `api-docs/openapi.yaml`, browsable
-  in Swagger UI at `/api-docs/` and in-app at `/#/api`; operator guides
-  render at `/#/guides/<file>`.
+  in Swagger UI at `/#/api`; operator guides render at `/#/guides/<file>`.
 
 ## Layout
 
@@ -25,23 +21,22 @@ ui/                 Vue 3 SPA source — the product. npm run build emits
                     htdocs/index.html plus hashed bundles into htdocs/spa/.
                     Vitest specs live in ui/src/__tests__/.
 htdocs/             Apache docroot: the SPA (index.html + spa/), the operator
-                    config.json, runtime assets/ (logo, agent image tarball),
-                    and the classic PHP console archive under classic/.
+                    config.json, runtime assets/ (logo, agent image tarball).
 cgi-bin/            Perl CGI API: api (Mojolicious::Lite dispatcher) plus one
                     *.pm module per resource.
-api-docs/           Docs tree served at /api-docs: openapi.yaml, Swagger UI,
-                    operator guides (*.md), branding, architecture.svg.
+api-docs/           Docs tree served at /api-docs: openapi.yaml, operator
+                    guides (*.md), branding, architecture.svg.
 agent/              Field probe agent (cron container): netping-agent.pl,
                     run-agent.sh, build_agent.sh, Dockerfile — see
                     agent/README.md.
 notify/             In-container alert jobs (not field agents):
                     notify-email.pl, notify-ntfy.pl, run-notify.sh.
-tests/              validate.sh (commit gate) + run.sh, with Perl and PHP
-                    suites under perl/ and php/. What the suites cover and
-                    how to add tests: tests/README.md.
+tests/              validate.sh (commit gate) + run.sh, with the Perl suite
+                    under perl/. What the suites cover and how to add tests:
+                    tests/README.md.
 chart/              Optional Helm chart for Kubernetes.
-Dockerfile          Stack image: Alpine with Apache + PHP + Perl CGI +
-                    MariaDB client + RRDtool + cron.
+Dockerfile          Stack image: Alpine with Apache + Perl CGI + MariaDB
+                    client + RRDtool + cron.
 docker-compose.yml  wanportal (app) + wandb (MariaDB).
 .env                Secrets. Gitignored; never commit.
 ```
@@ -82,7 +77,7 @@ cd ui && npm test && npm run build
 
 Vite builds straight into the live docroot (`base: '/'`, `outDir:
 '../htdocs'`, `assetsDir: 'spa'`, `emptyOutDir: false`): `htdocs/` also holds
-`classic/`, `config.json` and `assets/`, so the build only ever writes
+`config.json` and `assets/`, so the build only ever writes
 `index.html` and `spa/` bundles. Prune orphaned `htdocs/spa/index-*.{js,css}`
 hashes from old builds by hand.
 
@@ -178,7 +173,7 @@ updating, deleting and resetting services are JWT routes, admin-only
 
 ```sh
 bash tests/validate.sh   # syntax, live smoke, audit gates, unit tests — the commit gate
-bash tests/run.sh        # unit tests only (Perl prove + PHP)
+bash tests/run.sh        # unit tests only (Perl prove)
 ```
 
 Both drivers `docker exec` into the running `wanportal` container, so the
@@ -240,6 +235,5 @@ is enabled. Do not delete those rows to get past a 500; deactivate them
 
 `htdocs/config.json` is the operator site config: the brand logo and the nav
 menu. `logo` points at `assets/logo.png` and
-`menu` drives the SPA navigation. It is read by two parsers —
-`ui/src/siteConfig.js` and `htdocs/classic/lib/site_config.php` — so extend
-both when you add a config key.
+`menu` drives the SPA navigation. It is read by `ui/src/siteConfig.js`; a
+new config key means extending that parser.

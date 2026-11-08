@@ -113,16 +113,14 @@ sub _strip_service_profile {
     return $row;
 }
 
-# Perl twin of wanportal_is_latency_issue() in
-# htdocs/classic/lib/monitor_metrics.php: one shared definition of "this
-# monitor is spiking right now" so API consumers and the PHP pages
-# cannot drift apart on the rules. Same gates, same order:
+# One shared definition of "this monitor is spiking right now" for the
+# /monitors routes: add_latency_fields is the only implementation, and
+# tests/perl/latency_flag.t pins it. Gates, in order:
 #
 #   - effectively active (monitor, agent, and target all enabled)
 #   - fresh: last_update parses and is newer than 3 * pollinterval
 #     seconds ago (pollinterval falls back to the DB default of 60;
-#     an unparseable last_update counts as stale, matching
-#     strtotime() returning false in PHP)
+#     an unparseable last_update counts as stale)
 #   - up: current_loss < 100 - down is not a latency problem
 #   - meaningful: at least 2 samples so the median is real
 #   - baseline: threshold (avg_median + 2*avg_stddev) > 0

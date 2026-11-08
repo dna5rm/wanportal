@@ -21,26 +21,6 @@ else
   cat /tmp/wanportal-perl-c.out
 fi
 
-phpbin=""
-for c in /usr/bin/php84 php84 php8.4 php; do
-  if docker exec "$CTR" test -x "$c" 2>/dev/null || docker exec "$CTR" sh -c "command -v $c >/dev/null 2>&1"; then
-    phpbin=$c
-    break
-  fi
-done
-if [[ -z "$phpbin" ]]; then
-  bad "no php in container"
-else
-  while IFS= read -r -d '' f; do
-    rel="${f#"$ROOT"/}"
-    if docker exec "$CTR" "$phpbin" -l "/srv/$rel" >/dev/null 2>&1; then
-      ok "php -l $rel"
-    else
-      bad "php -l $rel"
-    fi
-  done < <(find "$ROOT/htdocs" -name '*.php' -print0)
-fi
-
 echo "== live http =="
 code=$(curl -sS -o /tmp/wanportal-health.json -w '%{http_code}' --max-time 8 "$API/health" || echo 000)
 if [[ "$code" == "200" ]] && grep -q ok /tmp/wanportal-health.json; then
@@ -120,7 +100,8 @@ PY
     bad "GET /session without bearer http $code (want 401)"
   fi
 
-  # the /login response must carry the claims (login.php stores them in the PHP session)
+  # the /login response must carry the claims themselves (the SPA holds no
+  # server-side session)
   curl -sS --max-time 8 -X POST "$API/login" \
     -H 'Content-Type: application/json' \
     -d "{\"username\":\"admin\",\"password\":\"$pw\"}" \
@@ -138,7 +119,7 @@ PY
 fi
 
 # GET /netping-script serves the agent script source to JWT callers
-# (the same /srv/agent/netping-agent.pl htdocs/classic/netping.php reads from disk).
+# (the same /srv/agent/netping-agent.pl the local cron polling agent runs).
 code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "$API/netping-script" || echo 000)
 if [[ "$code" == "401" ]]; then
   ok "GET /netping-script without bearer is 401"
@@ -159,11 +140,11 @@ sys.exit(0)
 PY
 fi
 
-# ---- URL contract (SPA cutover) ------------------------------------------
-# The Vue SPA is the UI served at /; the classic PHP console stays at
-# /classic (with or without the trailing slash); the old /app alias is
-# retired and must 404; the CGI API
-# base /cgi-bin/api is untouched (covered by the /health check above).
+# ---- URL contract (SPA-only UI) -------------------------------------------
+# The Vue SPA is the only UI, served at /. /classic must not serve a
+# server-rendered PHP console (404 or anything else non-PHP passes); /app
+# must 404; the CGI API base /cgi-bin/api is untouched (covered by the
+# /health check above).
 site_root="${WANPORTAL_BASE:-${API%/cgi-bin/api}}"
 fetch() { curl -sSL -o "$2" -w '%{http_code}' --max-time 8 "$1" || echo 000; }
 is_spa() { grep -q 'id="app"' "$1" && grep -q 'type="module"' "$1"; }
@@ -179,7 +160,7 @@ code=$(fetch "$site_root/" /tmp/wanportal-root.html)
 if [[ "$code" == "200" ]] && is_spa /tmp/wanportal-root.html; then
   ok "GET / serves the SPA shell (div#app + module script)"
 else
-  bad "GET / http $code is not the SPA shell (want 200 with div#app; PHP console still at /?)"
+  bad "GET / http $code is not the SPA shell (want 200 with div#app; the SPA is served at /)"
 fi
 
 spa_src=$(grep -o '<script[^>]*type="module"[^>]*' /tmp/wanportal-root.html 2>/dev/null |
@@ -199,49 +180,17 @@ else
 fi
 
 classic_code=$(fetch "$site_root/classic" /tmp/wanportal-classic.html)
-if [[ "$classic_code" == "200" ]] && is_php_console /tmp/wanportal-classic.html; then
-  ok "GET /classic serves the PHP console (/classic or /classic/)"
+if [[ "$classic_code" != "200" ]] || ! is_php_console /tmp/wanportal-classic.html; then
+  ok "GET /classic is not a PHP page (http $classic_code; the SPA is the only UI)"
 else
-  bad "GET /classic http $classic_code is not the PHP console (want 200 server-rendered console)"
-fi
-
-login_code=$(fetch "$site_root/classic/login.php" /tmp/wanportal-classic-login.html)
-if [[ "$login_code" == "200" ]] && grep -q 'Login' /tmp/wanportal-classic-login.html; then
-  ok "GET /classic/login.php is 200 and contains Login"
-else
-  bad "GET /classic/login.php http $login_code (want 200 PHP Login page)"
+  bad "GET /classic http $classic_code serves a PHP page (want: /classic is not a PHP page)"
 fi
 
 app_code=$(fetch "$site_root/app" /tmp/wanportal-app.html)
 if [[ "$app_code" == "404" ]]; then
-  ok "GET /app is retired (404; the SPA lives at /)"
+  ok "GET /app is 404 (the SPA is at /)"
 else
-  bad "GET /app http $app_code (want 404: /app alias removed, SPA is at /)"
-fi
-
-# Host header must not be used as API URL in netping.php
-if grep -n "https://{\$server_name}" "$ROOT/htdocs/classic/netping.php" >/dev/null; then
-  bad "netping.php still interpolates SERVER_NAME into API URL"
-else
-  ok "netping.php does not use Host as API URL"
-fi
-
-if grep -n "strtolower(\$_SERVER\['HTTP_USER_AGENT'\]" "$ROOT/htdocs/classic/netping.php" >/dev/null \
-   && grep -n "echo \$content" "$ROOT/htdocs/classic/netping.php" >/dev/null; then
-  # dump still present: must be after a session gate
-  if grep -n "check_session\|!\s*isset(\$_SESSION\['user'\])" "$ROOT/htdocs/classic/netping.php" >/dev/null; then
-    ok "netping.php agent dump is session-gated (or still present with a gate)"
-  else
-    bad "netping.php curl dump has no session gate"
-  fi
-else
-  ok "netping.php does not dump agent source to curl UA"
-fi
-
-if grep -n "proxyRequest('DELETE', '/cgi-bin/api/" "$ROOT/htdocs/classic/assets/js/listings.js" >/dev/null; then
-  bad "listings.js DELETE paths still double-prefix /cgi-bin/api"
-else
-  ok "listings.js DELETE paths are API-relative"
+  bad "GET /app http $app_code (want 404: the SPA is at /)"
 fi
 
 if grep -nE 'filter[[:space:]]*=>[[:space:]]*".*\$username' "$ROOT/cgi-bin/auth.pm" >/dev/null; then
@@ -268,13 +217,6 @@ else
   ok "public /rrd does not concat raw id into path"
 fi
 
-# cheap Host XSS: title must htmlspecialchars server_name
-if grep -n "<title>' . \$server_name" "$ROOT/htdocs/classic/lib/page.php" >/dev/null; then
-  bad "page.php echoes \$server_name into <title> unescaped"
-else
-  ok "page.php escapes server name in title"
-fi
-
 rrd_code=$(curl -sS -o /tmp/wanportal-rrd.json -w '%{http_code}' --max-time 8 \
   "$API/rrd?id=../../../etc/passwd" || echo 000)
 if [[ "$rrd_code" == "400" || "$rrd_code" == "404" ]]; then
@@ -283,7 +225,7 @@ else
   bad "GET /rrd traversal id http $rrd_code (want 400/404)"
 fi
 
-if grep -q cron-run-agent "$ROOT/Dockerfile" && grep -q 'su -s /bin/sh apache' "$ROOT/Dockerfile"; then
+if grep -q cron-run-agent "$ROOT/Dockerfile" && grep -qE 'su .*-s /bin/sh apache' "$ROOT/Dockerfile"; then
   ok "Dockerfile cron drops to apache via image wrappers"
 else
   bad "Dockerfile cron still runs bind-mount scripts as root"
